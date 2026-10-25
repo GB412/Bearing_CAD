@@ -1,0 +1,31 @@
+name: CAD Workbench OCCT regression
+on:
+  push:
+    branches: ['feature/cad-workbench-*']
+  pull_request:
+    branches: [main]
+jobs:
+  geometry:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: workbench
+          create-args: >-
+            python=3.11
+            cadquery=2.5.2
+            ezdxf=1.4.2
+            svgwrite=1.4.3
+            -c conda-forge
+          cache-environment: true
+      - name: OCCT review drawing and section tests
+        shell: micromamba-shell {0}
+        run: |
+          python -m unittest discover -s tests -p test_cad02.py -v
+          python -m unittest discover -s tests -p test_workbench.py -v
+      - name: Frontend build
+        run: |
+          npm ci
+          npm run build
