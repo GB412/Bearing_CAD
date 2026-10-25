@@ -1,0 +1,5 @@
+# Optional exact CAD/export environment for generate_cad.py and DXF audit.
+# CadQuery installation is platform-specific; use the official conda package channel.
+cadquery==2.5.2
+ezdxf==1.4.2
+svgwrite==1.4.3

@@ -34,12 +34,11 @@ function shape2d(p){
 function refresh(){const p=params(),err=check(p);byId('error').style.display=err?'block':'none';byId('error').textContent=err||'';byId('ok').style.display=err?'none':'block';
  byId('previewInvalid').style.display=err?'block':'none';byId('viewgrid').classList.toggle('preview-invalid',Boolean(err));
  document.querySelectorAll('#viewgrid .toolbar input,#viewgrid .toolbar button').forEach(el=>el.disabled=Boolean(err));
- document.querySelectorAll('[data-export]').forEach(button=>button.disabled=Boolean(err));
+ document.querySelectorAll('#saveSvg,#saveDxf,#saveJson').forEach(button=>button.disabled=Boolean(err));
  if(err){byId('visual2d').innerHTML='';byId('calcs').textContent='等待有效参数';document.dispatchEvent(new CustomEvent('bearing:invalid'));return;}
  byId('calcs').innerHTML=`轴瓦内孔 <em>⌀${nfmt(p.shaft_d_mm+2*p.radial_clearance_mm)} mm</em><br/>直径间隙 <em>${nfmt(2*p.radial_clearance_mm)} mm</em><br/>轴瓦壁厚 <em>${nfmt((p.bush_od_mm-p.shaft_d_mm-2*p.radial_clearance_mm)/2)} mm</em>`;
  shape2d(p);document.dispatchEvent(new CustomEvent('bearing:change',{detail:p}));}
  function download(filename,mime,txt){const url=URL.createObjectURL(new Blob([txt],{type:mime}));const a=document.createElement('a');a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),500);}
- byId('saveJson').dataset.export='';byId('saveSvg').dataset.export='';byId('saveDxf').dataset.export='';
  byId('saveJson').addEventListener('click',()=>{const p=params();if(check(p))return;download('bearing_parameters.json','application/json',JSON.stringify(p,null,2));});
  byId('saveSvg').addEventListener('click',()=>{const p=params();if(check(p))return;const s=new XMLSerializer().serializeToString(byId('visual2d'));download('bearing_section.svg','image/svg+xml;charset=utf-8',s);});
  byId('saveDxf').addEventListener('click',()=>{const p=params();if(check(p))return;download('bearing_section.dxf','application/dxf',dxf(p));});
