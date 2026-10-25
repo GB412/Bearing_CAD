@@ -22,6 +22,8 @@ function refresh(){
 function invalidate(){
  version++;controller?.abort();controller=null;
  $('cad03Result').hidden=true;$('cad03Files').replaceChildren();$('cad03Views').replaceChildren();
+ for(const id of ['saveSvg','saveDxf'])$(id).disabled=false;
+ window.bearingRefresh?.();
  $('cad03Mode').textContent='当前：Three.js 参数化示意网格（不包含油孔油槽）';
  document.dispatchEvent(new CustomEvent('bearing:exact-clear'));refresh();
 }
@@ -48,6 +50,16 @@ $('cad03Generate').addEventListener('click',async()=>{
   }
   $('cad03Hash').textContent='SHA256: '+d.geometry_hash+' · '+d.generator_version+' · DRAFT';
   $('cad03Result').hidden=false;
+  // The top-level 2D pane now shows the authoritative review sheet rather than
+  // the independent CAD-01 schematic. Existing simple export buttons are disabled
+  // to avoid exporting stale (or reference-only) geometry; use the file links.
+  const preview=$('visual2d');
+  preview.replaceChildren();
+  const drawing=document.createElementNS('http://www.w3.org/2000/svg','image');
+  drawing.setAttribute('width','680');drawing.setAttribute('height','480');
+  drawing.setAttribute('href',d.files['bearing_review_sheet.svg']);
+  preview.append(drawing);
+  for(const id of ['saveSvg','saveDxf'])$(id).disabled=true;
   document.dispatchEvent(new CustomEvent('bearing:exact-ready',{detail:{files:d.files}}));
   const mode=document.querySelector('[name="workbenchMode"]:checked')?.value||'assembly';
   if(mode==='section')document.dispatchEvent(new CustomEvent('bearing:view-mode',{detail:{mode}}));
