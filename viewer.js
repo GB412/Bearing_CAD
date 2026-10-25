@@ -18,17 +18,23 @@ try {
   const fill=new THREE.DirectionalLight('#a6caff',.8);fill.position.set(-110,-60,-95);scene.add(fill);
   const ground=new THREE.GridHelper(270,14,0xaac4da,0xd9e6f1);ground.rotation.x=Math.PI/2;ground.position.z=-80;scene.add(ground);
   let objects=[];
-  let exactMeshes=[];let loadSerial=0;const exactGroup=new THREE.Group();scene.add(exactGroup);
+  let exactMeshes=[];let exactMode='assembly';let exactFiles=null;let loadSerial=0;const exactGroup=new THREE.Group();scene.add(exactGroup);
   function clearExact(){loadSerial++;for(const obj of exactMeshes){exactGroup.remove(obj);obj.geometry.dispose();obj.material.dispose();}exactMeshes=[];meshes.visible=true;}
-  document.addEventListener('bearing:exact-clear',clearExact);
-  document.addEventListener('bearing:change',clearExact);
-  document.addEventListener('bearing:invalid',clearExact);
+  const invalidateExact=()=>{exactFiles=null;clearExact();};
+  document.addEventListener('bearing:exact-clear',invalidateExact);
+  document.addEventListener('bearing:change',invalidateExact);
+  document.addEventListener('bearing:invalid',invalidateExact);
   document.addEventListener('bearing:exact-ready',async(event)=>{
+    exactFiles=event.detail.files;await loadExact();
+  });
+  document.addEventListener('bearing:view-mode',async(e)=>{exactMode=e.detail.mode==='section'?'section':'assembly';if(exactFiles)await loadExact();});
+  async function loadExact(){
     clearExact();const serial=loadSerial;
-    const loader=new STLLoader(),files=event.detail.files;
+    const loader=new STLLoader(),files=exactFiles;
+    if(!files)return;
     try{
       const geometries=await Promise.all(['housing','bushing','shaft'].map(async name=>{
-        const response=await fetch(files[name+'.stl'],{cache:'no-store'});if(!response.ok)throw Error(name+' STL HTTP '+response.status);
+        const response=await fetch(files[name+(exactMode==='section'?'_section':'')+'.stl'],{cache:'no-store'});if(!response.ok)throw Error(name+' STL HTTP '+response.status);
         return loader.parse(await response.arrayBuffer());
       }));
       if(serial!==loadSerial){geometries.forEach(g=>g.dispose());return;}
@@ -37,10 +43,10 @@ try {
         const obj=new THREE.Mesh(geometry,mat(['#b7c4d6','#3b8cda','#69b69a'][i],false));
         exactGroup.add(obj);exactMeshes.push(obj);
       });
-      meshes.visible=false;syncExact();
+      meshes.visible=false;syncExact();fitCamera(true);
       document.dispatchEvent(new CustomEvent('bearing:exact-loaded'));
     }catch(err){if(serial===loadSerial){clearExact();document.dispatchEvent(new CustomEvent('bearing:exact-error',{detail:err.message}));}}
-  });
+  }
   function syncExact(){if(exactMeshes.length!==3)return;
     for(let i=0;i<3;i++){exactMeshes[i].visible=document.getElementById(['showHousing','showBushing','showShaft'][i]).checked;
       const transparent=document.getElementById('transparent').checked;
@@ -52,6 +58,13 @@ try {
     exactMeshes[0].position.z=-(p.housing_length_mm*.66+14)*t;
     exactMeshes[1].position.z=0;
     exactMeshes[2].position.z=(p.housing_length_mm*.78+17)*t;
+  }
+  function fitCamera(exact=false){
+    const p=window.bearingParams?.();if(!p)return;
+    const extent=Math.max(p.housing_od_mm,p.housing_length_mm+18);
+    const distance=extent*2.45;
+    camera.position.set(distance*.75,distance*.58,distance*.82);
+    controls.target.set(0,0,0);controls.update();
   }
 
   const meshes=new THREE.Group();scene.add(meshes);
@@ -77,7 +90,7 @@ try {
     objects[0].visible=document.getElementById('showHousing').checked;
     objects[1].visible=document.getElementById('showBushing').checked;
     objects[2].visible=document.getElementById('showShaft').checked;
-    const maxD=Math.max(p.housing_od_mm,p.housing_length_mm);camera.far=1400;camera.updateProjectionMatrix();ground.position.z=-Math.max(80,maxD);explode();
+    const maxD=Math.max(p.housing_od_mm,p.housing_length_mm);camera.far=1400;camera.updateProjectionMatrix();ground.position.z=-Math.max(80,maxD);explode();fitCamera();
   }
   function explode(){syncExact();if(objects.length!==3)return;const p=window.bearingParams?.();if(!p)return;
     const t=Number(document.getElementById('explode').value)/100;
@@ -92,6 +105,7 @@ try {
   window.bearingViewerSnapshot=()=>({
     canvasWidth: renderer.domElement.width,
     canvasHeight: renderer.domElement.height,
+    exactMode,
     exactParts:exactMeshes.map((obj,i)=>({name:['housing','bushing','shaft'][i],visible:obj.visible,positionZ:obj.position.z,vertexCount:obj.geometry.attributes.position.count})),
     parts: objects.map((obj,i)=>{
       obj.geometry.computeBoundingBox();
@@ -110,7 +124,7 @@ try {
   });
   for(const id of ['cutaway','transparent','showHousing','showBushing','showShaft'])document.getElementById(id).addEventListener('change',()=>{if(exactMeshes.length){syncExact();return;}remake();});
   document.getElementById('explode').addEventListener('input',explode);
-  document.getElementById('viewReset').addEventListener('click',()=>{camera.position.set(154,116,160);controls.target.set(0,0,0);controls.update();});
+  document.getElementById('viewReset').addEventListener('click',()=>fitCamera());
   remake();
   function frame(){requestAnimationFrame(frame);controls.update();renderer.render(scene,camera);}frame();
 }catch(error){

@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN"><head><link rel="icon" href="data:,"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>BearingCAD Studio · 圆柱径向滑动轴承</title>
+<title>滑动轴承 CAD 工作台 · 圆柱径向滑动轴承</title>
 <style>
 :root{color-scheme:light;--ink:#18304b;--muted:#63748b;--border:#dde5ef;--navy:#091a34;--accent:#1967b0;--panel:#fff;--bg:#eef3f9}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:Inter,"Microsoft Yahei","PingFang SC",system-ui,sans-serif;color:var(--ink)}button,input{font:inherit}button{cursor:pointer}
@@ -12,10 +12,10 @@ main{max-width:1600px;padding:22px 24px 34px;margin:0 auto}.lead{display:flex;ga
 </style>
 <style>
 .viewgrid.preview-invalid .visual{opacity:.24;filter:grayscale(.7);pointer-events:none}
-#cad03Files a{padding:8px 10px;background:#e8f2fc;border-radius:7px;font-size:12px;text-decoration:none}#cad03Views img{width:100%;border:1px solid #d7e4ef;border-radius:8px}#cad03Result[hidden]{display:none}
+#cad03Files a{padding:8px 10px;background:#e8f2fc;border-radius:7px;font-size:12px;text-decoration:none}#cad03Views img{width:100%;border:1px solid #d7e4ef;border-radius:8px}#cad03Result[hidden]{display:none}.workbench-mode{display:flex;gap:18px;align-items:center;flex-wrap:wrap;padding:14px 0;font-size:13px;color:#274760}.workbench-mode input{accent-color:#2370b9}#cad03Views img{max-height:740px;object-fit:contain;background:#fff}#cad03Panel{box-shadow:0 12px 40px #17375e14}#cad03Files{display:flex;gap:10px;flex-wrap:wrap}#cad03Files a{font-weight:650;border:1px solid #cbdded}#cad03Hash{color:#7890a2}
 </style>
 </head><body>
-<header><div><h1>BearingCAD Studio <span style="font-size:12px;color:#79cef9">DEMO 01</span></h1><p>面向滑动轴承多 Agent 设计系统的参数化 CAD 可视化模块</p></div><div class="header-right">圆柱径向滑动轴承 · 套筒轴瓦 / 轴 / 轴承座</div></header>
+<header><div><h1>BearingCAD Studio <span style="font-size:12px;color:#79cef9">DESIGN WORKSPACE</span></h1><p>面向滑动轴承多 Agent 设计系统的参数化 CAD 可视化模块</p></div><div class="header-right">圆柱径向滑动轴承 · 套筒轴瓦 / 轴 / 轴承座</div></header>
 <main>
 <div class="lead"><p>修改左侧设计尺寸 → 三维预览与二维剖视同步更新。所有数值使用 <strong>mm</strong>。</p><span class="tag">几何演示 · 未经工程校核</span></div>
 <div class="columns">
@@ -29,10 +29,10 @@ main{max-width:1600px;padding:22px 24px 34px;margin:0 auto}.lead{display:flex;ga
 </div><div class="stat" id="calcs"></div><div class="subnote">本页只验证几何一致性，不计算承载能力、温升、摩擦、润滑状态或公差配合。径向间隙指单侧间隙，轴瓦内孔 = d + 2c。</div><button id="reset" class="full">恢复演示参数</button><p class="valid" id="ok">● 参数通过几何范围校验</p></div></aside>
 <div class="preview-area"><div id="previewInvalid" class="invalid" role="status" aria-live="polite">参数无效：预览已清空，修正参数后恢复；禁止导出当前参数。</div>
 <div class="viewgrid" id="viewgrid">
-<section class="panel"><div class="panelhead">三维参数模型 <small>Three.js · 离线可用</small></div><div class="visual" id="stage"><div id="fallback" class="fallback"><strong>三维引擎未加载</strong><p>请通过 README 中的 Vite 命令启动本地构建。</p></div></div><div class="toolbar"><label><input type="checkbox" id="showHousing" checked> 显示座</label><label><input type="checkbox" id="showBushing" checked> 显示轴瓦</label><label><input type="checkbox" id="showShaft" checked> 显示轴</label><label><input type="checkbox" id="cutaway" checked> 剖切</label><label><input type="checkbox" id="transparent"> 半透明</label><label>轴向爆炸 <input type="range" id="explode" min="0" max="100" value="25"></label><button id="viewReset" class="outline">重置视角</button></div><div class="desc">灰色：轴承座；蓝色：轴瓦；绿色：轴。剖切、透明和爆炸只改变演示显示，不改变 CAD 实体输出。</div></section>
-<section class="panel"><div class="panelhead">二维结构示意预览 <small>参数剖视 · SVG 矢量图</small></div><div class="visual"><svg id="visual2d" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 480" role="img" aria-label="滑动轴承轴向剖视图及端视图"></svg></div><div class="toolbar"><span>轴向剖视 + 端面视图</span><span>尺寸单位：mm</span><span>CAD 示意图（未套国标图框）</span></div><div class="actions"><button id="saveSvg" class="outline">下载 SVG</button><button id="saveDxf" class="outline">下载 DXF</button><button id="saveJson" class="outline">下载 JSON</button><a href="./outputs/bearing_assembly.step" download class="outline btnlink" title="仅对应初始参数，变化后需运行 Python 生成器">样例 STEP（固定初始参数）</a></div><div class="desc">STEP 为压缩包自带初始参数样例；改变参数后，请下载 JSON 并运行 generate_cad.py 重新生成对应实体。SVG/DXF 随页面参数即时更新。</div></section>
+<section class="panel"><div class="panelhead">三维装配与结构查看 <small>Three.js · 离线可用</small></div><div class="visual" id="stage"><div id="fallback" class="fallback"><strong>三维引擎未加载</strong><p>请通过 README 中的 Vite 命令启动本地构建。</p></div></div><div class="toolbar"><label><input type="checkbox" id="showHousing" checked> 显示座</label><label><input type="checkbox" id="showBushing" checked> 显示轴瓦</label><label><input type="checkbox" id="showShaft" checked> 显示轴</label><label><input type="checkbox" id="cutaway" checked> 剖切</label><label><input type="checkbox" id="transparent"> 半透明</label><label>轴向爆炸 <input type="range" id="explode" min="0" max="100" value="25"></label><button id="viewReset" class="outline">重置视角</button></div><div class="desc">灰色：轴承座；蓝色：轴瓦；绿色：轴。剖切、透明和爆炸只改变演示显示，不改变 CAD 实体输出。</div></section>
+<section class="panel"><div class="panelhead">二维图纸预览 <small>参数剖视 · SVG 矢量图</small></div><div class="visual"><svg id="visual2d" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 480" role="img" aria-label="滑动轴承轴向剖视图及端视图"></svg></div><div class="toolbar"><span>轴向剖视 + 端面视图</span><span>尺寸单位：mm</span><span>CAD 示意图（未套国标图框）</span></div><div class="actions"><button id="saveSvg" class="outline">下载 SVG</button><button id="saveDxf" class="outline">下载 DXF</button><button id="saveJson" class="outline">下载 JSON</button><a href="./outputs/bearing_assembly.step" download class="outline btnlink" title="仅对应初始参数，变化后需运行 Python 生成器">样例 STEP（固定初始参数）</a></div><div class="desc">STEP 为压缩包自带初始参数样例；改变参数后，请下载 JSON 并运行 generate_cad.py 重新生成对应实体。SVG/DXF 随页面参数即时更新。</div></section>
 </div></div></div><section class="panel" id="cad03Panel" style="margin-top:16px">
-<div class="panelhead">CAD-02 · Day 3 精确实体生成 <small>CadQuery / OCCT · 本地服务 · DRAFT</small></div>
+<div class="panelhead">参数化 CAD 成果生成 <small>CadQuery / OCCT · 本地服务 · DRAFT</small></div>
 <div class="formcontent">
 <div style="display:flex;gap:16px;flex-wrap:wrap">
 <label><input type="checkbox" id="cad03HoleOn" checked> 启用径向供油孔</label>
@@ -42,15 +42,16 @@ main{max-width:1600px;padding:22px 24px 34px;margin:0 auto}.lead{display:flex;ga
 <div class="field"><label for="cad03GrooveW">环槽轴向宽度 (mm)</label><input id="cad03GrooveW" type="number" value="6" step="0.001" min="0.001"></div>
 <div class="field"><label for="cad03GrooveDepth">环槽径向深度 (mm)</label><input id="cad03GrooveDepth" type="number" value="1.2" step="0.001" min="0.001"></div>
 </div>
-<p class="subnote" id="cad03Mode">当前：Three.js 参数化示意网格（不包含油孔油槽）</p>
-<button class="full" id="cad03Generate" disabled>调用本地 OCCT 生成精确 CAD</button>
+<p class="subnote" id="cad03Mode">模型待生成 · 请确认尺寸参数</p>
+<button class="full" id="cad03Generate" disabled>生成三维模型与二维图纸</button>
 <p id="cad03Status" role="status" aria-live="polite">检测 Python CAD 服务…</p>
+<div class="workbench-mode"><span>三维模型：</span><label><input type="radio" name="workbenchMode" value="assembly" checked> 完整装配</label><label><input type="radio" name="workbenchMode" value="section"> 实体半剖</label></div>
 <div id="cad03Result" hidden>
 <p id="cad03Hash" class="mono" style="font-size:11px;overflow-wrap:anywhere"></p>
 <div id="cad03Files" class="actions" style="border:none"></div>
 <div id="cad03Views" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px"></div>
 </div>
-<p class="subnote">精确模型从已生成的 STL 显示，STEP/DXF 直接由 OCCT 导出。模型变化后先清空旧成果。精确模型模式下剖切开关不适用，需在 FreeCAD 使用截面功能检查油槽。未经过专业工程校核。</p>
+<p class="subnote">三维模型、实体半剖与二维设计图均基于同一组 OCCT 几何。提供装配、剖切、显隐和导出；图纸用于方案复核，尚未经过工程校核。</p>
 </div></section><div class="foot"><span><strong>展示路径</strong>　参数 → 几何 → 二维/三维同步 → 导出 → 方案留痕</span><span><strong>Demo 01</strong>　示意图 / 未经工程校核 / 非正式制造工程图</span></div></main>
 <script type="module" src="./app.js"></script><script type="module" src="./viewer.js"></script><script type="module" src="./cad03.js"></script>
 </body></html>

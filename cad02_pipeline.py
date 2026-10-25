@@ -17,7 +17,7 @@ from decimal import Decimal
 
 from generate_cad import Bearing
 
-GENERATOR_VERSION = "CAD-02/0.1.0"
+GENERATOR_VERSION = "CAD-02/0.2.0"
 BASE_FIELDS = {f.name for f in fields(Bearing)}
 FEATURE_FIELDS = {"oil_feed_hole_d_mm", "annular_groove_width_mm", "annular_groove_depth_mm"}
 ALL_FIELDS = BASE_FIELDS | FEATURE_FIELDS
@@ -271,15 +271,23 @@ def generate(design: Design, out_root: Path) -> Path:
         import cadquery as cq
         models = build_models(design)
         checks = validate_models(design, models)
+        from cad_workbench_drawing import make_sections, check_assembly, write_review_drawing, STL_TOLERANCE_MM, STL_ANGULAR_TOLERANCE_RAD
+        assembly_checks = check_assembly(design, models)
+        sections = make_sections(design, models)
+        for name, solid in sections.items():
+            solid.export(str(tmp / f"{name}_section.stl"),
+                         tolerance=STL_TOLERANCE_MM, angularTolerance=STL_ANGULAR_TOLERANCE_RAD)
+            solid.export(str(tmp / f"{name}_section.step"))
         assembly = cq.Assembly(name="PlainJournalBearingCAD02")
         for name, color in (("housing", cq.Color(.7, .77, .85)),
                             ("bushing", cq.Color(.2, .55, .85)),
                             ("shaft", cq.Color(.5, .75, .6))):
             assembly.add(models[name], name=name, color=color)
             models[name].export(str(tmp / f"{name}.step"))
-            models[name].export(str(tmp / f"{name}.stl"))
+            models[name].export(str(tmp / f"{name}.stl"), tolerance=STL_TOLERANCE_MM, angularTolerance=STL_ANGULAR_TOLERANCE_RAD)
         assembly.export(str(tmp / "bearing_assembly.step"))
         projections = write_projections(models, tmp)
+        drawing = write_review_drawing(design, models, sections, tmp, projection_edges)
         (tmp / "design_snapshot.json").write_text(json.dumps(
             {"unit": "mm", "approval_state": "DRAFT",
              "bearing": vars(design.bearing), "features": vars(design.features)},
@@ -291,7 +299,8 @@ def generate(design: Design, out_root: Path) -> Path:
                     "approval_state": "DRAFT",
                     "geometry_hash_sha256": geometry_hash,
                     "cache_key": key, "unit": "mm",
-                    "topology_checks": checks,
+                    "topology_checks": checks, "assembly_checks": assembly_checks,
+                    "section_drawing_checks": drawing,
                     "projection_checks": projections, "files": files}
         (tmp / "artifact_manifest.json").write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
