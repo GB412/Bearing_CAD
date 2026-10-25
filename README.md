@@ -53,3 +53,23 @@ python generate_cad.py --params sample_params.json --out outputs
 ## 验收边界
 
 本仓库只实施 CAD-01。二维图是参数化结构示意，三维剖切是浏览器显示效果，不能称为正式 GB/ISO 制造工程图。油孔、油槽、公差、承载/温升计算、权威 B-Rep 投影、候选确认和 V3.1 集成属于后续范围。
+
+## CAD-01 终验补充
+
+GitHub Actions 固定使用 `ubuntu-24.04`，避免 Playwright 1.55 在更新的 GitHub runner 系统上无法安装 Chromium。CI 顺序为 `npm ci` → `npm run build` → Node 参数/DXF 单测 → Python 基础测试 → Chromium 安装 → 对 `npm run preview` 生产构建执行浏览器测试。
+
+```powershell
+npm ci
+npm run build
+npm run test:unit:js
+npm test
+npx playwright install chromium
+npm run test:browser
+npm audit
+```
+
+尺寸输入与图纸标注统一最多三位小数（0.001 mm），前端和 Python 都约束轴瓦外径不超过 160 mm、轴承座外径不超过 200 mm。浏览器 DXF 已补齐 LTYPE/LAYER 表头句柄；仍需第三方 QCAD/FreeCAD 人工打开验收，才可声称互操作通过。
+
+浏览器测试会从生产服务器加载本地资源，并阻止外部网络请求。此方法验证本地资源可用，并不模拟断开本机网络（因为 localhost 服务仍须保持可访问）。
+
+`npm audit` 的具体结果需单独记录并分流；不要未经兼容性测试执行 `npm audit fix --force`。
