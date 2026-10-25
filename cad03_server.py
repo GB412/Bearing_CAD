@@ -43,7 +43,7 @@ def make_server(host="127.0.0.1",port=8088,static=Path("dist"),artifacts=Path("a
                 directory=generate(design,artifacts)
                 manifest=verify_bundle(directory,design.geometry_hash)
                 root=f"/api/cad02/files/{manifest['cache_key']}/"
-                return self.reply(200,{"geometry_hash":design.geometry_hash,"approval_state":"DRAFT","unit":"mm",
+                return self.reply(200,{"geometry_hash":design.geometry_hash,"approval_state":"DRAFT","unit":"mm","cache_key":manifest["cache_key"],
                     "generator_version":manifest["generator_version"],
                     "files":{name:root+name for name in manifest["files"] if name in FILES}})
             except Exception:
