@@ -1,0 +1,32 @@
+name: CAD-02 Day3 browser bridge
+on:
+  push:
+    branches: [main, 'feature/cad02-day3-*']
+  pull_request:
+    branches: [main]
+jobs:
+  cad03:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: node --test cad03_geometry.test.js
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: cad03
+          create-args: >-
+            python=3.11
+            cadquery=2.5.2
+            ezdxf=1.4.2
+            svgwrite=1.4.3
+            -c conda-forge
+          cache-environment: true
+      - name: Day3 local API and real CAD roundtrip
+        shell: micromamba-shell {0}
+        run: python -m unittest discover -s tests -p test_cad03.py -v
