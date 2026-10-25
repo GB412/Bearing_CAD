@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit,unquote
 from cad02_pipeline import parse_design,generate,verify_bundle
 
-FILES={"bearing_assembly.step","housing.step","bushing.step","shaft.step","housing.stl","bushing.stl","shaft.stl","occt_projection.dxf","occt_side.svg","occt_end.svg","artifact_manifest.json","design_snapshot.json"}
+FILES={"bearing_assembly.step","housing.step","bushing.step","shaft.step","housing.stl","bushing.stl","shaft.stl","occt_projection.dxf","occt_side.svg","occt_end.svg","artifact_manifest.json","design_snapshot.json","housing_section.stl","bushing_section.stl","shaft_section.stl","housing_section.step","bushing_section.step","shaft_section.step","bearing_review_sheet.svg","bearing_review_sheet.dxf"}
 RE=re.compile(r"^/api/cad02/files/([a-f0-9]{24})/([a-z0-9_.-]+)$")
 MIMES={".step":"model/step",".stl":"model/stl",".svg":"image/svg+xml",".dxf":"application/dxf",".json":"application/json"}
 
