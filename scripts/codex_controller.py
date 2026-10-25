@@ -155,8 +155,15 @@ class Controller:
         if changed.strip():
             raise GateError("Uncommitted files present; refusing to overwrite: " + changed[-600:])
 
-    def task_branch(self, task):
+    def task_branch(self, task, allow_dirty_repair=False):
         name = f"codex/{task['id'].lower()}"
+        current = self.run_cmd(["git", "branch", "--show-current"], label="current branch").strip()
+        if allow_dirty_repair:
+            # Retain Codex's uncommitted failing-test changes so it can fix them.
+            # Never carry dirty changes across another branch or task.
+            if current != name:
+                raise GateError("Repair requires the original task branch, not " + current)
+            return name
         self.clean_tree()
         self.run_cmd(["git", "fetch", "origin", "main"], label="fetch main")
         exists = self.run_cmd(["git", "branch", "--list", name], label="find task branch")
@@ -315,7 +322,7 @@ Previous validation feedback: {previous[:3000]}"""
                 continue
             if record["attempts"] >= self.max_attempts:
                 raise GateError(f"Exceeded {self.max_attempts} repair passes")
-            self.task_branch(task)
+            self.task_branch(task, allow_dirty_repair=record["phase"] == "REPAIR")
             record = self.update(key, phase="WORKING", attempts=record["attempts"] + 1)
             try:
                 self.develop(task, record.get("error", ""))
