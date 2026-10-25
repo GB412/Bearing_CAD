@@ -29,6 +29,31 @@ class TestGates(unittest.TestCase):
             self.assertEqual(len(module.load_queue(p)["tasks"]),1)
             p.write_text(json.dumps(dict(required_workflows=["ci"],local_checks=[["true"]],tasks=[dict(id="MIG-01",title="t",objective="o",acceptance=["one"])]*2)))
             with self.assertRaises(module.GateError):module.load_queue(p)
+    def test_repair_does_not_allow_dirty_other_branch(self):
+        import types
+        calls=[]
+        def fake(cmd,**kwargs):
+            calls.append(cmd)
+            if cmd==["git","branch","--show-current"]:
+                return "codex/mig-02\n"
+            raise AssertionError("A dirty repair must stop before any further git calls")
+        runner=module.Controller(types.SimpleNamespace(),{"repository":"GB412/Bearing_CAD"},executor=None)
+        runner.run_cmd=fake
+        with self.assertRaises(module.GateError):
+            runner.task_branch({"id":"MIG-01"},allow_dirty_repair=True)
+        self.assertEqual(len(calls),1)
+    def test_repair_preserves_work_in_matching_branch(self):
+        import types
+        calls=[]
+        def fake(cmd,**kwargs):
+            calls.append(cmd)
+            if cmd==["git","branch","--show-current"]:
+                return "codex/mig-01\n"
+            raise AssertionError("Matching dirty repair should not switch branches")
+        runner=module.Controller(types.SimpleNamespace(),{"repository":"GB412/Bearing_CAD"},executor=None)
+        runner.run_cmd=fake
+        self.assertEqual(runner.task_branch({"id":"MIG-01"},allow_dirty_repair=True),"codex/mig-01")
+        self.assertEqual(len(calls),1)
     def test_atomic_state_roundtrip(self):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/"state.json"
