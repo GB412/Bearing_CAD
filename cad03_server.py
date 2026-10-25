@@ -66,7 +66,7 @@ def make_server(host="127.0.0.1",port=8088,static=Path("dist"),artifacts=Path("a
                     p=(folder/name).resolve(strict=True)
                     if not p.is_relative_to(folder.resolve()):raise ValueError("Bad path")
                     return self.send(200,p.read_bytes(),MIMES.get(p.suffix,"application/octet-stream"),name.endswith((".step",".stl",".dxf")))
-                except (ValueError,OSError,KeyError,json.JSONDecodeError):
+                except (ValueError,OSError,KeyError,RuntimeError,json.JSONDecodeError):
                     return self.reply(404,{"error":"Artifact invalid or missing"})
             if route.startswith("/api/"):return self.reply(404,{"error":"Unknown endpoint"})
             try:
