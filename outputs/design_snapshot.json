@@ -1,0 +1,11 @@
+{
+  "shaft_d_mm": 50,
+  "radial_clearance_mm": 0.05,
+  "bush_od_mm": 70,
+  "length_mm": 50,
+  "housing_od_mm": 86,
+  "housing_length_mm": 60,
+  "bore_d_mm": 50.1,
+  "status": "DEMO_UNVERIFIED",
+  "geometry_unit": "mm"
+}

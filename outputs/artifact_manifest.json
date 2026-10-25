@@ -1,0 +1,18 @@
+{
+  "generator": "BearingCAD-Demo/0.1.0",
+  "approval_state": "DRAFT",
+  "geometry_hash_sha256": "7ad1658d960aafc4a0f08ecf6b6d9aa3a0e83bd6a6f78772b5ec3ca8342bb37a",
+  "geometry_unit": "mm",
+  "files": {
+    "bearing_assembly.step": "37cbc88b129af28a9319d4e71efa2651d0849904d6dcd051492e3d3958891b44",
+    "bearing_section.dxf": "37031cf0828334d6a0d83775b3b5fee3f8b6e078d1ccc57eeb77ebe239b979c4",
+    "bearing_section.svg": "f9de9fbbf3513efc1c23928d6d7ec044c5fb22bdda67ae13ca06e04a0e6d34f3",
+    "bushing.step": "2aef19e70adcfedb3b9bef356b485b6db9d004695bd3ce6bdba0b1732b188881",
+    "bushing.stl": "5e9bf1d3bcbc75172eb087c4a6f5623c063178f4393f517c7f53ce99d774bd2c",
+    "design_snapshot.json": "90bcda93169150391c09732f5df133466fea63ec171738ad0a5229bb50d7bdaf",
+    "housing.step": "22bde8ea8c23835278f927160cf52966ecfecf618bcb63b3cea0e648cf620bab",
+    "housing.stl": "cbb1bb740de663361981c20237f425f41f8ce74c82f5732b77619ec82276d5c8",
+    "shaft.step": "b731a1f92203c11081f63d4cbd2e6d3cd0fa3830cef3c092e1b78dde325d7820",
+    "shaft.stl": "b72e90c563d5a26385141070aa3261804a555df0121809119a9ad1ddac091642"
+  }
+}
