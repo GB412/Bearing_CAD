@@ -1,0 +1,148 @@
+{
+  "generator_version": "CAD-02/0.2.0",
+  "occt_version": "2.5.2",
+  "approval_state": "DRAFT",
+  "geometry_hash_sha256": "71a4b63105b40a19c840af78ff0ab773d06cf3dcb53f601f3e64adb589c74665",
+  "cache_key": "64d4893af7e66b4bf4179c2d",
+  "unit": "mm",
+  "topology_checks": {
+    "housing": {
+      "volume_mm3": 117464.286434,
+      "bounds_mm": {
+        "x": 86.0,
+        "y": 86.0,
+        "z": 60.0
+      },
+      "is_valid": true,
+      "solid_count": 1
+    },
+    "bushing": {
+      "volume_mm3": 92522.546126,
+      "bounds_mm": {
+        "x": 70.0,
+        "y": 70.0,
+        "z": 50.0
+      },
+      "is_valid": true,
+      "solid_count": 1
+    },
+    "shaft": {
+      "volume_mm3": 153152.641863,
+      "bounds_mm": {
+        "x": 50.0,
+        "y": 50.0,
+        "z": 78.0
+      },
+      "is_valid": true,
+      "solid_count": 1
+    }
+  },
+  "assembly_checks": {
+    "radial_clearance_mm": 0.05,
+    "bushing_to_housing_nominal_diametral_gap_mm": 0.0,
+    "nominal_interference_mm3": {
+      "shaft_bushing_mm3": 0.0,
+      "bushing_housing_mm3": 0.0,
+      "shaft_housing_mm3": 0.0
+    },
+    "note": "Nominal geometry only. Press fits/tolerances require separate engineering review."
+  },
+  "section_drawing_checks": {
+    "section_plane": "Y=0; keep Y<=0",
+    "section_face_counts": {
+      "housing": 3,
+      "bushing": 3,
+      "shaft": 1
+    },
+    "end_visible_edges": 7,
+    "status": "DRAFT_NOT_FOR_MANUFACTURE"
+  },
+  "projection_checks": {
+    "side": {
+      "visible_edges": 14,
+      "hidden_edges": 53
+    },
+    "end": {
+      "visible_edges": 7,
+      "hidden_edges": 29
+    }
+  },
+  "files": {
+    "bearing_assembly.step": {
+      "sha256": "580909aacc5badc0e5cde1f926025f546326dfaefc739b4f172ad58417dc1573",
+      "size_bytes": 116169
+    },
+    "bearing_review_sheet.dxf": {
+      "sha256": "0c113d090d307ec58d447788431451acbaf22afe4c4faf0823d48928c9feac96",
+      "size_bytes": 699846
+    },
+    "bearing_review_sheet.svg": {
+      "sha256": "429d3b2868ca765719a9ab72d1a840aabba875e3a96d01ce35980fd211741cd4",
+      "size_bytes": 385989
+    },
+    "bushing.step": {
+      "sha256": "1846a2b2a53c4d2c5c8d0d624f70f1eaca8a0f2a680dae8736195d80032ff212",
+      "size_bytes": 54238
+    },
+    "bushing.stl": {
+      "sha256": "e54280c869cc2798bed8df4cacba4d4926cc7c8692039e3a7dfa776ffd37bd3c",
+      "size_bytes": 110484
+    },
+    "bushing_section.step": {
+      "sha256": "204f74b923c8054e99ddfaff40aa959283f794f6786e9264e8748d00c7b6a88b",
+      "size_bytes": 52620
+    },
+    "bushing_section.stl": {
+      "sha256": "1a1238aef00e847ef0704c1dfbfbfcffd21fed8032ee146f7d4964879668db28",
+      "size_bytes": 56684
+    },
+    "design_snapshot.json": {
+      "sha256": "b5dd83b8c1a8eed92a2cca86d366e8d2e67d4cfb136b721a93d39b563553bb94",
+      "size_bytes": 353
+    },
+    "housing.step": {
+      "sha256": "e19a18c14261bd235806849544c4b7efb4d2c9c395d43dd76abd6dd5235e4e3f",
+      "size_bytes": 45057
+    },
+    "housing.stl": {
+      "sha256": "6ff2d4dea5f8013de02e35384cc6282597b33907ebcfe3109ac3204e9329062c",
+      "size_bytes": 68484
+    },
+    "housing_section.step": {
+      "sha256": "7ecca69d96a5c4060b22dd8cfaf0fca6372d6dd92aa1dda4bfb8e8538e8dbac7",
+      "size_bytes": 36027
+    },
+    "housing_section.stl": {
+      "sha256": "26517915ae0f5591c81fdfcd83ca6d47db98b011596b6c57c7d135034af48498",
+      "size_bytes": 35084
+    },
+    "occt_end.svg": {
+      "sha256": "70b4084540b2e851de3e9573cb80540d68766488e5aad9a5d8686000c09a81a2",
+      "size_bytes": 316773
+    },
+    "occt_projection.dxf": {
+      "sha256": "9ef912cf2cd78f13db3ee9bd91a673af5c0a05edf36c7f393885095816960802",
+      "size_bytes": 586950
+    },
+    "occt_side.svg": {
+      "sha256": "a1892e9a4a54e8cc122941ba5753f478fca760a434e5f578af92b6ca728e82a3",
+      "size_bytes": 344816
+    },
+    "shaft.step": {
+      "sha256": "0c23c7f6a3d4976924140b2d92e0994a0003186608c3b962a87f1174680bd92e",
+      "size_bytes": 5760
+    },
+    "shaft.stl": {
+      "sha256": "79db21956bbd90d8920c12b28da766e5f3b82aaf1927f11dd9d1ea50753d5548",
+      "size_bytes": 20884
+    },
+    "shaft_section.step": {
+      "sha256": "3fa164e8c12e957413f616213339a3b6aaee201055596276aa5025d5b02c9dc2",
+      "size_bytes": 9766
+    },
+    "shaft_section.stl": {
+      "sha256": "c70809b76c93cf808204c0bf41947735c8b331f7a663e38ce9606fed83b213cd",
+      "size_bytes": 10684
+    }
+  }
+}

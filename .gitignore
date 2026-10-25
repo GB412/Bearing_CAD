@@ -9,3 +9,8 @@ __pycache__/
 *.tmp
 *.log
 .DS_Store
+
+# Local RoBAS reference
+.reference/
+reference/
+RoBAS
