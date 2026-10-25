@@ -1,0 +1,28 @@
+name: CAD-02 OCCT verification
+on:
+  push:
+    branches: [main, 'feature/cad02-*']
+  pull_request:
+    branches: [main]
+jobs:
+  occt:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: cad02
+          create-args: >-
+            python=3.11
+            cadquery=2.5.2
+            ezdxf=1.4.2
+            svgwrite=1.4.3
+            -c conda-forge
+          cache-environment: true
+      - name: Validate exact B-Rep and HLR exports
+        shell: micromamba-shell {0}
+        run: python -m unittest discover -s tests -p test_cad02.py -v
+      - name: CLI artifact smoke test
+        shell: micromamba-shell {0}
+        run: python cad02_pipeline.py --params sample_params_cad02.json --out artifacts/cad02
