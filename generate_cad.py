@@ -32,12 +32,16 @@ class Bearing:
 
     def validate(self):
         vals = vars(self)
-        if any(not math.isfinite(v) for v in vals.values()):
-            raise ValueError('All input values must be finite')
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in vals.values()):
+            raise ValueError('All input values must be finite numbers')
+        if any(abs(v * 1000 - round(v * 1000)) > 1e-7 for v in vals.values()):
+            raise ValueError('All dimensions must be expressible to 0.001 mm precision')
         if not (15 <= self.shaft_d_mm <= 120):
             raise ValueError('shaft_d_mm must be 15..120 mm (demo limit)')
         if not (0.005 <= self.radial_clearance_mm <= 0.3):
             raise ValueError('radial clearance must be 0.005..0.3 mm (demo limit)')
+        if self.bush_od_mm > 160 or self.housing_od_mm > 200:
+            raise ValueError('Demo limit: bushing OD <= 160 mm and housing OD <= 200 mm')
         if self.bush_od_mm <= self.bore_d_mm + 4:
             raise ValueError('bush_od_mm needs >2mm radial bushing wall')
         if self.housing_od_mm <= self.bush_od_mm + 6:

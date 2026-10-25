@@ -57,6 +57,16 @@ class CadCase(unittest.TestCase):
   for layer in ('HOUSING','BUSHING','SHAFT','CENTER','DIM'):
    self.assertIn(layer, doc.layers)
   self.assertGreater(len(doc.modelspace()), 10)
+ def test_demo_max_diameter_and_precision(self):
+  for bearing in [
+    Bearing(50,.05,170,50,190,60),
+    Bearing(50,.05,70,50,201,60),
+    Bearing(50,.00549,70,50,86,60),
+    Bearing(50,.05,70.0001,50,86,60),
+  ]:
+   with self.subTest(bearing=bearing):
+    with self.assertRaises(ValueError): bearing.validate()
+  Bearing(50,.005,70,50,86,60).validate()
  def test_cad_solid_volume(self):
   try:
    import cadquery

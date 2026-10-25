@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "python -m unittest discover -s tests -v",
     "test:browser": "playwright test",
-    "test:all": "npm test && npm run test:browser"
+    "test:all": "npm test && npm run test:browser",
+    "test:unit:js": "node --test geometry.test.js"
   },
   "dependencies": {
     "three": "0.180.0"

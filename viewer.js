@@ -51,6 +51,25 @@ try {
   const obs=new ResizeObserver(()=>{const w=canvasArea.clientWidth,h=canvasArea.clientHeight;if(w<=0||h<=0)return;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h,false);});obs.observe(canvasArea);
   document.addEventListener('bearing:change',remake);
   document.addEventListener('bearing:invalid',clearMeshes);
+  // Read-only scene diagnostics used by integration tests; never exposes mutable meshes.
+  window.bearingViewerSnapshot=()=>({
+    canvasWidth: renderer.domElement.width,
+    canvasHeight: renderer.domElement.height,
+    parts: objects.map((obj,i)=>{
+      obj.geometry.computeBoundingBox();
+      const b=obj.geometry.boundingBox;
+      return {
+        name:['housing','bushing','shaft'][i],
+        visible:obj.visible,
+        transparent:obj.material.transparent,
+        opacity:obj.material.opacity,
+        positionZ:obj.position.z,
+        vertexCount:obj.geometry.getAttribute('position').count,
+        diameterX:b.max.x-b.min.x,
+        widthZ:b.max.z-b.min.z
+      };
+    })
+  });
   for(const id of ['cutaway','transparent','showHousing','showBushing','showShaft'])document.getElementById(id).addEventListener('change',remake);
   document.getElementById('explode').addEventListener('input',explode);
   document.getElementById('viewReset').addEventListener('click',()=>{camera.position.set(154,116,160);controls.target.set(0,0,0);controls.update();});
