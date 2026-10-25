@@ -45,9 +45,7 @@ $('cad03Generate').addEventListener('click',async()=>{
   for(const name of ['bearing_review_sheet.dxf','bearing_review_sheet.svg','bearing_assembly.step','housing.step','bushing.step','shaft.step','housing_section.step','bushing_section.step','shaft_section.step','artifact_manifest.json']){
    if(!d.files[name])continue;const a=document.createElement('a');a.href=d.files[name];a.download=name;a.textContent=name;$('cad03Files').append(a);
   }
-  for(const name of ['bearing_review_sheet.svg']){
-   if(!d.files[name])continue;const img=document.createElement('img');img.src=d.files[name];img.alt=name;$('cad03Views').append(img);
-  }
+  // Drawing is rendered in the main 2D viewport, not duplicated below.
   $('cad03Hash').textContent='SHA256: '+d.geometry_hash+' · '+d.generator_version+' · DRAFT';
   $('cad03Result').hidden=false;
   // The top-level 2D pane now shows the authoritative review sheet rather than
