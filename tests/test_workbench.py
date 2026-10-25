@@ -36,7 +36,7 @@ class WorkbenchGeometryTests(unittest.TestCase):
     self.assertEqual(len(solid),1)
    svg=(dest/"bearing_review_sheet.svg").read_text(encoding="utf-8")
    self.assertIn("滑动轴承",svg)
-   self.assertIn("油槽",svg)
+   self.assertIn("内环槽",svg)
    doc=ezdxf.readfile(dest/"bearing_review_sheet.dxf")
    audit=doc.audit()
    self.assertFalse(audit.errors)
