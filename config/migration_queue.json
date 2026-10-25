@@ -1,0 +1,176 @@
+{
+  "repository": "GB412/Bearing_CAD",
+  "max_attempts": 3,
+  "poll_seconds": 30,
+  "codex_timeout_seconds": 3600,
+  "test_timeout_seconds": 1800,
+  "ci_timeout_seconds": 2700,
+  "required_workflows": [
+    "CAD-01 validation",
+    "CAD-02 OCCT verification",
+    "CAD-02 Day3 browser bridge",
+    "CAD Workbench OCCT regression",
+    "Codex Controller"
+  ],
+  "local_checks": [
+    [
+      "python",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "tests",
+      "-p",
+      "test_cad.py",
+      "-v"
+    ],
+    [
+      "python",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "tests",
+      "-p",
+      "test_cad02.py",
+      "-v"
+    ],
+    [
+      "python",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "tests",
+      "-p",
+      "test_cad03.py",
+      "-v"
+    ],
+    [
+      "python",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "tests",
+      "-p",
+      "test_workbench.py",
+      "-v"
+    ],
+    [
+      "npm",
+      "ci"
+    ],
+    [
+      "npm",
+      "run",
+      "build"
+    ],
+    [
+      "npm",
+      "run",
+      "test:unit:js"
+    ]
+  ],
+  "tasks": [
+    {
+      "id": "MIG-01",
+      "title": "Audit RoBAS and establish rolling CAD contracts",
+      "objective": "Audit private RoBAS C# CAD geometry and document formulas, unit normalization and build an Assembly/Part contract independent of the existing three-part journal bearing pipeline. Add test fixtures for three rolling-bearing families. Do not yet build rolling solids.",
+      "acceptance": [
+        "RoBAS file/path/formula/units audit with ambiguity flags and no copied source",
+        "Typed assembly and part identities and immutable DRAFT provenance",
+        "Existing sliding bearing tests pass unchanged",
+        "Rolling test fixtures reviewed for physical validity"
+      ]
+    },
+    {
+      "id": "MIG-02",
+      "title": "Deep-groove races and balls",
+      "objective": "Implement true OCCT B-Rep deep-groove ball bearing outer race inner race toroidal raceways and independent spherical rolling elements using verified RoBAS formulas.",
+      "acceptance": [
+        "Independent valid closed inner/outer race solids and Z balls",
+        "Pitch circle, ball count, envelope and raceway location tested",
+        "STEP reimport preserves Z+2 solids",
+        "Both RoBAS-reference and valid engineering test fixtures pass"
+      ]
+    },
+    {
+      "id": "MIG-03",
+      "title": "Deep-groove complete cage and assembly",
+      "objective": "Implement initial robust machined sphere-pocket cage and complete deep-groove assembly from real RoBAS geometric construction principles.",
+      "acceptance": [
+        "Z pocket cavities correctly placed, no duplicate first pocket",
+        "Z balls and two rings plus cage independently addressable",
+        "Interference check separates intended contact from invalid overlaps",
+        "Assembly STEP and part-level STL roundtrip"
+      ]
+    },
+    {
+      "id": "MIG-04",
+      "title": "Shared CAD export and HTTP routing",
+      "objective": "Introduce rolling-bearing service endpoints and generalized part manifests preserving existing journal bearing API; adapt generic export, cache, geometry hash and file whitelisting.",
+      "acceptance": [
+        "Sliding and rolling requests use type-specific schema validation",
+        "Full manifest files and every STL/STEP download match geometry hash",
+        "Legacy /api/cad02 paths and tests remain working",
+        "No path traversal, stale design approval injection or skipped CAD errors"
+      ]
+    },
+    {
+      "id": "MIG-05",
+      "title": "Rolling bearing Web viewer",
+      "objective": "Add precise rolling-bearing type selection and dynamic part tree/part visibility in Three.js while retaining sliding bearing sections and drawing workflow.",
+      "acceptance": [
+        "Deep-groove parameters submitted through same-origin backend",
+        "Dynamic part list shows inner/outer races, balls and cage",
+        "No stale geometry shown after parameter change or failed loading",
+        "Browser tests cover both bearing families"
+      ]
+    },
+    {
+      "id": "MIG-06",
+      "title": "Angular contact ball bearing",
+      "objective": "Reimplement RoBAS single-row angular-contact ball bearing asymmetrical grooves, contact angle, balls and appropriate cage as valid B-Rep solids.",
+      "acceptance": [
+        "Contact-angle configuration and axial race offsets checked",
+        "STEP roundtrip and per-part volumes valid",
+        "Misfit contact/raceway conditions rejected and documented",
+        "Three representative valid fixtures pass"
+      ]
+    },
+    {
+      "id": "MIG-07",
+      "title": "Cylindrical roller bearing families",
+      "objective": "Reimplement RoBAS cylindrical roller bearing raceways, rollers and N/NU/NJ/NUP/NF flange forms, preserving named part identities.",
+      "acceptance": [
+        "All five forms generate closed solids",
+        "Roller pitch circle, count, flange configuration tested",
+        "Valid assembly STEP with part list per form",
+        "Regression suite stays green"
+      ]
+    },
+    {
+      "id": "MIG-08",
+      "title": "Complex rolling cages and performance",
+      "objective": "Port RoBAS supported stamped and roller cage alternatives where source geometry is verified and improve large-assembly mesh and generation performance.",
+      "acceptance": [
+        "Cage variants checked for pocket count and placement",
+        "Large assembly remains responsive under explicit reference fixture",
+        "Failure cases are explicit, not silently approximated",
+        "B-Rep and display meshes share the same source"
+      ]
+    },
+    {
+      "id": "MIG-09",
+      "title": "Final RoBAS rolling geometry migration acceptance",
+      "objective": "Audit feature parity across three rolling-bearing families, resolve supported fixture defects, document unsupported RoBAS features and produce repeatable final test report.",
+      "acceptance": [
+        "Deep-groove, angular contact and cylindrical roller representative STEP models reimport",
+        "All mandatory CI workflows pass",
+        "No sliding journal regressions or approval state forgery",
+        "Document residual limitations, licensing and manual CAD interoperability checkpoints"
+      ]
+    }
+  ]
+}
