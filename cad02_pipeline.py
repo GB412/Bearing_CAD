@@ -80,8 +80,8 @@ class Design:
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def read_design(path: Path) -> Design:
-    data = json.loads(path.read_text(encoding="utf-8"))
+def parse_design(data: dict) -> Design:
+    """Parse untrusted JSON payloads, rejecting unknown approval/identity fields."""
     if not isinstance(data, dict):
         raise ValueError("Design parameters must be a JSON object")
     unknown, missing = set(data) - ALL_FIELDS, BASE_FIELDS - set(data)
@@ -90,6 +90,10 @@ def read_design(path: Path) -> Design:
     design = Design(Bearing(**{k: data[k] for k in BASE_FIELDS}),
                     FeatureSpec(**{k: data[k] for k in FEATURE_FIELDS if k in data}))
     return design.validate()
+
+
+def read_design(path: Path) -> Design:
+    return parse_design(json.loads(path.read_text(encoding="utf-8")))
 
 
 def build_models(design: Design):
