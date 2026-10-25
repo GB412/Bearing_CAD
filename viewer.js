@@ -29,8 +29,9 @@ try {
     return new THREE.Mesh(geom,mat(color,alpha));
   }
   function solid(radius,length,color,alpha){const g=new THREE.CylinderGeometry(radius,radius,length,96,1,false);g.rotateX(Math.PI/2);return new THREE.Mesh(g,mat(color,alpha));}
-  function remake(){const p=window.bearingParams?.();if(!p)return;
-    for(const obj of objects){meshes.remove(obj);obj.geometry.dispose();obj.material.dispose();}objects=[];
+  function clearMeshes(){for(const obj of objects){meshes.remove(obj);obj.geometry.dispose();obj.material.dispose();}objects=[];}
+  function remake(){const p=window.bearingParams?.();if(!p){clearMeshes();return;}
+    clearMeshes();
     const cut=document.getElementById('cutaway').checked,transparent=document.getElementById('transparent').checked;
     const housing=ring(p.housing_od_mm/2,p.bush_od_mm/2,p.housing_length_mm,cut,'#b7c4d6',transparent);
     const bush=ring(p.bush_od_mm/2,(p.shaft_d_mm+2*p.radial_clearance_mm)/2,p.length_mm,cut,'#3b8cda',transparent);
@@ -49,6 +50,7 @@ try {
   }
   const obs=new ResizeObserver(()=>{const w=canvasArea.clientWidth,h=canvasArea.clientHeight;if(w<=0||h<=0)return;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h,false);});obs.observe(canvasArea);
   document.addEventListener('bearing:change',remake);
+  document.addEventListener('bearing:invalid',clearMeshes);
   for(const id of ['cutaway','transparent','showHousing','showBushing','showShaft'])document.getElementById(id).addEventListener('change',remake);
   document.getElementById('explode').addEventListener('input',explode);
   document.getElementById('viewReset').addEventListener('click',()=>{camera.position.set(154,116,160);controls.target.set(0,0,0);controls.update();});

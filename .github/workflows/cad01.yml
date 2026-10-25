@@ -1,0 +1,22 @@
+name: CAD-01 validation
+
+on:
+  push:
+    branches: [main, 'fix/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  frontend-and-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: python -m unittest discover -s tests -v
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
