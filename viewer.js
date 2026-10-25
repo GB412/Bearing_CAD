@@ -20,9 +20,10 @@ try {
   let objects=[];
   let exactMeshes=[];let exactMode='assembly';let exactFiles=null;let loadSerial=0;const exactGroup=new THREE.Group();scene.add(exactGroup);
   function clearExact(){loadSerial++;for(const obj of exactMeshes){exactGroup.remove(obj);obj.geometry.dispose();obj.material.dispose();}exactMeshes=[];meshes.visible=true;}
-  document.addEventListener('bearing:exact-clear',clearExact);
-  document.addEventListener('bearing:change',clearExact);
-  document.addEventListener('bearing:invalid',clearExact);
+  const invalidateExact=()=>{exactFiles=null;clearExact();};
+  document.addEventListener('bearing:exact-clear',invalidateExact);
+  document.addEventListener('bearing:change',invalidateExact);
+  document.addEventListener('bearing:invalid',invalidateExact);
   document.addEventListener('bearing:exact-ready',async(event)=>{
     exactFiles=event.detail.files;await loadExact();
   });
