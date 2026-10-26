@@ -23,7 +23,7 @@ class SimplifiedCageTests(unittest.TestCase):
                     "kind": "simplified_annular",
                     "inner_d_mm": 48 * factor,
                     "outside_d_mm": 60 * factor,
-                    "width_mm": 9 * factor,
+                    "width_mm": 11 * factor,
                     "pocket_clearance_mm": 0.25 * factor,
                 }
                 request = parse_request(data)
@@ -52,7 +52,7 @@ class SimplifiedCageTests(unittest.TestCase):
             with self.subTest(changes=changes):
                 data = deep_request()
                 data["cage"] = {"kind": "simplified_annular", "inner_d_mm": 48,
-                                "outside_d_mm": 60, "width_mm": 9, "pocket_clearance_mm": 0.25}
+                                "outside_d_mm": 60, "width_mm": 11, "pocket_clearance_mm": 0.25}
                 data["cage"].update(changes)
                 with self.assertRaises(ContractError):
                     build_deep_groove(parse_request(data))
