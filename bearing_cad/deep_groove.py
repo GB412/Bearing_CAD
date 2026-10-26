@@ -57,11 +57,32 @@ def build_deep_groove(request: BearingRequest) -> AssemblyModel:
     if max(interference_volume(inner, reference_ball), interference_volume(outer, reference_ball)) > 1e-6:
         raise ContractError("ASSEMBLY_INTERFERENCE", "/geometry", "Ball penetrates a raceway")
 
+    cage_shape = None
+    if request.cage is not None:
+        cage_spec = request.cage
+        if not (inner_shoulder < cage_spec.inner_d_mm < cage_spec.outside_d_mm < outer_shoulder):
+            raise ContractError("PARAMETER_INVALID", "/cage", "Cage must lie radially between shoulders")
+        if not (ball_d + 2 * cage_spec.pocket_clearance_mm < cage_spec.width_mm <= B):
+            raise ContractError("PARAMETER_INVALID", "/cage/width_mm", "Cage needs axial bridges around ball pockets")
+        cage_shape = annulus(cage_spec.inner_d_mm, cage_spec.outside_d_mm, cage_spec.width_mm)
+        cutter = sphere(ball_d + 2 * cage_spec.pocket_clearance_mm)
+        # Exactly count pockets (no duplicated 0/360-degree endpoint).
+        for center in positions:
+            cage_shape = cage_shape.cut(cutter.translate(center))
+        if not inspect_solid(cage_shape).valid:
+            raise ContractError("BREP_INVALID", "/cage", "Pocket cutting disconnected cage")
+        if (interference_volume(cage_shape, inner) > 1e-6 or
+                interference_volume(cage_shape, outer) > 1e-6 or
+                interference_volume(cage_shape, reference_ball) > 1e-6):
+            raise ContractError("ASSEMBLY_INTERFERENCE", "/cage", "Cage overlaps rings or rolling elements")
+
     components = (
         ComponentDefinition("inner_ring", "inner_ring", inner),
         ComponentDefinition("outer_ring", "outer_ring", outer),
         ComponentDefinition("ball", "rolling_element", ball),
     )
+    if cage_shape is not None:
+        components += (ComponentDefinition("cage", "cage", cage_shape),)
     instances = (
         ComponentInstance("inner_ring", "inner_ring"),
         ComponentInstance("outer_ring", "outer_ring"),
@@ -69,4 +90,6 @@ def build_deep_groove(request: BearingRequest) -> AssemblyModel:
         ComponentInstance(f"ball_{i+1:03d}", "ball", position)
         for i, position in enumerate(positions)
     )
+    if cage_shape is not None:
+        instances += (ComponentInstance("cage", "cage"),)
     return AssemblyModel(BearingType.DEEP_GROOVE, components, instances)

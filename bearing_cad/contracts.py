@@ -35,6 +35,15 @@ class BearingType(str, Enum):
 
 
 @dataclass(frozen=True)
+class CageSpec:
+    kind: str
+    inner_d_mm: float
+    outside_d_mm: float
+    width_mm: float
+    pocket_clearance_mm: float
+
+
+@dataclass(frozen=True)
 class BearingRequest:
     schema_version: str
     bearing_type: BearingType
@@ -42,6 +51,7 @@ class BearingRequest:
     detail_level: str
     geometry_strategy: str
     parameters: Mapping[str, float | int | str]
+    cage: CageSpec | None = None
 
     def __post_init__(self) -> None:
         # A frozen dataclass does not freeze nested dictionaries by itself.
@@ -52,6 +62,9 @@ class BearingRequest:
                    "unit": self.unit, "detail_level": self.detail_level,
                    "geometry_strategy": self.geometry_strategy,
                    "parameters": dict(self.parameters)}
+        if self.cage is not None:
+            payload["cage"] = {name: getattr(self.cage, name) for name in
+                               ("kind", "inner_d_mm", "outside_d_mm", "width_mm", "pocket_clearance_mm")}
         return json.dumps(payload, sort_keys=True, separators=(",", ":"),
                           allow_nan=False, ensure_ascii=True)
 
@@ -119,8 +132,13 @@ def _closed_object(value: Any, allowed: set[str], path: str) -> Mapping[str, Any
 
 def parse_request(data: Mapping[str, Any]) -> BearingRequest:
     """Reject unknown/missing inputs; do not silently infer RoBAS parameters."""
-    envelope = _closed_object(data, {"schema_version", "bearing_type", "unit",
-                                     "detail_level", "geometry_strategy", "parameters"}, "")
+    if not isinstance(data, dict):
+        raise ContractError("PARAMETER_INVALID", "", "Expected request object")
+    cage_present = "cage" in data
+    cage_raw = data.get("cage")
+    envelope = _closed_object({k:v for k,v in data.items() if k != "cage"},
+                              {"schema_version", "bearing_type", "unit",
+                               "detail_level", "geometry_strategy", "parameters"}, "")
     if envelope["schema_version"] != SCHEMA_VERSION:
         raise ContractError("SCHEMA_UNSUPPORTED", "/schema_version", "Unsupported schema version")
     try:
@@ -166,5 +184,28 @@ def parse_request(data: Mapping[str, Any]) -> BearingRequest:
         raise ContractError("PARAMETER_INVALID", "/parameters/outside_d_mm", "Outer diameter must exceed bore")
     if not params["bore_d_mm"] < params["pitch_d_mm"] < params["outside_d_mm"]:
         raise ContractError("PARAMETER_INVALID", "/parameters/pitch_d_mm", "Pitch diameter must lie between bore and outside diameters")
+    cage = None
+    if cage_present:
+        if kind != BearingType.DEEP_GROOVE:
+            raise ContractError("NOT_SUPPORTED", "/cage", "Cage supported only for deep-groove bearings")
+        fields = {"kind", "inner_d_mm", "outside_d_mm", "width_mm", "pocket_clearance_mm"}
+        obj = _closed_object(cage_raw, fields, "/cage")
+        if obj["kind"] != "simplified_annular":
+            raise ContractError("NOT_SUPPORTED", "/cage/kind", "Detailed cage not implemented")
+        values = {}
+        for field in fields - {"kind"}:
+            value = obj[field]
+            if type(value) not in (int, float) or (type(value) is int and value.bit_length() > 1024):
+                raise ContractError("PARAMETER_INVALID", f"/cage/{field}", "Expected positive mm")
+            try:
+                finite = math.isfinite(value)
+            except OverflowError:
+                finite = False
+            if not finite or value <= 0:
+                raise ContractError("PARAMETER_INVALID", f"/cage/{field}", "Expected finite positive mm")
+            values[field] = float(value)
+        if values["inner_d_mm"] >= values["outside_d_mm"]:
+            raise ContractError("PARAMETER_INVALID", "/cage/outside_d_mm", "Cage outer must exceed cage inner")
+        cage = CageSpec(kind="simplified_annular", **values)
     return BearingRequest(SCHEMA_VERSION, kind, "mm", envelope["detail_level"],
-                          "explicit", params)
+                          "explicit", params, cage)
