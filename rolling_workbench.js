@@ -141,7 +141,7 @@ $('generate').addEventListener('click',generate);
 $('resetParams').addEventListener('click',()=>{for(const [key,,value] of fields)$('param-'+key).value=String(value);
  for(const [key,,value] of cages)$('cage-'+key).value=String(value);$('cageEnabled').checked=true;dispose();status('已恢复演示参数；请重新生成 CAD');});
 $('cageEnabled').addEventListener('change',()=>{$('cageParams').hidden=!$('cageEnabled').checked;});
-for(const el of [...document.querySelectorAll('#parameters input,#cageParams input')])el.addEventListener('change',()=>{token++;controller?.abort();dispose();status('参数已更改，请重新生成以查看对应真实实体');});
+for(const el of [...document.querySelectorAll('#parameters input,#cageParams input')])el.addEventListener('input',()=>{token++;controller?.abort();dispose();status('参数已更改，请重新生成以查看对应真实实体');});
 for(const id of ['cutaway','transparent','explode'])$(id).addEventListener('input',applyVisualOptions);
 $('viewReset').addEventListener('click',()=>{resetCamera();controls.reset();resetCamera();});
 (async()=>{try{const response=await fetch('/api/v2/cad/status');const data=await response.json();
