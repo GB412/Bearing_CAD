@@ -10,7 +10,8 @@ def deep_request():
             "unit": "mm", "detail_level": "functional", "geometry_strategy": "explicit",
             "parameters": {"bore_d_mm": 40, "outside_d_mm": 68, "width_mm": 15,
                            "ball_d_mm": 8, "pitch_d_mm": 54, "ball_count": 11,
-                           "inner_groove_radius_mm": 4.3, "outer_groove_radius_mm": 4.5}}
+                           "inner_groove_radius_mm": 4.3, "outer_groove_radius_mm": 4.5,
+                           "inner_shoulder_d_mm": 47.2, "outer_shoulder_d_mm": 60.8}}
 
 
 class ContractTests(unittest.TestCase):
@@ -64,6 +65,8 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(parse_request(cylinder).parameters["configuration"], "NU")
         angle = copy.deepcopy(deep)
         angle["bearing_type"] = "rolling.angular_contact_ball"
+        del angle["parameters"]["inner_shoulder_d_mm"]
+        del angle["parameters"]["outer_shoulder_d_mm"]
         angle["parameters"]["contact_angle_deg"] = 25
         self.assertEqual(parse_request(angle).parameters["contact_angle_deg"], 25.)
         angle["parameters"]["contact_angle_deg"] = 90

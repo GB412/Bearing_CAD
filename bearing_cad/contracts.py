@@ -93,7 +93,8 @@ class AssemblyModel:
 _COMMON = ("bore_d_mm", "outside_d_mm", "width_mm")
 _TYPES: dict[BearingType, tuple[str, ...]] = {
     BearingType.DEEP_GROOVE: (*_COMMON, "ball_d_mm", "pitch_d_mm", "ball_count",
-                              "inner_groove_radius_mm", "outer_groove_radius_mm"),
+                              "inner_groove_radius_mm", "outer_groove_radius_mm",
+                              "inner_shoulder_d_mm", "outer_shoulder_d_mm"),
     BearingType.CYLINDRICAL: (*_COMMON, "roller_d_mm", "roller_length_mm", "pitch_d_mm",
                               "roller_count", "configuration"),
     BearingType.ANGULAR_CONTACT: (*_COMMON, "ball_d_mm", "pitch_d_mm", "ball_count",
