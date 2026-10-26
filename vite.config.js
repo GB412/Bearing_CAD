@@ -22,6 +22,7 @@ export default defineConfig({
     strictPort: false,
   },
   build: {
+    rollupOptions: { input: { main: resolve(process.cwd(), 'index.html'), rolling: resolve(process.cwd(), 'rolling.html') } },
     target: 'es2020',
     outDir: 'dist',
     emptyOutDir: true,

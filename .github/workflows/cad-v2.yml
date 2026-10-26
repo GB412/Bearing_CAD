@@ -17,3 +17,19 @@ jobs:
       - name: Run domain contracts and real OCCT STEP roundtrip
         shell: micromamba-shell {0}
         run: python -m unittest discover -s tests_v2 -p 'test_*.py' -v
+  rolling-ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Validate manifest and instance handling
+        run: node --test rolling_manifest.test.js
+      - name: Build both workbenches
+        run: npm run build
+      - name: Ensure V2 HTML is emitted
+        run: test -s dist/rolling.html

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>Rolling Bearing CAD | 参数化轴承工作台</title></head>
+<body>
+<header class="top"><div><span class="kicker">BEARING CAD / V2</span><h1>滚动轴承参数化工作台</h1><p>结构参数 → OCCT 精确装配 → STEP / STL 成果</p></div><div class="pill" id="connection">连接本地 CAD 引擎…</div></header>
+<main class="workspace">
+<aside class="side">
+<section class="panel" aria-label="结构参数"><div class="panel-header"><h2>01 / 几何参数</h2><span>mm</span></div><div class="panel-body">
+<label class="field">轴承类型<select id="bearingType"><option value="rolling.deep_groove_ball">单列深沟球轴承</option></select></label>
+<div class="fields" id="parameters"></div>
+<label class="switch"><input id="cageEnabled" type="checkbox" checked><span>显示简化保持架</span></label>
+<div class="cage-fields" id="cageParams"></div>
+<p class="hint">所有内部尺寸均为显式结构输入，不依据型号自动推定。保持架是简化结构，非制造图模型。</p>
+<div class="buttonrow"><button id="generate" class="primary">生成精确 CAD 模型</button><button id="resetParams" class="secondary">复位</button></div>
+<div class="notice" id="status" role="status" aria-live="polite">检查本地引擎连接…</div>
+</div></section>
+</aside>
+<section class="mainpanel">
+<div class="viewer-head"><div><h2>02 / 三维装配</h2><p id="modelLabel">尚未生成模型</p></div><div class="tag">B-REP → STL PREVIEW</div></div>
+<div class="stage" id="viewport"><div class="stage-overlay" id="emptyStage">输入结构参数，点击“生成精确 CAD 模型”<span>预览来自 CAD 引擎生成的网格，不使用 Three.js 代替工程实体</span></div></div>
+<div class="toolbar"><label><input type="checkbox" id="cutaway"> 半剖显示</label><label><input type="checkbox" id="transparent"> 透明显示</label><label>装配爆炸 <input id="explode" type="range" min="0" max="100" value="0"></label><button id="viewReset" class="secondary">重置视角</button></div>
+<div class="lower">
+<section class="pane"><div class="pane-title"><h3>装配零件树</h3><span id="partCount">0 个实例</span></div><div id="parts" class="partlist"><p class="muted">等待模型加载</p></div></section>
+<section class="pane"><div class="pane-title"><h3>CAD 成果文件</h3><span id="quality">未验证</span></div><div id="downloads" class="downloads"><p class="muted">尚无文件</p></div><p class="footnote" id="provenance">正式工程设计和轴承制造校核需进一步审核。</p></section>
+</div>
+</section></main>
+<footer>CAD V2 · 本地单用户工程预览 · 数据单位 mm · 非制造批准模型 <a href="/api/v2/cad/status">CAD 服务状态</a></footer>
+<script type="module" src="./rolling_workbench.js"></script>
+</body></html>
