@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import mimetypes
 from threading import Lock, RLock
 import json
 import logging
@@ -28,12 +29,15 @@ _CONTENT_TYPES = {".step": "model/step", ".stl": "model/stl", ".json": "applicat
 
 
 def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"),
-                host: str = "127.0.0.1") -> ThreadingHTTPServer:
+                host: str = "127.0.0.1", static_root: Path | None = None) -> ThreadingHTTPServer:
     """Bind to IPv4 loopback only. No network deployment or implicit auth."""
     if host != "127.0.0.1":
         raise ValueError("CAD-V2 API only supports IPv4 loopback")
     root = Path(artifacts_root).resolve()
     root.mkdir(parents=True, exist_ok=True)
+    static = Path(static_root).resolve(strict=True) if static_root is not None else None
+    if static is not None and not (static / "rolling.html").is_file():
+        raise ValueError("Build rolling.html with npm run build before serving")
     jobs: OrderedDict[str, dict] = OrderedDict()
     job_lock = RLock()
     build_lock = Lock()  # Single active expensive OCCT generation per process.
@@ -169,12 +173,44 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
             finally:
                 build_lock.release()
 
+        def _serve_static(self):
+            """Serve only the V2 workbench and Vite hashed assets, not the old demo."""
+            if static is None:
+                return self._error(404, "NOT_FOUND", "Workbench not configured")
+            parsed = urlsplit(self.path)
+            route = parsed.path
+            if parsed.query or parsed.fragment:
+                return self._error(404, "NOT_FOUND", "Unknown route")
+            if route in ("/", "/rolling.html"):
+                rel = "rolling.html"
+            elif re.fullmatch(r"/assets/[A-Za-z0-9_.-]+\.(?:js|css)", route):
+                rel = route.lstrip("/")
+            else:
+                return self._error(404, "NOT_FOUND", "Unknown workbench file")
+            try:
+                file_path = (static / rel).resolve(strict=True)
+                if not file_path.is_relative_to(static) or not file_path.is_file():
+                    raise ValueError("Unsafe static path")
+                data = file_path.read_bytes()
+            except (OSError, ValueError):
+                return self._error(404, "NOT_FOUND", "Workbench file unavailable")
+            self.send_response(200)
+            self.send_header("Content-Type", mimetypes.guess_type(file_path.name)[0] or "application/octet-stream")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(data)
+
         def do_HEAD(self):
             self.do_GET()
 
         def do_GET(self):
             if not self._host_allowed():
                 return self._error(403, "HOST_FORBIDDEN", "Invalid loopback host")
+            if not urlsplit(self.path).path.startswith("/api/"):
+                return self._serve_static()
             route = self._route()
             if route == "/api/v2/cad/status":
                 return self._respond(200, {"available": True, "mode": "loopback_synchronous",
@@ -237,8 +273,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Loopback-only CAD-V2 service")
     parser.add_argument("--port", type=int, default=8090)
     parser.add_argument("--artifacts", type=Path, default=Path("artifacts/cad-v2"))
+    parser.add_argument("--static", type=Path, default=None, help="Vite dist directory for the V2 workbench")
     args = parser.parse_args()
-    server = make_server(port=args.port, artifacts_root=args.artifacts)
+    server = make_server(port=args.port, artifacts_root=args.artifacts, static_root=args.static)
     print(f"CAD-V2 API http://127.0.0.1:{server.server_port}/api/v2/cad/status", flush=True)
     try:
         server.serve_forever()
