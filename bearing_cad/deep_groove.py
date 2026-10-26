@@ -13,7 +13,7 @@ from .contracts import (
     AssemblyModel, BearingType, BearingRequest,
     ComponentDefinition, ComponentInstance, ContractError,
 )
-from .geometry import annulus, sphere, circular_positions
+from .geometry import annulus, sphere, cylindrical_roller, circular_positions
 from .geometry_checks import inspect_solid, interference_volume
 
 
@@ -62,19 +62,34 @@ def build_deep_groove(request: BearingRequest) -> AssemblyModel:
         cage_spec = request.cage
         if not (inner_shoulder < cage_spec.inner_d_mm < cage_spec.outside_d_mm < outer_shoulder):
             raise ContractError("PARAMETER_INVALID", "/cage", "Cage must lie radially between shoulders")
-        if not (ball_d + 2 * cage_spec.pocket_clearance_mm < cage_spec.width_mm <= B):
-            raise ContractError("PARAMETER_INVALID", "/cage/width_mm", "Cage needs axial bridges around ball pockets")
-        cage_shape = annulus(cage_spec.inner_d_mm, cage_spec.outside_d_mm, cage_spec.width_mm)
-        cutter = sphere(ball_d + 2 * cage_spec.pocket_clearance_mm)
-        # Exactly count pockets (no duplicated 0/360-degree endpoint).
-        for center in positions:
-            cage_shape = cage_shape.cut(cutter.translate(center))
+        # Concept-only alternative to spherical boolean pockets: two axial rims
+        # connected by one bridge in each gap between adjacent balls.
+        # Rim/bridge proportions are visual-geometry heuristics, not RoBAS
+        # manufacturing rules or an approved engineering cage design.
+        rim_thickness = cage_spec.width_mm / 11.0
+        bridge_diameter = ball_d / 8.0
+        if not (ball_d / 2 + cage_spec.pocket_clearance_mm <
+                cage_spec.width_mm / 2 - rim_thickness):
+            raise ContractError("PARAMETER_INVALID", "/cage/width_mm", "Insufficient axial ball clearance")
+        if pitch * math.sin(math.pi / count) - ball_d/2 <= bridge_diameter/2 + cage_spec.pocket_clearance_mm:
+            raise ContractError("PARAMETER_INVALID", "/cage", "Insufficient tangential bridge clearance")
+        upper = annulus(cage_spec.inner_d_mm, cage_spec.outside_d_mm, rim_thickness).translate(
+            (0, 0, (cage_spec.width_mm-rim_thickness)/2))
+        lower = annulus(cage_spec.inner_d_mm, cage_spec.outside_d_mm, rim_thickness).translate(
+            (0, 0, -(cage_spec.width_mm-rim_thickness)/2))
+        cage_shape = upper.union(lower)
+        bridge_length = cage_spec.width_mm - 2*rim_thickness + 0.2
+        for i in range(count):
+            angle = 2 * math.pi * (i+0.5) / count
+            bridge = cylindrical_roller(bridge_diameter, bridge_length).translate(
+                (pitch/2 * math.cos(angle), pitch/2 * math.sin(angle), 0))
+            cage_shape = cage_shape.union(bridge)
         if not inspect_solid(cage_shape).valid:
-            raise ContractError("BREP_INVALID", "/cage", "Pocket cutting disconnected cage")
+            raise ContractError("BREP_INVALID", "/cage", "Disconnected or invalid cage")
         if (interference_volume(cage_shape, inner) > 1e-6 or
-                interference_volume(cage_shape, outer) > 1e-6 or
-                interference_volume(cage_shape, reference_ball) > 1e-6):
-            raise ContractError("ASSEMBLY_INTERFERENCE", "/cage", "Cage overlaps rings or rolling elements")
+            interference_volume(cage_shape, outer) > 1e-6 or
+            interference_volume(cage_shape, reference_ball) > 1e-6):
+            raise ContractError("ASSEMBLY_INTERFERENCE", "/cage", "Cage overlaps races or rolling elements")
 
     components = (
         ComponentDefinition("inner_ring", "inner_ring", inner),
