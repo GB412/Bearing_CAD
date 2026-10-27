@@ -17,6 +17,17 @@ jobs:
       - name: Run domain contracts and real OCCT STEP roundtrip
         shell: micromamba-shell {0}
         run: python -m unittest discover -s tests_v2 -p 'test_*.py' -v
+      - name: Generate seven-case RoBAS migration geometry evidence
+        shell: micromamba-shell {0}
+        run: python -m bearing_cad.migration_baseline --output build/migration-07a
+      - name: Publish migration evidence report (no STEP binaries)
+        uses: actions/upload-artifact@v4
+        with:
+          name: 3d-mig-07a-robas-occt-evidence
+          path: |
+            build/migration-07a/comparison.json
+            build/migration-07a/comparison.md
+          if-no-files-found: error
   rolling-ui:
     runs-on: ubuntu-24.04
     timeout-minutes: 15

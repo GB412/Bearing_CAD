@@ -32,3 +32,9 @@
 后续 PR 先移植圆柱滚子窗孔保持架并独立验证环体穿孔、桥厚、与滚子的间隙、STEP roundtrip。深沟球 Stamp 两半笼与角接触 StraightPocketCage 需另立 PR；3° 锥面必须有明确的图纸/同参数 Eyeshot 输出作为几何决策证据。
 
 **未运行旧 Eyeshot CAD 软件，旧实体体积、真实端部结构与详细制造规范标记 UNVERIFIED。**
+
+## 截至 3D-MIG-07A 的状态更新
+
+上面这份表格是 **3D-MIG-01 当时的历史快照**；在 3D-MIG-02～04 中，`CylinderPocketCage`、`StraightPocketCage`、`StampingCage` 的**几何构造方法**已按独立显式参数迁入 Python；在 3D-MIG-05 中其网页入口也已开放，在 3D-MIG-06 中已加入 STEP 质量报告。请勿再将它们笼统描述为“当前未迁移”。
+
+原 RoBAS 的经验默认尺寸、Eyeshot 实体拓扑/体积以及角接触 3° 锥面是否与新版等价 **仍未验证**。七组当前真实 OCCT 基准、旧源码解析路径和缺失 Eyeshot STEP 的标记以 `docs/migration/3d-mig-07-cases.md` 与 CI 发布的 `comparison.json` 为准。
