@@ -68,11 +68,15 @@ class AssemblyQualityTests(unittest.TestCase):
             self.assertGreaterEqual(error,0)
             self.assertGreater(
                 quality["step_roundtrip"]["radial_window_cage_relative_volume_limit"],
-                quality["step_roundtrip"]["allowed_relative_volume_error"],
+                quality["step_roundtrip"]["default_relative_volume_limit"],
             )
             self.assertGreater(
                 quality["step_roundtrip"]["radial_window_cage_centroid_limit_mm"],
-                quality["step_roundtrip"]["allowed_part_centroid_error_mm"],
+                quality["step_roundtrip"]["default_centroid_limit_mm"],
+            )
+            self.assertEqual(
+                quality["step_roundtrip"]["allowed_relative_volume_error"],
+                quality["step_roundtrip"]["radial_window_cage_relative_volume_limit"],
             )
 
     def test_interior_part_shift_rejected_even_if_total_bbox_and_volume_unchanged(self):
