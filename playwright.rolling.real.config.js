@@ -10,6 +10,9 @@ export default defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:8090',
     browserName: 'chromium',
+    // The GitHub Ubuntu runner ships Chrome; avoid re-downloading Chromium.
+    // Local developers keep using the Playwright-managed Chromium.
+    ...(process.env.CI ? {channel: 'chrome'} : {}),
     headless: true,
   },
   webServer: {
