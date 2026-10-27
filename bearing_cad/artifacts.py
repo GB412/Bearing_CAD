@@ -19,7 +19,7 @@ from .deep_groove import build_deep_groove
 from .geometry_checks import inspect_solid
 
 BUNDLE_VERSION = "cad-v2-artifacts/1"
-GENERATOR_VERSION = "0.9.0"
+GENERATOR_VERSION = "0.9.1"
 
 
 def _digest(path: Path) -> str:
@@ -110,7 +110,11 @@ def generate_bundle(request: BearingRequest, output_root: Path) -> Path:
             "configuration": request.parameters.get("configuration"),
             "contact_angle_deg": request.parameters.get("contact_angle_deg"),
             "status": "GEOMETRY_VALIDATED",
-            "completeness": "SIMPLIFIED_CAGE" if request.cage else "CAGE_OMITTED",
+            "completeness": (
+                "CAGE_OMITTED" if request.cage is None else
+                "CYLINDRICAL_WINDOW_CAGE" if request.cage.kind == "cylindrical_window"
+                else "SIMPLIFIED_CAGE"
+            ),
             "parts": [{"id": part.component_id, "role": part.role} for part in model.components],
             "instances": [
                 {"id": inst.instance_id, "part_id": inst.component_id,
