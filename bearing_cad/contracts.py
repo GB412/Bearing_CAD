@@ -114,7 +114,9 @@ _TYPES: dict[BearingType, tuple[str, ...]] = {
                               "inner_rib_tip_d_mm", "outer_rib_tip_d_mm"),
     BearingType.ANGULAR_CONTACT: (*_COMMON, "ball_d_mm", "pitch_d_mm", "ball_count",
                                   "inner_groove_radius_mm", "outer_groove_radius_mm",
-                                  "contact_angle_deg"),
+                                  "contact_angle_deg", "inner_shoulder_left_d_mm",
+                                  "inner_shoulder_right_d_mm", "outer_shoulder_left_d_mm",
+                                  "outer_shoulder_right_d_mm"),
 }
 _COUNTS = {"ball_count", "roller_count"}
 _TEXT = {"configuration"}

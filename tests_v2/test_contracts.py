@@ -70,6 +70,10 @@ class ContractTests(unittest.TestCase):
         angle["bearing_type"] = "rolling.angular_contact_ball"
         del angle["parameters"]["inner_shoulder_d_mm"]
         del angle["parameters"]["outer_shoulder_d_mm"]
+        angle["parameters"].update({"inner_shoulder_left_d_mm": 49,
+                                    "inner_shoulder_right_d_mm": 47,
+                                    "outer_shoulder_left_d_mm": 61,
+                                    "outer_shoulder_right_d_mm": 59})
         angle["parameters"]["contact_angle_deg"] = 25
         self.assertEqual(parse_request(angle).parameters["contact_angle_deg"], 25.)
         angle["parameters"]["contact_angle_deg"] = 90
