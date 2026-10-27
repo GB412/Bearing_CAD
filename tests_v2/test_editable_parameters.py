@@ -76,6 +76,40 @@ class EditableParametersTests(unittest.TestCase):
                         )
                     self.assertEqual(manifest["request_hash"], request.request_hash)
 
+    def test_axial_clearance_is_minimum_requirement_not_geometry_control(self):
+        # The entered minimum reserve can change without changing the centered
+        # roller or flanges. It still changes the request identity.
+        from bearing_cad.geometry_checks import inspect_solid
+        source=cylindrical_request("NUP")
+        stricter=copy.deepcopy(source)
+        stricter["parameters"]["axial_clearance_mm"]=0.8
+        a,b=map(parse_request,(source,stricter))
+        self.assertNotEqual(a.request_hash,b.request_hash)
+        first,second=build_cylindrical_roller(a),build_cylindrical_roller(b)
+        self.assertEqual([x.translation_mm for x in first.instances],
+                         [x.translation_mm for x in second.instances])
+        self.assertEqual([x.component_id for x in first.components],
+                         [x.component_id for x in second.components])
+        for before,after in zip(first.components,second.components):
+            self.assertAlmostEqual(inspect_solid(before.shape).volume_mm3,
+                                   inspect_solid(after.shape).volume_mm3,places=6)
+        too_much=copy.deepcopy(source)
+        too_much["parameters"]["axial_clearance_mm"]=1.1
+        with self.assertRaises(ContractError):
+            build_cylindrical_roller(parse_request(too_much))
+
+    def test_forged_dataclass_request_cannot_bypass_cage_resource_limits(self):
+        from dataclasses import replace
+        from bearing_cad.contracts import CageSpec
+        original=parse_request(cylindrical_request("NUP"))
+        forged=replace(original,cage=CageSpec(kind="cylindrical_window",
+                        inner_d_mm=1001,outside_d_mm=1002,width_mm=16,
+                        pocket_clearance_mm=.15))
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaises(ContractError) as error:
+                generate_bundle(forged,Path(temp))
+            self.assertEqual(error.exception.error_code,"RESOURCE_LIMIT")
+
     def test_zero_clearance_and_resource_limit_contract(self):
         payload = cylindrical_request()
         payload["parameters"]["radial_clearance_mm"] = 0

@@ -23,6 +23,8 @@ def build_deep_groove(request: BearingRequest) -> AssemblyModel:
     """Use explicit shoulder, raceway and ball parameters in mm."""
     if request.bearing_type != BearingType.DEEP_GROOVE:
         raise ContractError("NOT_SUPPORTED", "/bearing_type", "Expected deep-groove ball bearing")
+    if request.detail_level != "functional":
+        raise ContractError("NOT_SUPPORTED", "/detail_level", "Only functional B-Rep is supported")
     p = request.parameters
     d, D, B = (p["bore_d_mm"], p["outside_d_mm"], p["width_mm"])
     pitch, ball_d, count = (p["pitch_d_mm"], p["ball_d_mm"], p["ball_count"])
