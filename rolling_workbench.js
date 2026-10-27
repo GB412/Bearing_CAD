@@ -71,7 +71,7 @@ function applyVisualOptions(){
     :part==='cage_lower'?-1.1
     :part==='cage_upper'?1.1
     :part==='rivet'?0
-    :object.userData.role==='cage'?.5
+    :object.userData.role==='cage'?0.5
     :object.userData.role==='loose_rib'?1.7:0;
   object.position.z+=explode*15*direction;
   if(object.userData.role==='rolling_element'||part==='rivet')object.position.addScaledVector(object.userData.radial,explode*10);
