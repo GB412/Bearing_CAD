@@ -14,6 +14,7 @@ from .contracts import (AssemblyModel, BearingRequest, BearingType, ComponentDef
                         ComponentInstance, ContractError)
 from .geometry import circular_positions, revolve_radial_profile, sphere
 from .geometry_checks import inspect_solid, interference_volume
+from .cages import straight_pocket_cage
 
 
 def _raceway_centres(pitch_radius: float, ball_radius: float,
@@ -43,8 +44,6 @@ def build_angular_contact(request: BearingRequest) -> AssemblyModel:
     """
     if request.bearing_type != BearingType.ANGULAR_CONTACT:
         raise ContractError("NOT_SUPPORTED", "/bearing_type", "Expected angular-contact ball bearing")
-    if request.cage is not None:
-        raise ContractError("NOT_SUPPORTED", "/cage", "Angular-contact cage not implemented")
     if request.detail_level != "functional":
         raise ContractError("NOT_SUPPORTED", "/detail_level", "Only functional B-Rep is supported")
 
@@ -120,4 +119,18 @@ def build_angular_contact(request: BearingRequest) -> AssemblyModel:
                  ComponentInstance("outer_ring", "outer_ring")) + tuple(
                      ComponentInstance(f"ball_{i+1:03d}", "ball", position)
                      for i, position in enumerate(positions))
+    if request.cage is not None:
+        cage = straight_pocket_cage(
+            request.cage, pitch_d_mm=pitch, ball_d_mm=ball_d,
+            ball_count=count, bearing_width_mm=B,
+            max_inner_shoulder_d_mm=max(p["inner_shoulder_left_d_mm"], p["inner_shoulder_right_d_mm"]),
+            min_outer_shoulder_d_mm=min(p["outer_shoulder_left_d_mm"], p["outer_shoulder_right_d_mm"]),
+        )
+        for ring in (inner_ring, outer_ring):
+            if interference_volume(cage, ring) > 1e-6:
+                raise ContractError("ASSEMBLY_INTERFERENCE", "/cage", "Cage penetrates race ring")
+        if interference_volume(cage, reference_ball) > 1e-6:
+            raise ContractError("ASSEMBLY_INTERFERENCE", "/cage", "Cage penetrates ball")
+        components += (ComponentDefinition("cage", "cage", cage),)
+        instances += (ComponentInstance("cage", "cage"),)
     return AssemblyModel(BearingType.ANGULAR_CONTACT, components, instances)

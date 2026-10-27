@@ -19,7 +19,7 @@ from .deep_groove import build_deep_groove
 from .geometry_checks import inspect_solid
 
 BUNDLE_VERSION = "cad-v2-artifacts/1"
-GENERATOR_VERSION = "0.9.1"
+GENERATOR_VERSION = "0.9.2"
 
 
 def _digest(path: Path) -> str:
@@ -113,6 +113,7 @@ def generate_bundle(request: BearingRequest, output_root: Path) -> Path:
             "completeness": (
                 "CAGE_OMITTED" if request.cage is None else
                 "CYLINDRICAL_WINDOW_CAGE" if request.cage.kind == "cylindrical_window"
+                else "STRAIGHT_POCKET_CAGE" if request.cage.kind == "straight_pocket"
                 else "SIMPLIFIED_CAGE"
             ),
             "parts": [{"id": part.component_id, "role": part.role} for part in model.components],

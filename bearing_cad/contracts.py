@@ -190,12 +190,11 @@ def parse_request(data: Mapping[str, Any]) -> BearingRequest:
         raise ContractError("PARAMETER_INVALID", "/parameters/pitch_d_mm", "Pitch diameter must lie between bore and outside diameters")
     cage = None
     if cage_present:
-        if kind == BearingType.ANGULAR_CONTACT:
-            raise ContractError("NOT_SUPPORTED", "/cage", "Angular-contact cage not yet implemented")
         fields = {"kind", "inner_d_mm", "outside_d_mm", "width_mm", "pocket_clearance_mm"}
         obj = _closed_object(cage_raw, fields, "/cage")
         allowed_kind = {BearingType.DEEP_GROOVE: "simplified_annular",
-                        BearingType.CYLINDRICAL: "cylindrical_window"}[kind]
+                        BearingType.CYLINDRICAL: "cylindrical_window",
+                        BearingType.ANGULAR_CONTACT: "straight_pocket"}[kind]
         if obj["kind"] != allowed_kind:
             raise ContractError("NOT_SUPPORTED", "/cage/kind",
                                 f"Cage kind not implemented for {kind.value}")
