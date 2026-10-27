@@ -44,3 +44,24 @@ jobs:
         run: npm run build
       - name: Ensure V2 HTML is emitted
         run: test -s dist/rolling.html
+
+  rolling-real-e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: environment-v2.yml
+          cache-environment: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Install Chromium for actual CAD browser E2E
+        run: npx playwright install --with-deps chromium
+      - name: Run actual browser→loopback Python CAD→OCCT→STEP/STL
+        shell: micromamba-shell {0}
+        run: npx playwright test --config playwright.rolling.real.config.js
