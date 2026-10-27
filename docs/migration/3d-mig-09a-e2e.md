@@ -23,7 +23,7 @@ npx playwright test --config playwright.rolling.real.config.js
 3. 角接触球 25° `straight_pocket`：**14 实例 / 4 原型**。
 4. 每一步浏览器显示 STL 三角面数>0、manifest 实例/原型数匹配；从真实 HTTP 下载 `bearing_assembly.step`，核对 STEP 文件头与非空文件，并下载 `geometry_quality.json` 检查实例数、STEP 回读和质心对照。
 5. 真实非法参数 HTTP 422 后，旧模型、零件树和成果下载必须清空，页面应明确报错。
-6. GitHub 新 `rolling-real-e2e` job，固定 Micromamba CadQuery + Node22 + Chromium。在 CI 上完整运行真实后端。
+6. GitHub 新 `rolling-real-e2e` job，固定 Micromamba CadQuery + Node22 + GitHub Ubuntu 运行器预装 Chrome（本地仍使用 Playwright Chromium）。在 CI 上完整运行真实后端。
 
 ## 边界
 
