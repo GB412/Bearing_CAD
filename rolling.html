@@ -46,6 +46,15 @@
               <div class="cage-fields" id="cageParams"></div>
             </div>
           </div>
+          <div class="section-heading">尺寸调整</div>
+          <div class="scale-tools">
+            <label class="field" for="scaleTarget">目标内径 d（mm）
+              <input id="scaleTarget" type="number" min="0.001" step="any" value="40" aria-label="目标内径">
+            </label>
+            <button id="scaleApply" type="button" class="secondary">整体等比例缩放</button>
+          </div>
+          <p class="hint">仅同步缩放长度尺寸和保持架尺寸；数量、接触角及挡边构型保持不变。独立修改时不会自动覆盖其他参数。</p>
+          <div id="validation" class="parameter-warning" role="alert" hidden></div>
           <p class="hint">预设数据用于几何测试，不代表厂家选型或制造公差。</p>
           <div class="buttonrow">
             <button id="generate" class="primary">生成三维模型</button>

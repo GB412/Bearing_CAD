@@ -96,6 +96,9 @@ def build_deep_groove(request: BearingRequest) -> AssemblyModel:
     cage_shape = None
     if request.cage is not None:
         cage_spec = request.cage
+        if cage_spec.width_mm > B:
+            raise ContractError("PARAMETER_INVALID", "/cage/width_mm",
+                                "Cage width cannot exceed bearing axial width")
         if not (inner_shoulder < cage_spec.inner_d_mm < cage_spec.outside_d_mm < outer_shoulder):
             raise ContractError("PARAMETER_INVALID", "/cage", "Cage must lie radially between shoulders")
         # Concept-only alternative to spherical boolean pockets: two axial rims
