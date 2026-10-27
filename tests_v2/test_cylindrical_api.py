@@ -15,7 +15,7 @@ class CylindricalApiTests(unittest.TestCase):
         from bearing_cad.contracts import ContractError, parse_request
         oversized = cylindrical_request("NUP")
         oversized["cage"] = {"kind":"cylindrical_window", "inner_d_mm":1001,
-                            "outside_d_mm":1002, "width_mm":16, "pocket_clearance_mm":.15}
+                            "outside_d_mm":60, "width_mm":16, "pocket_clearance_mm":.15}
         unsupported = cylindrical_request("NU")
         unsupported["detail_level"]="envelope"
         cases=[(oversized,"RESOURCE_LIMIT","/cage/inner_d_mm"),
