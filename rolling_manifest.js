@@ -55,7 +55,7 @@ export const cageForms = Object.freeze({
     fields:[
       ['inner_d_mm','保持架内径',48],['outside_d_mm','保持架外径',60],
       ['width_mm','保持架总宽度',11.5],['pocket_clearance_mm','球兜净距',.15],
-      ['board_thickness_mm','冲压板厚度',.7],['rivet_shaft_d_mm','铆钉杆径',1],
+      ['board_thickness_mm','球兜外最小轴向余料约束',.7],['rivet_shaft_d_mm','铆钉杆径',1],
       ['rivet_head_d_mm','铆钉头直径',1.6],
       ['rivet_hole_clearance_mm','铆钉孔净距',.05]
     ]

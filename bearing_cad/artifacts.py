@@ -20,7 +20,7 @@ from .geometry_checks import inspect_solid
 from .assembly_quality import build_assembly, audit_step_roundtrip
 
 BUNDLE_VERSION = "cad-v2-artifacts/1"
-GENERATOR_VERSION = "0.9.4"
+GENERATOR_VERSION = "0.9.5"
 
 
 def _digest(path: Path) -> str:

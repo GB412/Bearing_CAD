@@ -17,3 +17,7 @@
 `tests_v2/test_stamping_cage.py` 三尺度、球-铆钉相位、两半笼互不重叠、穿孔/局部有效、STEP 中 26 实体全数回读有效、manifest SHA 与不同请求缓存隔离；旧深沟球无笼与简化笼回归。必须 GitHub 全套 CAD-01/02/03、V2 和 Workbench CI 通过后合并。
 
 **尚待专业审核**：真实型号对应的板厚与铆钉规范、预载和寿命、原 Eyeshot STEP 体积/轮廓等价、网页详细笼体输入 UI。当前属具备原始构造层级的功能级 CAD 迁移，不是制造认证。
+
+## 3D-MIG-08A 参数语义澄清
+当前 `board_thickness_mm` 并**不是生成的冲压板精确厚度**。它约束 `half_height > ball_radius + pocket_clearance_mm + board_thickness_mm`，属于球兜外的最小轴向余料限制；实际半笼由环形坯减去球形球兜形成，局部厚度随几何位置变化。网页现显示“球兜外最小轴向余料约束”，保留 JSON 字段名称以兼容现有保存的参数。
+对于需要精确冲压板厚的制造模型，必须另经专业设计验证，不能将该字段理解为材料板厚。

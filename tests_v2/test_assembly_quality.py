@@ -67,6 +67,25 @@ class AssemblyQualityTests(unittest.TestCase):
             self.assertLess(error,quality["step_roundtrip"]["allowed_relative_volume_error"])
             self.assertGreaterEqual(error,0)
 
+    def test_interior_part_shift_rejected_even_if_total_bbox_and_volume_unchanged(self):
+        # Three equal-volume solids: moving only the middle solid leaves both
+        # overall envelope and sorted volumes unchanged. Old gate missed this.
+        box = cq.Workplane("XY").box(2, 2, 2)
+        model = AssemblyModel(
+            BearingType.DEEP_GROOVE,
+            (ComponentDefinition("probe", "probe", box),),
+            tuple(ComponentInstance(f"box_{i}", "probe", (float(x), 0., 0.))
+                  for i, x in enumerate((-10, 0, 10))),
+        )
+        assembly = build_assembly(model)
+        solids = list(assembly.toCompound().Solids())
+        self.assertEqual(len(solids), 3)
+        # Preserve the two extrema; move the central solid by two millimetres.
+        center = sorted(range(3), key=lambda i: abs(solids[i].Center().x))[0]
+        solids[center] = solids[center].translate(cq.Vector(2., 0., 0.))
+        with self.assertRaisesRegex(RuntimeError, "center of mass"):
+            audit_step_roundtrip(model, assembly, solids)
+
     def test_invalid_instance_transforms_are_rejected_before_geometry(self):
         box = ComponentDefinition("a", "probe", object())
         for location, rotation in (
@@ -94,6 +113,7 @@ class AssemblyQualityTests(unittest.TestCase):
                 self.assertEqual(len(info["step_roundtrip"]["source_bounds_mm"]), 6)
                 self.assertLess(info["step_roundtrip"]["worst_relative_solid_volume_error"], 1e-5)
                 self.assertLess(info["step_roundtrip"]["worst_bbox_error_mm"], 1e-3)
+                self.assertLess(info["step_roundtrip"]["worst_part_centroid_error_mm"], 1e-3)
                 self.assertAlmostEqual(
                     info["step_roundtrip"]["source_summed_volume_mm3"],
                     info["step_roundtrip"]["imported_summed_volume_mm3"],
