@@ -17,9 +17,10 @@ from .cylindrical_roller import build_cylindrical_roller
 from .angular_contact import build_angular_contact
 from .deep_groove import build_deep_groove
 from .geometry_checks import inspect_solid
+from .assembly_quality import build_assembly, audit_step_roundtrip
 
 BUNDLE_VERSION = "cad-v2-artifacts/1"
-GENERATOR_VERSION = "0.9.3"
+GENERATOR_VERSION = "0.9.4"
 
 
 def _digest(path: Path) -> str:
@@ -78,18 +79,17 @@ def generate_bundle(request: BearingRequest, output_root: Path) -> Path:
         model = build_angular_contact(request)
     else:
         raise ContractError("NOT_SUPPORTED", "/bearing_type", "CAD builder not implemented")
-    parts = {component.component_id: component.shape for component in model.components}
-    assembly = cq.Assembly(name="bearing_assembly")
-    for instance in model.instances:
-        assembly.add(parts[instance.component_id], name=instance.instance_id,
-                     loc=cq.Location(cq.Vector(*instance.translation_mm)))
+    assembly = build_assembly(model)
     with tempfile.TemporaryDirectory(prefix=".cad-v2-staging-", dir=output_root) as temp:
         folder = Path(temp)
         step_path = folder / "bearing_assembly.step"
         assembly.save(str(step_path))
         reread = cq.importers.importStep(str(step_path)).solids().vals()
-        if len(reread) != len(model.instances) or any(not solid.isValid() for solid in reread):
-            raise RuntimeError("STEP roundtrip failed: invalid solid or instance count mismatch")
+        quality = audit_step_roundtrip(model, assembly, reread)
+        (folder / "geometry_quality.json").write_text(
+            json.dumps(quality, ensure_ascii=False, sort_keys=True, indent=2),
+            encoding="utf-8",
+        )
         for component in model.components:
             if not inspect_solid(component.shape).valid:
                 raise RuntimeError("Invalid B-Rep component " + component.component_id)
@@ -120,7 +120,9 @@ def generate_bundle(request: BearingRequest, output_root: Path) -> Path:
             "parts": [{"id": part.component_id, "role": part.role} for part in model.components],
             "instances": [
                 {"id": inst.instance_id, "part_id": inst.component_id,
-                 "translation_mm": list(inst.translation_mm)} for inst in model.instances
+                 "translation_mm": list(inst.translation_mm),
+                 "rotation_about_z_deg": float(inst.rotation_about_z_deg)}
+                for inst in model.instances
             ],
             "files": files,
         }

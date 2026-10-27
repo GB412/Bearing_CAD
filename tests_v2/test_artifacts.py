@@ -22,7 +22,14 @@ class ArtifactsTests(unittest.TestCase):
             self.assertEqual(report["completeness"], "SIMPLIFIED_CAGE")
             self.assertEqual(len(report["instances"]), 14)
             self.assertEqual(len(report["parts"]), 4)
-            self.assertEqual(len(report["files"]), 6)
+            self.assertEqual(len(report["files"]), 7)
+            self.assertIn("geometry_quality.json", report["files"])
+            import json
+            metrics = json.loads((path / "geometry_quality.json").read_text(encoding="utf-8"))
+            self.assertEqual(metrics["scope"], "GEOMETRY_ONLY_NOT_MANUFACTURING_APPROVAL")
+            self.assertEqual(metrics["instance_count"], 14)
+            self.assertLess(metrics["step_roundtrip"]["worst_relative_solid_volume_error"], 1e-5)
+            self.assertLess(metrics["step_roundtrip"]["worst_bbox_error_mm"], 1e-3)
             self.assertFalse(any(p.name.startswith(".cad-v2-staging-") for p in root.iterdir()))
             step = path / "bearing_assembly.step"
             step.write_bytes(step.read_bytes() + b"invalid-footer")

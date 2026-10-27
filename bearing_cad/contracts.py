@@ -108,6 +108,15 @@ class AssemblyModel:
             raise ContractError("PARAMETER_INVALID", "/assembly", "Duplicate component or instance IDs")
         if any(p.component_id not in ids for p in self.instances):
             raise ContractError("PARAMETER_INVALID", "/assembly/instances", "Unknown component definition")
+        if not self.instances or not self.components:
+            raise ContractError("PARAMETER_INVALID", "/assembly", "Assembly must not be empty")
+        for item in self.instances:
+            values = (*item.translation_mm, item.rotation_about_z_deg)
+            if (len(item.translation_mm) != 3 or
+                any(type(number) not in (int, float) or not math.isfinite(number)
+                    for number in values)):
+                raise ContractError("PARAMETER_INVALID", "/assembly/instances",
+                                    "Instance transform must be finite X/Y/Z mm and Z rotation degrees")
 
 
 _COMMON = ("bore_d_mm", "outside_d_mm", "width_mm")

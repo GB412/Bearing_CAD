@@ -95,3 +95,14 @@ test('unsupported and incomplete cages fail rather than silently changing geomet
  assert.throws(()=>requestFromFields(values(angular),{kind:'straight_pocket',...fixture('straight_pocket'),width_mm:'Infinity'},angular),/无效/);
  assert.equal(requestFromFields(values(cylindrical),null,cylindrical).cage,undefined);
 });
+
+test('Z rotation is preserved for STL instances and legacy manifest defaults to zero',()=>{
+ const legacy=def();
+ assert.ok(buildAssemblyIndex(legacy).every(p=>p.rotation_about_z_deg===0));
+ legacy.instances[1].rotation_about_z_deg=90;
+ assert.equal(buildAssemblyIndex(legacy)[1].rotation_about_z_deg,90);
+ legacy.instances[1].rotation_about_z_deg=Infinity;
+ assert.throws(()=>buildAssemblyIndex(legacy),/旋转/);
+ legacy.instances[1].rotation_about_z_deg='90';
+ assert.throws(()=>buildAssemblyIndex(legacy),/旋转/);
+});

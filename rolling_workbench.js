@@ -151,6 +151,8 @@ async function loadArtifacts(result, sequence){
   const mesh=new THREE.Mesh(g,material);mesh.name=instance.id;mesh.userData.role=instance.role;
   mesh.userData.partId=instance.part_id;
   mesh.userData.base=new THREE.Vector3(...instance.translation_mm);
+  // Keep exactly the same Z-axis instance rotation as the STEP assembly.
+  mesh.rotation.z=THREE.MathUtils.degToRad(instance.rotation_about_z_deg);
   mesh.userData.radial=new THREE.Vector3(instance.translation_mm[0],instance.translation_mm[1],0).normalize();
   mesh.position.copy(mesh.userData.base);
   entries.push(mesh);scene.add(mesh);
@@ -218,4 +220,4 @@ $('viewReset').addEventListener('click',()=>{resetCamera();controls.reset();rese
  }
  $('generate').disabled=!canGenerate();
 })();
-window.rollingViewerSnapshot=()=>({instances:entries.map(p=>({id:p.name,role:p.userData.role,visible:p.visible,position:p.position.toArray(),triangles:p.geometry.attributes.position.count/3,opacity:p.material.opacity})),requestHash:active?.manifest.request_hash??null});
+window.rollingViewerSnapshot=()=>({instances:entries.map(p=>({id:p.name,role:p.userData.role,visible:p.visible,position:p.position.toArray(),triangles:p.geometry.attributes.position.count/3,opacity:p.material.opacity,rotationZDeg:THREE.MathUtils.radToDeg(p.rotation.z)})),requestHash:active?.manifest.request_hash??null});

@@ -1,0 +1,23 @@
+# 3D-MIG-06：CAD 装配变换与几何质量门禁
+
+## 本次审阅发现
+- `ComponentInstance.rotation_about_z_deg` 从早期契约一直存在，但原 `artifacts.py` 创建 CadQuery Assembly 时仅传平移，manifest 和 Three.js 预览同样丢弃旋转；只用圆球、轴承圈测试时无法发现。
+- 原 `generate_bundle` 仅校验每个 STEP 实体有效、数量匹配；少了对导出前后**每件实体积**及全装配空间包围盒的交叉检验，可能忽略位置和几何丢失问题。
+- 冲压笼的 `board_thickness_mm` 目前仅用于检查设计余料最小要求，**不是实体每处的实测钣金厚度**。本 PR 不修改该几何规则，只明确要求后续老师或实际 Eyeshot 输出验证。
+
+## 精简改动
+1. `AssemblyModel` 要求每一个实例的 X/Y/Z 平移和绕 Z 旋转都是有限数，拒绝空装配、NaN/Inf/布尔值。
+2. 由 `assembly_quality.py` 集中构建 CadQuery Assembly，`cq.Location` 显式应用旋转+平移；源 STEP 与浏览器 `manifest.instances[].rotation_about_z_deg` 使用同一约定，旧缺字段的 manifest 兼容为 0°。
+3. 加入 `geometry_quality.json` 可追溯质量报告，包含每个部件 B-Rep 体积/包围尺寸、STEP 每个实体积偏差的最大值、全装配最小最大边界和往返误差；纳入原有 SHA-256 完整性清单。
+4. 仅当 STEP 个体积相对误差 ≤ 1e-5 且全装配包围盒坐标误差 ≤ 0.001 mm 时发布成果，不得将质量报告解释为接触力学、轴承寿命、公差、制造检验通过。
+5. 内容寻址生成器版本升级，旧成果不被误认为通过新增质量门禁。Three.js 对 STL 实例同样应用绕 Z 角度。
+
+## 验收
+- **非轴对称 4×2×3 mm 盒子**绕 Z 旋转 90° 并平移到 (10,3,0) 后，STEP 回读必须观测 x=2 mm、y=4 mm，包围盒中心 (10,3)，否则测试应失败。
+- 浮点非有限装配位置/角度必须拒绝。
+- 深沟球、圆柱滚子 NUP、角接触球代表性案例导出 STEP、报告生成和内容 SHA 完整性都通过。
+- 三类详细保持架旧几何、CAD-01/02/03、Playwright 与 Workbench 旧回归不得退化。
+- 新的几何质量输出仅为内核测量和 STEP 一致性；制造级审核、RoBAS 原版 Eyeshot 实体逐点对比仍待 3D-MIG-07。
+
+## 有意不做
+不重写轴承几何公式、不过度建立通用仿真/工程校核引擎、不默认修正角接触 3° 锥面、不修改滑动轴承 API、不开发二维工程图。
