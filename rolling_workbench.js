@@ -2,11 +2,11 @@ import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {STLLoader} from 'three/addons/loaders/STLLoader.js';
 import './rolling_workbench.css';
-import {bearingForms, cageFields, buildAssemblyIndex, validateArtifact, requestFromFields, apiMessage} from './rolling_manifest.js';
+import {bearingForms, cageForms, cageChoices, defaultCageEnabled, buildAssemblyIndex, validateArtifact, requestFromFields, apiMessage} from './rolling_manifest.js';
 
 const $ = id => document.getElementById(id);
 let fields=bearingForms['rolling.deep_groove_ball'].fields;
-const cages=cageFields;
+let cages=cageForms.simplified_annular.fields;
 function renderFields(container, prefix, data) {
  container.replaceChildren();
  for (const [key,label,value,choices] of data) {
@@ -65,9 +65,16 @@ function applyVisualOptions(){
   object.material.depthWrite=opacity===1;
   object.material.clippingPlanes=$('cutaway').checked?[clipPlane]:[];
   object.position.copy(object.userData.base);
-  const direction=object.userData.role==='outer_ring'?1:object.userData.role==='inner_ring'?-1:object.userData.role==='cage'?0.5:object.userData.role==='loose_rib'?1.7:0;
+  const part=object.userData.partId;
+  const direction=object.userData.role==='outer_ring'?1
+    :object.userData.role==='inner_ring'?-1
+    :part==='cage_lower'?-1.1
+    :part==='cage_upper'?1.1
+    :part==='rivet'?0
+    :object.userData.role==='cage'?0.5
+    :object.userData.role==='loose_rib'?1.7:0;
   object.position.z+=explode*15*direction;
-  if(object.userData.role==='rolling_element')object.position.addScaledVector(object.userData.radial,explode*10);
+  if(object.userData.role==='rolling_element'||part==='rivet')object.position.addScaledVector(object.userData.radial,explode*10);
  }
 }
 function presentTree(){
@@ -92,19 +99,34 @@ function invalidatePreview(message='输入已改变，请重新生成 CAD'){
  dispose();status(message);
  $('generate').disabled=!canGenerate();
 }
+function configureCageKind(reset=false){
+ const types=cageChoices[selectedType()]??[];
+ const picker=$('cageKind');
+ if(reset||!types.includes(picker.value)){
+  picker.replaceChildren();
+  for(const kind of types){
+   const opt=document.createElement('option');opt.value=kind;
+   opt.textContent=cageForms[kind].label;picker.append(opt);
+  }
+ }
+ cages=cageForms[picker.value].fields;
+ renderFields($('cageParams'),'cage-',cages);
+ $('cageOptions').hidden=!$('cageEnabled').checked;
+}
 function configureForm(){
  fields=bearingForms[selectedType()].fields;
  renderFields($('parameters'),'param-',fields);
- const hasCage=bearingForms[selectedType()].hasCage;
- $('cagePanel').hidden=!hasCage;
- $('cageParams').hidden=hasCage&&!$('cageEnabled').checked;
+ $('cageEnabled').checked=defaultCageEnabled[selectedType()];
+ configureCageKind(true);
  invalidatePreview('已切换轴承类型，请重新生成真实 CAD 模型');
  updateAvailability();
 }
 function getParams(){
  const p={};for(const [key] of fields)p[key]=$('param-'+key).value;
- const useCage=bearingForms[selectedType()].hasCage&&$('cageEnabled').checked;
- const c=useCage?Object.fromEntries(cages.map(([key])=>[key,$('cage-'+key).value])):null;
+ const c=$('cageEnabled').checked
+  ?{kind:$('cageKind').value,
+     ...Object.fromEntries(cages.map(([key])=>[key,$('cage-'+key).value]))}
+  :null;
  return requestFromFields(p,c,selectedType());
 }
 async function loadArtifacts(result, sequence){
@@ -127,6 +149,7 @@ async function loadArtifacts(result, sequence){
   const g=templates.get(instance.part_id).clone();g.computeVertexNormals();
   const material=new THREE.MeshStandardMaterial({color:palette[instance.role]||0xb3c6d8,metalness:.45,roughness:.35,side:THREE.DoubleSide});
   const mesh=new THREE.Mesh(g,material);mesh.name=instance.id;mesh.userData.role=instance.role;
+  mesh.userData.partId=instance.part_id;
   mesh.userData.base=new THREE.Vector3(...instance.translation_mm);
   mesh.userData.radial=new THREE.Vector3(instance.translation_mm[0],instance.translation_mm[1],0).normalize();
   mesh.position.copy(mesh.userData.base);
@@ -167,14 +190,17 @@ async function generate(){
 $('generate').addEventListener('click',generate);
 $('resetParams').addEventListener('click',()=>{
  renderFields($('parameters'),'param-',fields);
- renderFields($('cageParams'),'cage-',cages);
- $('cageEnabled').checked=true;
- $('cageParams').hidden=!bearingForms[selectedType()].hasCage;
- invalidatePreview('已恢复当前轴承类型的演示参数；请重新生成 CAD');
+ $('cageEnabled').checked=defaultCageEnabled[selectedType()];
+ configureCageKind(true);
+ invalidatePreview('已恢复当前轴承类型的几何测试参数；请重新生成 CAD');
 });
 $('cageEnabled').addEventListener('change',()=>{
- $('cageParams').hidden=!$('cageEnabled').checked;
+ $('cageOptions').hidden=!$('cageEnabled').checked;
  invalidatePreview('保持架设置已更改，请重新生成 CAD');
+});
+$('cageKind').addEventListener('change',()=>{
+ configureCageKind();
+ invalidatePreview('保持架结构已更改，请重新生成 CAD');
 });
 $('bearingType').addEventListener('change',configureForm);
 for(const id of ['cutaway','transparent','explode'])$(id).addEventListener('input',applyVisualOptions);

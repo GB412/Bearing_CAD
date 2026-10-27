@@ -7,9 +7,10 @@
 <section class="panel" aria-label="结构参数"><div class="panel-header"><h2>01 / 几何参数</h2><span>mm</span></div><div class="panel-body">
 <label class="field">轴承类型<select id="bearingType"><option value="rolling.deep_groove_ball">单列深沟球轴承</option><option value="rolling.cylindrical_roller">单列圆柱滚子轴承</option><option value="rolling.angular_contact_ball">单列角接触球轴承</option></select></label>
 <div class="fields" id="parameters"></div>
-<div id="cagePanel"><label class="switch"><input id="cageEnabled" type="checkbox" checked><span>显示简化保持架</span></label>
-<div class="cage-fields" id="cageParams"></div></div>
-<p class="hint">页面默认值只是几何测试夹具；内外圈、沟道、挡边尺寸必须明确输入，不依据轴承型号自动推定。圆柱滚子与角接触保持架尚未实现，所有模型均未取得制造批准。</p>
+<div id="cagePanel"><label class="switch"><input id="cageEnabled" type="checkbox" checked><span>包含保持架（可选）</span></label>
+<div id="cageOptions"><label class="field">保持架结构<select id="cageKind" aria-label="保持架结构"><option value="simplified_annular">简化环缘保持架（预览级）</option><option value="stamping_double_half">双半笼 + 球兜 + 铆钉</option></select></label>
+<div class="cage-fields" id="cageParams"></div></div></div>
+<p class="hint">三类轴承的保持架均可单独选择或省略；默认尺寸仅为可复现的几何测试夹具，并非厂家选型。请按结构参数校验后生成，任何结果都不是制造许可。</p>
 <div class="buttonrow"><button id="generate" class="primary">生成精确 CAD 模型</button><button id="resetParams" class="secondary">复位</button></div>
 <div class="notice" id="status" role="status" aria-live="polite">检查本地引擎连接…</div>
 </div></section>
