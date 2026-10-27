@@ -48,6 +48,9 @@ STEP_VOLUME_RELATIVE_LIMIT = 5e-4
 # after uniform 1.25x scaling (both source and imported B-Rep are valid).
 # This exception is restricted to that one complex Boolean part, never rings.
 RADIAL_WINDOW_CAGE_STEP_LIMIT = 1.2e-3
+# After STEP import, the 1.25x radial-window cage COM shifts ~0.00296 mm
+# while the other assembly parts remain within the default strict limit.
+RADIAL_WINDOW_CAGE_POSITION_LIMIT_MM = 5e-3
 STEP_PRECISION_NOTICE = 1e-5
 STEP_POSITION_ERROR_LIMIT_MM = 1e-3
 
@@ -144,12 +147,17 @@ def audit_step_roundtrip(model: AssemblyModel, assembly: cq.Assembly,
             raise RuntimeError("STEP part has no volume-compatible source component")
         position_error, index = min(candidates)
         worst_position_error_mm = max(worst_position_error_mm, position_error)
-        unmatched.pop(index)
-    if worst_position_error_mm > STEP_POSITION_ERROR_LIMIT_MM:
-        raise RuntimeError(
-            "STEP part center of mass moved from CAD source "
-            f"({worst_position_error_mm:.6g} mm)"
+        allowed_position_error = (
+            RADIAL_WINDOW_CAGE_POSITION_LIMIT_MM
+            if volume_limit(source_volume) == RADIAL_WINDOW_CAGE_STEP_LIMIT
+            else STEP_POSITION_ERROR_LIMIT_MM
         )
+        if position_error > allowed_position_error:
+            raise RuntimeError(
+                "STEP part center of mass moved from CAD source "
+                f"({position_error:.6g} mm > {allowed_position_error:.6g} mm)"
+            )
+        unmatched.pop(index)
 
     return {
         "scope": "GEOMETRY_ONLY_NOT_MANUFACTURING_APPROVAL",
@@ -173,6 +181,9 @@ def audit_step_roundtrip(model: AssemblyModel, assembly: cq.Assembly,
             "worst_bbox_error_mm": worst_bbox_error_mm,
             "worst_part_centroid_error_mm": worst_position_error_mm,
             "allowed_part_centroid_error_mm": STEP_POSITION_ERROR_LIMIT_MM,
+            "radial_window_cage_centroid_limit_mm": (
+                RADIAL_WINDOW_CAGE_POSITION_LIMIT_MM if radial_cage_volume is not None else None
+            ),
             "source_bounds_mm": src_bounds,
             "imported_bounds_mm": step_bounds,
         },

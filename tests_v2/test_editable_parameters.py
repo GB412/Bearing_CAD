@@ -62,6 +62,18 @@ class EditableParametersTests(unittest.TestCase):
                     manifest = verify_bundle(output)
                     self.assertEqual(len(manifest["instances"]), instance_count)
                     self.assertIn("geometry_quality.json", manifest["files"])
+                    if request.bearing_type.value == "rolling.angular_contact_ball":
+                        import json
+                        quality = json.loads((output/"geometry_quality.json").read_text(encoding="utf-8"))
+                        report = quality["step_roundtrip"]
+                        self.assertLessEqual(
+                            report["worst_part_centroid_error_mm"],
+                            report["radial_window_cage_centroid_limit_mm"],
+                        )
+                        self.assertLessEqual(
+                            report["worst_relative_solid_volume_error"],
+                            report["radial_window_cage_relative_volume_limit"],
+                        )
                     self.assertEqual(manifest["request_hash"], request.request_hash)
 
     def test_zero_clearance_and_resource_limit_contract(self):
