@@ -11,7 +11,7 @@ test('rolling workbench expands STL prototypes and handles changes',async({page}
   if(path===base){
    const names=['inner_ring','outer_ring','ball','cage'];
    const instances=[...names.slice(0,2).map(x=>({id:x,part_id:x,translation_mm:[0,0,0]})),
-      ...Array.from({length:11},(_,i)=>({id:'ball_'+(i+1),part_id:'ball',translation_mm:[27*Math.cos(i*2*Math.PI/11),27*Math.sin(i*2*Math.PI/11),0]})),
+      ...Array.from({length:11},(_,i)=>({id:'ball_'+(i+1),part_id:'ball',translation_mm:[27*Math.cos(i*2*Math.PI/11),27*Math.sin(i*2*Math.PI/11),0],rotation_about_z_deg:i===0?90:0})),
       {id:'cage',part_id:'cage',translation_mm:[0,0,0]}];
    const file_urls=Object.fromEntries(names.map(n=>[n+'.stl',base+'/files/'+n+'.stl']));
    return route.fulfill({json:{manifest:{status:'GEOMETRY_VALIDATED',geometry_unit:'mm',request_hash:'b'.repeat(64),completeness:'SIMPLIFIED_CAGE',
@@ -25,6 +25,7 @@ test('rolling workbench expands STL prototypes and handles changes',async({page}
  await expect.poll(()=>page.evaluate(()=>window.rollingViewerSnapshot?.().instances.length)).toBe(14);
  const before=await page.evaluate(()=>window.rollingViewerSnapshot());
  expect(before.instances.filter(p=>p.role==='rolling_element')).toHaveLength(11);
+ expect(before.instances.find(p=>p.id==='ball_1').rotationZDeg).toBeCloseTo(90,6);
  expect(new Set(before.instances.filter(p=>p.role==='rolling_element').map(p=>p.position.slice(0,2).join(','))).size).toBe(11);
  await expect(page.locator('#parts input')).toHaveCount(14);
  await page.locator('#parts input').nth(2).uncheck();

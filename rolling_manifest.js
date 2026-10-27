@@ -154,7 +154,13 @@ export function buildAssemblyIndex(manifest){
   if(!object(inst)||!PART.test(inst.id||'')||used.has(inst.id)||!defs.has(inst.part_id))throw Error('装配实例 ID 无效');
   if(!Array.isArray(inst.translation_mm)||inst.translation_mm.length!==3||!inst.translation_mm.every(n=>typeof n==='number'&&Number.isFinite(n)))
    throw Error('装配变换无效：'+inst.id);
-  used.add(inst.id);out.push({id:inst.id,part_id:inst.part_id,role:defs.get(inst.part_id),translation_mm:inst.translation_mm});
+  const rotation=inst.rotation_about_z_deg??0;
+  if(typeof rotation!=='number'||!Number.isFinite(rotation))
+   throw Error('实例 Z 轴旋转无效：'+inst.id);
+  used.add(inst.id);out.push({
+   id:inst.id,part_id:inst.part_id,role:defs.get(inst.part_id),
+   translation_mm:inst.translation_mm,rotation_about_z_deg:rotation
+  });
  }
  if(out.length===0||out.length>1000)throw Error('装配实例数超出范围');
  return out;
