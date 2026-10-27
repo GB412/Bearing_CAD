@@ -111,7 +111,8 @@ test('angular bore 40→50 reports linked shoulders and groove instead of CAD fa
  const raw=values(angular);raw.bore_d_mm='50';
  const issues=geometryIssues(requestFromFields(raw,null,angular));
  assert.ok(issues.some(i=>i.message.includes('内圈右肩')));
- assert.ok(issues.some(i=>i.message.includes('内沟道')));
+ // Detailed raceway intersection is validated by the authoritative Python builder.
+ assert.ok(issues.every(i=>i.fieldPath.startsWith('/parameters/')));
  assert.equal(issues[0].fieldPath,'/parameters/bore_d_mm');
  const error=describeCadError({error:{error_code:'PARAMETER_INVALID',
   field_path:'/parameters',message:'Expected bore < inner right < inner left < pitch < outer right < outer left < outside'}},422);
@@ -156,4 +157,17 @@ test('oversize simplified annular cage is rejected in front-end preflight',()=>{
  const cage=Object.fromEntries(cageForms.simplified_annular.fields.map(([k,,v])=>[k,String(v)]));
  const request=requestFromFields(values(deep),{kind:'simplified_annular',...cage,width_mm:'24'},deep);
  assert.ok(geometryIssues(request).some(i=>i.fieldPath==='/cage/width_mm'));
+});
+
+test('only lightweight ordering is blocked locally; precision rules stay on backend',()=>{
+ const angularRaw=values(angular);
+ angularRaw.ball_count='40'; // backend detects ball overlap, UI avoids duplicate trig
+ const shape=requestFromFields(angularRaw,null,angular);
+ assert.deepEqual(geometryIssues(shape),[]);
+ const base=values(cylindrical);
+ base.axial_clearance_mm='1.1'; // exceeds true end allowance; OCCT builder decides
+ assert.deepEqual(geometryIssues(requestFromFields(base,null,cylindrical)),[]);
+ const changed=values(angular);changed.bore_d_mm='50';
+ assert.ok(geometryIssues(requestFromFields(changed,null,angular))
+   .some(row=>row.message.includes('内圈右肩')));
 });

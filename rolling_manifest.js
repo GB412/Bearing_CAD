@@ -132,72 +132,38 @@ export function scaleGeometryFields(values,cage,bearingType,targetBore){
 
 // Fast, conservative checks only. The Python/OCCT builder remains authoritative
 // for all remaining contact, topology and interference validations.
+// UI preflight is intentionally narrow. Do not reproduce OCCT/roller/flange,
+// toroidal-cutter or cage-pocket feasibility mathematics in JavaScript.
+// The Python builder remains authoritative and returns structured field errors.
 export function geometryIssues(request){
- const p=request.parameters, c=request.cage, out=[];
- const add=(fieldPath,message,related=[])=>out.push({fieldPath,message,related});
+ const p=request.parameters,c=request.cage,kind=request.bearing_type;
+ const issues=[];
+ const add=(fieldPath,message,related=[])=>issues.push({fieldPath,message,related});
  const d=p.bore_d_mm,D=p.outside_d_mm,P=p.pitch_d_mm,B=p.width_mm;
- if(d>=D)add('/parameters/bore_d_mm','轴承内径必须小于外径。',['/parameters/outside_d_mm']);
- if(!(d<P&&P<D))add('/parameters/pitch_d_mm','节圆直径必须介于内径和外径之间。',['/parameters/bore_d_mm','/parameters/outside_d_mm']);
- const count=p.ball_count??p.roller_count;
- const body=p.ball_d_mm??p.roller_d_mm;
- const kind=request.bearing_type;
- if(count>1&&P*Math.sin(Math.PI/count)<=body)
-  add('/parameters/'+(kind==='rolling.cylindrical_roller'?'roller_count':'ball_count'),'滚动体数量过多，相邻滚动体会重叠。',['/parameters/pitch_d_mm']);
+ if(d>=D)add('/parameters/bore_d_mm','内径必须小于外径。',['/parameters/outside_d_mm']);
+ if(!(d<P&&P<D))
+  add('/parameters/pitch_d_mm','节圆直径必须介于内径和外径之间。',['/parameters/bore_d_mm','/parameters/outside_d_mm']);
  if(kind==='rolling.deep_groove_ball'){
-  const i=p.inner_shoulder_d_mm,o=p.outer_shoulder_d_mm;
-  const ri=p.inner_groove_radius_mm,ro=p.outer_groove_radius_mm;
-  if(!(d<i&&i<P&&P<o&&o<D))
-   add('/parameters/bore_d_mm','内径、内肩、节圆、外肩和外径应依次增大。',['/parameters/inner_shoulder_d_mm','/parameters/pitch_d_mm','/parameters/outer_shoulder_d_mm']);
-  if(ri<=body/2||ro<=body/2)
-   add('/parameters/inner_groove_radius_mm','内外沟道曲率半径都必须大于钢球半径。',['/parameters/outer_groove_radius_mm']);
-  if(P/2-ri<=d/2)add('/parameters/bore_d_mm','内孔已侵入内沟道切削区域，请同时调整节圆和沟道尺寸。',['/parameters/pitch_d_mm','/parameters/inner_groove_radius_mm']);
-  if(P/2+ro>=D/2)add('/parameters/outside_d_mm','外沟道切削区域超出了外圈直径。',['/parameters/pitch_d_mm']);
+  if(!(d<p.inner_shoulder_d_mm&&p.inner_shoulder_d_mm<P&&
+       P<p.outer_shoulder_d_mm&&p.outer_shoulder_d_mm<D))
+   add('/parameters/bore_d_mm','内径、内圈肩部、节圆、外圈肩部和外径必须依次增大。',['/parameters/inner_shoulder_d_mm','/parameters/pitch_d_mm','/parameters/outer_shoulder_d_mm']);
  }else if(kind==='rolling.angular_contact_ball'){
   const ir=p.inner_shoulder_right_d_mm,il=p.inner_shoulder_left_d_mm;
   const or=p.outer_shoulder_right_d_mm,ol=p.outer_shoulder_left_d_mm;
   if(!(d<ir&&ir<il&&il<P&&P<or&&or<ol&&ol<D))
-   add('/parameters/bore_d_mm','尺寸应满足：内径 < 内圈右肩 < 内圈左肩 < 节圆 < 外圈右肩 < 外圈左肩 < 外径。',['/parameters/inner_shoulder_right_d_mm','/parameters/inner_shoulder_left_d_mm','/parameters/pitch_d_mm','/parameters/outer_shoulder_right_d_mm','/parameters/outer_shoulder_left_d_mm']);
-  const r=body/2,ri=p.inner_groove_radius_mm,ro=p.outer_groove_radius_mm;
-  if(ri<=r||ro<=r)
-   add('/parameters/inner_groove_radius_mm','内外沟道曲率半径都必须大于钢球半径。',['/parameters/outer_groove_radius_mm']);
-  const angle=p.contact_angle_deg;
-  if(!(angle>0&&angle<90))add('/parameters/contact_angle_deg','接触角必须大于 0° 且小于 90°。');
-  if(ri>r&&ro>r&&angle>0&&angle<90){
-   const a=angle*Math.PI/180;
-   const innerR=P/2+(ri-r)*Math.cos(a);
-   const outerR=P/2-(ro-r)*Math.cos(a);
-   if(innerR-ri<=d/2)
-    add('/parameters/bore_d_mm','内孔已侵入角接触内沟道，请同步调整节圆、沟曲率或内径。',['/parameters/pitch_d_mm','/parameters/inner_groove_radius_mm']);
-   if(outerR+ro>=D/2)
-    add('/parameters/outside_d_mm','角接触外沟道切削区域超出了外径。');
-   if(Math.max(Math.abs((ri-r)*Math.sin(a))+ri,Math.abs((ro-r)*Math.sin(a))+ro)>=B/2)
-    add('/parameters/width_mm','轴承宽度不足，沟道切削区域穿过端面。');
-  }
+   add('/parameters/bore_d_mm','内径、内圈右肩、内圈左肩、节圆、外圈右肩、外圈左肩和外径必须依次增大。',['/parameters/inner_shoulder_right_d_mm','/parameters/inner_shoulder_left_d_mm','/parameters/pitch_d_mm','/parameters/outer_shoulder_right_d_mm','/parameters/outer_shoulder_left_d_mm']);
  }else if(kind==='rolling.cylindrical_roller'){
-  const rollR=p.roller_d_mm/2,gap=p.radial_clearance_mm;
-  const inner=P/2-rollR-gap,outer=P/2+rollR+gap;
-  if(!(d/2<inner&&inner<p.inner_rib_tip_d_mm/2&&
-       p.inner_rib_tip_d_mm<p.outer_rib_tip_d_mm&&
-       p.outer_rib_tip_d_mm/2<outer&&outer<D/2))
-   add('/parameters/bore_d_mm','内孔、内滚道、挡边、外滚道和外径的径向顺序不成立。',['/parameters/pitch_d_mm','/parameters/inner_rib_tip_d_mm','/parameters/outer_rib_tip_d_mm']);
-  if(!(p.roller_length_mm/2+p.axial_clearance_mm<B/2-p.rib_width_mm))
-   add('/parameters/width_mm','轴承宽度不足以容纳滚子、轴向净距和挡边。',['/parameters/roller_length_mm','/parameters/axial_clearance_mm','/parameters/rib_width_mm']);
+  if(!(d<p.inner_rib_tip_d_mm&&p.inner_rib_tip_d_mm<P&&
+       P<p.outer_rib_tip_d_mm&&p.outer_rib_tip_d_mm<D))
+   add('/parameters/bore_d_mm','内径、内挡边顶径、节圆、外挡边顶径和外径必须依次增大。',['/parameters/inner_rib_tip_d_mm','/parameters/pitch_d_mm','/parameters/outer_rib_tip_d_mm']);
  }
  if(c){
-  if(c.width_mm>B)add('/cage/width_mm','保持架总宽度不能大于轴承宽度。',['/parameters/width_mm']);
-  if(!(c.inner_d_mm<c.outside_d_mm))add('/cage/inner_d_mm','保持架内径必须小于外径。',['/cage/outside_d_mm']);
-  if(kind==='rolling.deep_groove_ball'){
-   if(!(p.inner_shoulder_d_mm<c.inner_d_mm&&c.inner_d_mm<P&&P<c.outside_d_mm&&c.outside_d_mm<p.outer_shoulder_d_mm))
-    add('/cage/inner_d_mm','保持架必须位于内外圈肩部之间且跨过节圆。',['/cage/outside_d_mm']);
-  }else if(kind==='rolling.angular_contact_ball'){
-   if(!(Math.max(p.inner_shoulder_left_d_mm,p.inner_shoulder_right_d_mm)<c.inner_d_mm&&c.inner_d_mm<P&&P<c.outside_d_mm&&c.outside_d_mm<Math.min(p.outer_shoulder_left_d_mm,p.outer_shoulder_right_d_mm)))
-    add('/cage/inner_d_mm','保持架必须位于角接触球内外肩部之间且跨过节圆。',['/cage/outside_d_mm']);
-  }else if(kind==='rolling.cylindrical_roller'){
-   if(!(p.inner_rib_tip_d_mm<c.inner_d_mm&&c.inner_d_mm<P&&P<c.outside_d_mm&&c.outside_d_mm<p.outer_rib_tip_d_mm))
-    add('/cage/inner_d_mm','保持架必须位于滚子挡边之间且跨过节圆。',['/cage/outside_d_mm']);
-  }
+  if(c.width_mm>B)
+   add('/cage/width_mm','保持架总宽度不能大于轴承宽度。',['/parameters/width_mm']);
+  if(c.inner_d_mm>=c.outside_d_mm)
+   add('/cage/inner_d_mm','保持架内径必须小于外径。',['/cage/outside_d_mm']);
  }
- return out;
+ return issues;
 }
 export function requestFromFields(values, cage, bearingType='rolling.deep_groove_ball') {
   const form=bearingForms[bearingType];
