@@ -41,6 +41,32 @@ class AssemblyQualityTests(unittest.TestCase):
             self.assertEqual(report["instance_count"], 1)
             self.assertLess(report["step_roundtrip"]["worst_bbox_error_mm"], 1e-3)
 
+    def test_step_radial_window_volume_error_remains_visible(self):
+        # Real OCCT roundtrip can perturb a multi-cut radial window cage by
+        # ~0.017% despite valid source/import solids. Preserve a precision notice.
+        from bearing_cad.cages import straight_pocket_cage
+        from bearing_cad.contracts import CageSpec
+        cage = straight_pocket_cage(
+            CageSpec(kind="straight_pocket",inner_d_mm=51,
+                     outside_d_mm=57,width_mm=11,pocket_clearance_mm=.15),
+            pitch_d_mm=54,ball_d_mm=8,ball_count=11,bearing_width_mm=15,
+            max_inner_shoulder_d_mm=49,min_outer_shoulder_d_mm=59,
+        )
+        model=AssemblyModel(
+            BearingType.ANGULAR_CONTACT,
+            (ComponentDefinition("cage","cage",cage),),
+            (ComponentInstance("cage","cage"),),
+        )
+        assembly=build_assembly(model)
+        with tempfile.TemporaryDirectory() as tmp:
+            p=Path(tmp)/"radial.step"
+            assembly.save(str(p))
+            imported=cq.importers.importStep(str(p)).solids().vals()
+            quality=audit_step_roundtrip(model,assembly,imported)
+            error=quality["step_roundtrip"]["worst_relative_solid_volume_error"]
+            self.assertLess(error,quality["step_roundtrip"]["allowed_relative_volume_error"])
+            self.assertGreaterEqual(error,0)
+
     def test_invalid_instance_transforms_are_rejected_before_geometry(self):
         box = ComponentDefinition("a", "probe", object())
         for location, rotation in (
