@@ -61,7 +61,10 @@ class ContractTests(unittest.TestCase):
         cylinder["bearing_type"] = "rolling.cylindrical_roller"
         cylinder["parameters"] = {"bore_d_mm":40,"outside_d_mm":68,"width_mm":15,
                                   "roller_d_mm":8,"roller_length_mm":12,"pitch_d_mm":54,
-                                  "roller_count":11,"configuration":"NU"}
+                                  "roller_count":11,"configuration":"NU",
+                                  "radial_clearance_mm":0.05,"axial_clearance_mm":0.4,
+                                  "rib_width_mm":2,"inner_rib_tip_d_mm":52,
+                                  "outer_rib_tip_d_mm":56}
         self.assertEqual(parse_request(cylinder).parameters["configuration"], "NU")
         angle = copy.deepcopy(deep)
         angle["bearing_type"] = "rolling.angular_contact_ball"

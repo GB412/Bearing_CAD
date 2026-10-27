@@ -136,17 +136,18 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
                 request = parse_request(data)
             except ContractError as error:
                 return self._error(422, error.error_code, str(error), error.field_path)
-            if request.bearing_type.value != "rolling.deep_groove_ball":
+            if request.bearing_type.value not in {"rolling.deep_groove_ball", "rolling.cylindrical_roller"}:
                 return self._error(422, "NOT_SUPPORTED", "CAD builder is not implemented", "/bearing_type")
             if request.detail_level != "functional":
                 return self._error(422, "NOT_SUPPORTED", "Only functional CAD detail is implemented", "/detail_level")
             # The API cap is a resource limit, not a mechanical standard.
             dimensions = [float(value) for key, value in request.parameters.items()
-                          if key != "ball_count"]
+                          if key not in {"ball_count", "roller_count", "configuration"}]
             if request.cage is not None:
                 dimensions.extend([request.cage.inner_d_mm, request.cage.outside_d_mm,
                                    request.cage.width_mm, request.cage.pocket_clearance_mm])
-            if request.parameters["ball_count"] > 64 or max(dimensions) > 1000:
+            count = request.parameters.get("ball_count", request.parameters.get("roller_count", 0))
+            if count > 64 or max(dimensions) > 1000:
                 return self._error(422, "RESOURCE_LIMIT", "CAD service resource budget exceeded", "/parameters")
             if not build_lock.acquire(blocking=False):
                 return self._error(503, "BUSY", "One CAD build is already running")
@@ -214,7 +215,8 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
             route = self._route()
             if route == "/api/v2/cad/status":
                 return self._respond(200, {"available": True, "mode": "loopback_synchronous",
-                                           "supported_bearings": ["rolling.deep_groove_ball"]})
+                                           "supported_bearings": ["rolling.deep_groove_ball",
+                                                                  "rolling.cylindrical_roller"]})
             match = _JOB_ROUTE.fullmatch(route or "")
             if match:
                 job_id = match.group(1)
