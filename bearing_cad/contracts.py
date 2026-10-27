@@ -6,7 +6,7 @@ bearing axis is Z (mid-plane Z=0). No catalogue dimensions are guessed here.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from enum import Enum
 import hashlib
 import json
@@ -44,6 +44,14 @@ class CageSpec:
 
 
 @dataclass(frozen=True)
+class StampedCageSpec(CageSpec):
+    board_thickness_mm: float
+    rivet_shaft_d_mm: float
+    rivet_head_d_mm: float
+    rivet_hole_clearance_mm: float
+
+
+@dataclass(frozen=True)
 class BearingRequest:
     schema_version: str
     bearing_type: BearingType
@@ -63,8 +71,7 @@ class BearingRequest:
                    "geometry_strategy": self.geometry_strategy,
                    "parameters": dict(self.parameters)}
         if self.cage is not None:
-            payload["cage"] = {name: getattr(self.cage, name) for name in
-                               ("kind", "inner_d_mm", "outside_d_mm", "width_mm", "pocket_clearance_mm")}
+            payload["cage"] = asdict(self.cage)
         return json.dumps(payload, sort_keys=True, separators=(",", ":"),
                           allow_nan=False, ensure_ascii=True)
 
@@ -190,11 +197,18 @@ def parse_request(data: Mapping[str, Any]) -> BearingRequest:
         raise ContractError("PARAMETER_INVALID", "/parameters/pitch_d_mm", "Pitch diameter must lie between bore and outside diameters")
     cage = None
     if cage_present:
+        stamped = (kind == BearingType.DEEP_GROOVE
+                   and isinstance(cage_raw, dict)
+                   and cage_raw.get("kind") == "stamping_double_half")
         fields = {"kind", "inner_d_mm", "outside_d_mm", "width_mm", "pocket_clearance_mm"}
+        if stamped:
+            fields |= {"board_thickness_mm", "rivet_shaft_d_mm",
+                       "rivet_head_d_mm", "rivet_hole_clearance_mm"}
         obj = _closed_object(cage_raw, fields, "/cage")
-        allowed_kind = {BearingType.DEEP_GROOVE: "simplified_annular",
-                        BearingType.CYLINDRICAL: "cylindrical_window",
-                        BearingType.ANGULAR_CONTACT: "straight_pocket"}[kind]
+        allowed_kind = ("stamping_double_half" if stamped else {
+            BearingType.DEEP_GROOVE: "simplified_annular",
+            BearingType.CYLINDRICAL: "cylindrical_window",
+            BearingType.ANGULAR_CONTACT: "straight_pocket"}[kind])
         if obj["kind"] != allowed_kind:
             raise ContractError("NOT_SUPPORTED", "/cage/kind",
                                 f"Cage kind not implemented for {kind.value}")
@@ -212,6 +226,7 @@ def parse_request(data: Mapping[str, Any]) -> BearingRequest:
             values[field] = float(value)
         if values["inner_d_mm"] >= values["outside_d_mm"]:
             raise ContractError("PARAMETER_INVALID", "/cage/outside_d_mm", "Cage outer must exceed cage inner")
-        cage = CageSpec(kind=allowed_kind, **values)
+        cage_type = StampedCageSpec if stamped else CageSpec
+        cage = cage_type(kind=allowed_kind, **values)
     return BearingRequest(SCHEMA_VERSION, kind, "mm", envelope["detail_level"],
                           "explicit", params, cage)

@@ -15,6 +15,8 @@ from .contracts import (
 )
 from .geometry import annulus, sphere, cylindrical_roller, circular_positions
 from .geometry_checks import inspect_solid, interference_volume
+from .contracts import StampedCageSpec
+from .stamping import stamped_cage_components
 
 
 def build_deep_groove(request: BearingRequest) -> AssemblyModel:
@@ -56,6 +58,40 @@ def build_deep_groove(request: BearingRequest) -> AssemblyModel:
     reference_ball = ball.translate(positions[0])
     if max(interference_volume(inner, reference_ball), interference_volume(outer, reference_ball)) > 1e-6:
         raise ContractError("ASSEMBLY_INTERFERENCE", "/geometry", "Ball penetrates a raceway")
+
+    if isinstance(request.cage, StampedCageSpec):
+        upper, lower, rivet, rivet_centers = stamped_cage_components(
+            request.cage, pitch_d_mm=pitch, ball_d_mm=ball_d,
+            ball_count=count, bearing_width_mm=B,
+            inner_shoulder_d_mm=inner_shoulder,
+            outer_shoulder_d_mm=outer_shoulder,
+        )
+        for shape in (upper, lower):
+            if interference_volume(shape, inner) > 1e-6 or interference_volume(shape, outer) > 1e-6:
+                raise ContractError("ASSEMBLY_INTERFERENCE", "/cage", "Stamped cage penetrates ring")
+        placed_rivet = rivet.translate(rivet_centers[0])
+        if (interference_volume(placed_rivet, inner) > 1e-6 or
+            interference_volume(placed_rivet, outer) > 1e-6 or
+            interference_volume(placed_rivet, reference_ball) > 1e-6):
+            raise ContractError("ASSEMBLY_INTERFERENCE", "/cage", "Rivet penetrates bearing")
+        components = (
+            ComponentDefinition("inner_ring", "inner_ring", inner),
+            ComponentDefinition("outer_ring", "outer_ring", outer),
+            ComponentDefinition("ball", "rolling_element", ball),
+            ComponentDefinition("cage_upper", "cage", upper),
+            ComponentDefinition("cage_lower", "cage", lower),
+            ComponentDefinition("rivet", "cage", rivet),
+        )
+        instances = (
+            ComponentInstance("inner_ring", "inner_ring"),
+            ComponentInstance("outer_ring", "outer_ring"),
+            ComponentInstance("cage_upper", "cage_upper"),
+            ComponentInstance("cage_lower", "cage_lower"),
+        ) + tuple(ComponentInstance(f"ball_{i+1:03d}", "ball", location)
+                  for i, location in enumerate(positions)) + tuple(
+            ComponentInstance(f"rivet_{i+1:03d}", "rivet", location)
+            for i, location in enumerate(rivet_centers))
+        return AssemblyModel(BearingType.DEEP_GROOVE, components, instances)
 
     cage_shape = None
     if request.cage is not None:

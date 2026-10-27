@@ -144,8 +144,9 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
             dimensions = [float(value) for key, value in request.parameters.items()
                           if key not in {"ball_count", "roller_count", "configuration"}]
             if request.cage is not None:
-                dimensions.extend([request.cage.inner_d_mm, request.cage.outside_d_mm,
-                                   request.cage.width_mm, request.cage.pocket_clearance_mm])
+                from dataclasses import asdict
+                dimensions.extend(float(value) for value in asdict(request.cage).values()
+                                  if type(value) in (float, int))
             count = request.parameters.get("ball_count", request.parameters.get("roller_count", 0))
             if count > 64 or max(dimensions) > 1000:
                 return self._error(422, "RESOURCE_LIMIT", "CAD service resource budget exceeded", "/parameters")
