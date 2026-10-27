@@ -14,11 +14,12 @@ import cadquery as cq
 
 from .contracts import BearingRequest, BearingType, ContractError
 from .cylindrical_roller import build_cylindrical_roller
+from .angular_contact import build_angular_contact
 from .deep_groove import build_deep_groove
 from .geometry_checks import inspect_solid
 
 BUNDLE_VERSION = "cad-v2-artifacts/1"
-GENERATOR_VERSION = "0.8.0"
+GENERATOR_VERSION = "0.9.0"
 
 
 def _digest(path: Path) -> str:
@@ -73,6 +74,8 @@ def generate_bundle(request: BearingRequest, output_root: Path) -> Path:
         model = build_deep_groove(request)
     elif request.bearing_type == BearingType.CYLINDRICAL:
         model = build_cylindrical_roller(request)
+    elif request.bearing_type == BearingType.ANGULAR_CONTACT:
+        model = build_angular_contact(request)
     else:
         raise ContractError("NOT_SUPPORTED", "/bearing_type", "CAD builder not implemented")
     parts = {component.component_id: component.shape for component in model.components}
@@ -105,6 +108,7 @@ def generate_bundle(request: BearingRequest, output_root: Path) -> Path:
             "geometry_unit": "mm",
             "bearing_type": request.bearing_type.value,
             "configuration": request.parameters.get("configuration"),
+            "contact_angle_deg": request.parameters.get("contact_angle_deg"),
             "status": "GEOMETRY_VALIDATED",
             "completeness": "SIMPLIFIED_CAGE" if request.cage else "CAGE_OMITTED",
             "parts": [{"id": part.component_id, "role": part.role} for part in model.components],

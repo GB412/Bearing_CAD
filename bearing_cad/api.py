@@ -136,7 +136,7 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
                 request = parse_request(data)
             except ContractError as error:
                 return self._error(422, error.error_code, str(error), error.field_path)
-            if request.bearing_type.value not in {"rolling.deep_groove_ball", "rolling.cylindrical_roller"}:
+            if request.bearing_type.value not in {"rolling.deep_groove_ball", "rolling.cylindrical_roller", "rolling.angular_contact_ball"}:
                 return self._error(422, "NOT_SUPPORTED", "CAD builder is not implemented", "/bearing_type")
             if request.detail_level != "functional":
                 return self._error(422, "NOT_SUPPORTED", "Only functional CAD detail is implemented", "/detail_level")
@@ -216,7 +216,8 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
             if route == "/api/v2/cad/status":
                 return self._respond(200, {"available": True, "mode": "loopback_synchronous",
                                            "supported_bearings": ["rolling.deep_groove_ball",
-                                                                  "rolling.cylindrical_roller"]})
+                                                                  "rolling.cylindrical_roller",
+                                                                  "rolling.angular_contact_ball"]})
             match = _JOB_ROUTE.fullmatch(route or "")
             if match:
                 job_id = match.group(1)
