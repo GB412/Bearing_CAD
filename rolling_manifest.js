@@ -24,7 +24,7 @@ export const bearingForms = Object.freeze({
       ['rib_width_mm','挡边宽度',2],
       ['inner_rib_tip_d_mm','内挡边顶径',52],
       ['outer_rib_tip_d_mm','外挡边顶径',56]],
-    hasCage: false
+    hasCage: true
   },
   'rolling.angular_contact_ball': {
     label: '单列角接触球轴承',
@@ -36,13 +36,57 @@ export const bearingForms = Object.freeze({
       ['inner_shoulder_right_d_mm','内圈右肩直径',47],
       ['outer_shoulder_left_d_mm','外圈左肩直径',61],
       ['outer_shoulder_right_d_mm','外圈右肩直径',59]],
-    hasCage: false
+    hasCage: true
   }
 });
 export const cageFields = Object.freeze([
   ['inner_d_mm','保持架内径',48],['outside_d_mm','保持架外径',60],
   ['width_mm','保持架宽度',11],['pocket_clearance_mm','球兜间隙',.25]
 ]);
+// Fixtures below are geometry regression cases, not bearing catalogue dimensions.
+// The kind and exact numeric fields mirror contracts.py; nothing is inferred.
+export const cageForms = Object.freeze({
+  simplified_annular: {
+    label:'简化环缘保持架（预览级）',
+    fields:cageFields
+  },
+  stamping_double_half: {
+    label:'双半笼 + 球兜 + 铆钉',
+    fields:[
+      ['inner_d_mm','保持架内径',48],['outside_d_mm','保持架外径',60],
+      ['width_mm','保持架总宽度',11.5],['pocket_clearance_mm','球兜净距',.15],
+      ['board_thickness_mm','冲压板厚度',.7],['rivet_shaft_d_mm','铆钉杆径',1],
+      ['rivet_head_d_mm','铆钉头直径',1.6],
+      ['rivet_hole_clearance_mm','铆钉孔净距',.05]
+    ]
+  },
+  cylindrical_window: {
+    label:'圆柱滚子轴向窗孔保持架',
+    fields:[
+      ['inner_d_mm','保持架内径',52.6],['outside_d_mm','保持架外径',55.4],
+      ['width_mm','保持架宽度',16],['pocket_clearance_mm','滚子窗孔净距',.15]
+    ]
+  },
+  straight_pocket: {
+    label:'角接触球径向窗孔保持架',
+    fields:[
+      ['inner_d_mm','保持架内径',51],['outside_d_mm','保持架外径',57],
+      ['width_mm','保持架宽度',11],['pocket_clearance_mm','球兜净距',.15]
+    ]
+  }
+});
+export const cageChoices = Object.freeze({
+  'rolling.deep_groove_ball':['simplified_annular','stamping_double_half'],
+  'rolling.cylindrical_roller':['cylindrical_window'],
+  'rolling.angular_contact_ball':['straight_pocket']
+});
+// Keep existing deep-groove simplified cage as the initial page default.
+// Previously unsupported types default to *no cage* until explicitly enabled.
+export const defaultCageEnabled = Object.freeze({
+  'rolling.deep_groove_ball':true,
+  'rolling.cylindrical_roller':false,
+  'rolling.angular_contact_ball':false
+});
 function numeric(text, key, integer=false) {
   if (String(text).trim()==='') throw Error('缺少参数 '+key);
   const val=Number(text);
@@ -66,9 +110,17 @@ export function requestFromFields(values, cage, bearingType='rolling.deep_groove
   const result={schema_version:'bearing-cad.request.v1',bearing_type:bearingType,
     unit:'mm',detail_level:'functional',geometry_strategy:'explicit',parameters:params};
   if(cage!==null){
+    // Only old deep-groove callers may omit the kind; other types must
+    // explicitly state it. This preserves older simplified cage requests.
+    const kind=cage.kind??(bearingType==='rolling.deep_groove_ball'?'simplified_annular':null);
+    if(!cageChoices[bearingType]?.includes(kind))throw Error('不支持的保持架类型：'+String(kind));
+    const spec=cageForms[kind];
+    const expected=new Set(['kind',...spec.fields.map(([key])=>key)]);
+    for(const key of Object.keys(cage))if(!expected.has(key))throw Error('不支持的保持架参数：'+key);
     const dimensions={};
-    for(const [key] of cageFields) dimensions[key]=numeric(cage[key],key);
-    result.cage={kind:'simplified_annular',...dimensions};
+    for(const [key] of spec.fields)dimensions[key]=numeric(cage[key],key);
+    if(dimensions.inner_d_mm>=dimensions.outside_d_mm)throw Error('保持架内径应小于外径');
+    result.cage={kind,...dimensions};
   }
   return result;
 }

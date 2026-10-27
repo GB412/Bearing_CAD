@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {bearingForms,cageFields,requestFromFields,validateArtifact,buildAssemblyIndex,apiMessage} from './rolling_manifest.js';
+import {bearingForms,cageFields,cageForms,cageChoices,defaultCageEnabled,requestFromFields,validateArtifact,buildAssemblyIndex,apiMessage} from './rolling_manifest.js';
 
 const values=kind=>Object.fromEntries(bearingForms[kind].fields.map(([key,,value])=>[key,String(value)]));
 const deep='rolling.deep_groove_ball', cylindrical='rolling.cylindrical_roller', angular='rolling.angular_contact_ball';
@@ -62,4 +62,36 @@ test('manifest download URLs must remain local and registered',()=>{
  assert.throws(()=>validateArtifact({manifest:m,file_urls:{'ball.stl':'https://evil.example/file'}}));
  assert.throws(()=>validateArtifact({manifest:m,file_urls:{'evil.stl':url}}));
  assert.equal(apiMessage({error:{message:'Not supported'}},422),'Not supported');
+});
+
+test('all four geometry cage modes match their explicit backend parameter contract',()=>{
+ const fixture=kind=>Object.fromEntries(cageForms[kind].fields.map(([name,,val])=>[name,String(val)]));
+ const table=[
+  [deep,'simplified_annular',5],
+  [deep,'stamping_double_half',9],
+  [cylindrical,'cylindrical_window',5],
+  [angular,'straight_pocket',5]
+ ];
+ for(const [type,kind,expected] of table){
+  const result=requestFromFields(values(type),{kind,...fixture(kind)},type);
+  assert.equal(result.cage.kind,kind);
+  assert.equal(Object.keys(result.cage).length,expected);
+  assert.equal(result.cage.inner_d_mm,Number(fixture(kind).inner_d_mm));
+  assert.ok(result.cage.outside_d_mm>result.cage.inner_d_mm);
+  assert.ok(cageChoices[type].includes(kind));
+ }
+ const stamped=requestFromFields(values(deep),{kind:'stamping_double_half',...fixture('stamping_double_half')},deep);
+ assert.equal(stamped.cage.rivet_shaft_d_mm,1);
+ assert.equal(stamped.cage.board_thickness_mm,.7);
+ assert.deepEqual([defaultCageEnabled[deep],defaultCageEnabled[cylindrical],defaultCageEnabled[angular]],[true,false,false]);
+});
+test('unsupported and incomplete cages fail rather than silently changing geometry',()=>{
+ const fixture=kind=>Object.fromEntries(cageForms[kind].fields.map(([name,,val])=>[name,String(val)]));
+ assert.throws(()=>requestFromFields(values(cylindrical),{kind:'stamping_double_half',...fixture('stamping_double_half')},cylindrical),/保持架/);
+ assert.throws(()=>requestFromFields(values(angular),{kind:'cylindrical_window',...fixture('cylindrical_window')},angular),/保持架/);
+ assert.throws(()=>requestFromFields(values(deep),{kind:'stamping_double_half',...fixture('simplified_annular')},deep),/board_thickness_mm/);
+ assert.throws(()=>requestFromFields(values(deep),{kind:'simplified_annular',...fixture('simplified_annular'),secret:'8'},deep),/保持架参数/);
+ assert.throws(()=>requestFromFields(values(cylindrical),{kind:'cylindrical_window',...fixture('cylindrical_window'),inner_d_mm:'-5'},cylindrical),/无效/);
+ assert.throws(()=>requestFromFields(values(angular),{kind:'straight_pocket',...fixture('straight_pocket'),width_mm:'Infinity'},angular),/无效/);
+ assert.equal(requestFromFields(values(cylindrical),null,cylindrical).cage,undefined);
 });
