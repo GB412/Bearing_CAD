@@ -68,11 +68,15 @@ class AssemblyQualityTests(unittest.TestCase):
             self.assertGreaterEqual(error,0)
             self.assertGreater(
                 quality["step_roundtrip"]["radial_window_cage_relative_volume_limit"],
-                quality["step_roundtrip"]["allowed_relative_volume_error"],
+                quality["step_roundtrip"]["default_relative_volume_limit"],
             )
             self.assertGreater(
                 quality["step_roundtrip"]["radial_window_cage_centroid_limit_mm"],
-                quality["step_roundtrip"]["allowed_part_centroid_error_mm"],
+                quality["step_roundtrip"]["default_centroid_limit_mm"],
+            )
+            self.assertEqual(
+                quality["step_roundtrip"]["allowed_relative_volume_error"],
+                quality["step_roundtrip"]["radial_window_cage_relative_volume_limit"],
             )
 
     def test_interior_part_shift_rejected_even_if_total_bbox_and_volume_unchanged(self):
@@ -93,6 +97,48 @@ class AssemblyQualityTests(unittest.TestCase):
         solids[center] = solids[center].translate(cq.Vector(2., 0., 0.))
         with self.assertRaisesRegex(RuntimeError, "center of mass"):
             audit_step_roundtrip(model, assembly, solids)
+
+    def test_instance_limits_and_import_order_have_explicit_identity(self):
+        shape=cq.Workplane("XY").box(2,2,2)
+        # Equal volumes but different labeled components and locations.
+        model=AssemblyModel(
+            BearingType.ANGULAR_CONTACT,
+            (ComponentDefinition("cage","cage",shape),
+             ComponentDefinition("inner_ring","inner_ring",shape)),
+            (ComponentInstance("cage","cage",(-10.,0.,0.)),
+             ComponentInstance("inner_ring","inner_ring",(10.,0.,0.))),
+        )
+        assembly=build_assembly(model)
+        readback=list(reversed(tuple(assembly.toCompound().Solids())))
+        result=audit_step_roundtrip(model,assembly,readback)["step_roundtrip"]
+        self.assertTrue(result["all_instances_within_limits"])
+        self.assertEqual([r["instance_id"] for r in result["per_instance_metrics"]],
+                         ["cage","inner_ring"])
+        checks={r["instance_id"]:r for r in result["per_instance_metrics"]}
+        self.assertAlmostEqual(checks["cage"]["allowed_relative_volume_error"],0.0012)
+        self.assertAlmostEqual(checks["inner_ring"]["allowed_relative_volume_error"],0.0005)
+        self.assertAlmostEqual(checks["cage"]["allowed_centroid_error_mm"],0.005)
+        self.assertAlmostEqual(checks["inner_ring"]["allowed_centroid_error_mm"],0.001)
+        self.assertNotEqual(checks["cage"]["imported_solid_index"],
+                            checks["inner_ring"]["imported_solid_index"])
+
+    def test_near_equal_volume_ring_cannot_inherit_cage_allowance(self):
+        cage=cq.Workplane("XY").box(2,2,2)
+        ring=cq.Workplane("XY").box(2,2,2)
+        model=AssemblyModel(
+            BearingType.ANGULAR_CONTACT,
+            (ComponentDefinition("cage","cage",cage),
+             ComponentDefinition("inner_ring","inner_ring",ring)),
+            (ComponentInstance("cage","cage",(-10.,0.,0.)),
+             ComponentInstance("inner_ring","inner_ring",(10.,0.,0.))),
+        )
+        assembly=build_assembly(model)
+        # The ring is 0.08% larger, within cage limit (0.12%) but above
+        # general ring limit (0.05%). Its center/bounds remain in tolerance.
+        altered_ring=cq.Workplane("XY").box(2,2,2.0016).val().translate((10,0,0))
+        imported=(cage.val().translate((-10,0,0)),altered_ring)
+        with self.assertRaisesRegex(RuntimeError,"identity/volume"):
+            audit_step_roundtrip(model,assembly,imported)
 
     def test_invalid_instance_transforms_are_rejected_before_geometry(self):
         box = ComponentDefinition("a", "probe", object())
