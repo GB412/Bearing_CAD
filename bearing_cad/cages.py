@@ -93,7 +93,7 @@ def straight_pocket_cage(
         cq.Vector(0, 1, 0),
     )
     for index in range(ball_count):
-        angle = index * 360 / ball_count
+        angle = index * 360 / ball_count - 90  # Align +Y legacy cutter with +X Python ball_001
         cage = cage.cut(cutter.rotate((0, 0, 0), (0, 0, 1), angle))
     if not inspect_solid(cage).valid or cage.val().Volume() >= blank_volume:
         raise ContractError("BREP_INVALID", "/cage", "Radial windows invalid or did not remove material")

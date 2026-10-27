@@ -33,18 +33,18 @@ class StraightPocketCageTests(unittest.TestCase):
                 self.assertEqual(len(m.components), 4)
                 self.assertEqual(len(m.instances), 14)
                 for i in range(11):
-                    theta = math.pi / 2 + 2 * math.pi * i / 11
+                    theta = 2 * math.pi * i / 11
                     center = (27 * math.cos(theta), 27 * math.sin(theta), 0)
                     bridge = (27 * math.cos(theta + math.pi / 11),
                               27 * math.sin(theta + math.pi / 11), 0)
                     self.assertFalse(cage.val().isInside(center))
                     self.assertTrue(cage.val().isInside(bridge))
-                self.assertTrue(cage.val().isInside((0, 27, 5.3)))
-                self.assertTrue(cage.val().isInside((0, 27, -5.3)))
+                self.assertTrue(cage.val().isInside((27, 0, 5.3)))
+                self.assertTrue(cage.val().isInside((27, 0, -5.3)))
                 for name, shape in parts.items():
                     if name != "cage" and name != "ball":
                         self.assertLess(interference_volume(cage, shape), 1e-6)
-                self.assertLess(interference_volume(cage, parts["ball"].translate((0, 27, 0))), 1e-6)
+                self.assertLess(interference_volume(cage, parts["ball"].translate((27, 0, 0))), 1e-6)
 
     def test_step_all_solids_valid_and_cache_identity(self):
         with tempfile.TemporaryDirectory() as root:
