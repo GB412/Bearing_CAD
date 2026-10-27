@@ -2,7 +2,7 @@
   "name": "bearingcad-demo",
   "version": "0.1.0",
   "private": true,
-  "description": "Offline-capable plain journal bearing CAD demonstration",
+  "description": "Standalone sliding and rolling bearing parametric CAD workbenches",
   "type": "module",
   "scripts": {
     "dev": "vite",
