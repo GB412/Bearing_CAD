@@ -16,11 +16,11 @@ test('one workbench drives cylindrical NUP and angular contact without stale res
   if(path===base){
    const req=requests.at(-1),type=req.bearing_type;
    const roll=type==='rolling.cylindrical_roller'?'roller':'ball';
-   const parts=['inner_ring','outer_ring',roll,...(type==='rolling.cylindrical_roller'&&req.parameters.configuration==='NUP'?['loose_rib']:[])];
+   const parts=['inner_ring','outer_ring',roll,...(type==='rolling.cylindrical_roller'&&req.parameters.configuration==='NUP'?['loose_rib']:[]),...(type==='rolling.deep_groove_ball'&&req.cage?['cage']:[])];
    const n=req.parameters.ball_count??req.parameters.roller_count;
    const instances=[...parts.slice(0,2).map(x=>({id:x,part_id:x,translation_mm:[0,0,0]})),
       ...Array.from({length:n},(_,i)=>({id:roll+'_'+i,part_id:roll,translation_mm:[27*Math.cos(i*2*Math.PI/n),27*Math.sin(i*2*Math.PI/n),0]})),
-      ...(parts.includes('loose_rib')?[{id:'loose_rib',part_id:'loose_rib',translation_mm:[0,0,0]}]:[])];
+      ...(parts.includes('loose_rib')?[{id:'loose_rib',part_id:'loose_rib',translation_mm:[0,0,0]}]:[]),...(parts.includes('cage')?[{id:'cage',part_id:'cage',translation_mm:[0,0,0]}]:[])];
    const file_urls=Object.fromEntries(parts.map(name=>[name+'.stl',base+'/files/'+name+'.stl']));
    return route.fulfill({json:{manifest:{status:'GEOMETRY_VALIDATED',geometry_unit:'mm',request_hash:'b'.repeat(64),completeness:'CAGE_OMITTED',
     parts:parts.map(name=>({id:name,role:name===roll?'rolling_element':name})),instances,
@@ -52,7 +52,7 @@ test('one workbench drives cylindrical NUP and angular contact without stale res
  await page.locator('#bearingType').selectOption('rolling.deep_groove_ball');
  await expect(page.locator('#cagePanel')).toBeVisible();
  await page.locator('#generate').click();
- await expect.poll(()=>page.evaluate(()=>window.rollingViewerSnapshot().instances.length)).toBe(13);
+ await expect.poll(()=>page.evaluate(()=>window.rollingViewerSnapshot().instances.length)).toBe(14);
  expect(requests[2].cage?.kind).toBe('simplified_annular');
  await page.locator('#cageEnabled').uncheck();
  await expect.poll(()=>page.evaluate(()=>window.rollingViewerSnapshot().instances.length)).toBe(0);
