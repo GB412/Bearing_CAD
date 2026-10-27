@@ -1,0 +1,335 @@
+{
+  "schema_version": "bearing-cad.migration-cases.v1",
+  "legacy_source_archive_sha256": "69b39ec937bcc942d223601995c7279573c629d81c652e56a3146b4f2c95d23d",
+  "reference_step_status": "NOT_AVAILABLE",
+  "measurement_unit": "mm",
+  "cases": [
+    {
+      "case_id": "dgb_no_cage",
+      "legacy_call_path": "Two conflicting RoBAS deep-groove constructors must be recorded separately, never merged.",
+      "legacy_source_refs": [
+        "Core/BallBearing/DeepGroveBallBearing/DGBGeometry.cs:57-61",
+        "Core/BallBearing/DeepGroveBallBearing/DeepGrooveBallBearing.cs:62-70",
+        "BearingModel/Roller/BallRoller.cs:64-95"
+      ],
+      "request": {
+        "schema_version": "bearing-cad.request.v1",
+        "bearing_type": "rolling.deep_groove_ball",
+        "unit": "mm",
+        "detail_level": "functional",
+        "geometry_strategy": "explicit",
+        "parameters": {
+          "bore_d_mm": 40,
+          "outside_d_mm": 68,
+          "width_mm": 15,
+          "ball_d_mm": 8,
+          "pitch_d_mm": 54,
+          "ball_count": 11,
+          "inner_groove_radius_mm": 4.3,
+          "outer_groove_radius_mm": 4.5,
+          "inner_shoulder_d_mm": 47.2,
+          "outer_shoulder_d_mm": 60.8
+        }
+      },
+      "expected": {
+        "component_ids": [
+          "inner_ring",
+          "outer_ring",
+          "ball"
+        ],
+        "instance_count": 13,
+        "rolling_component_id": "ball",
+        "rolling_count": 11
+      }
+    },
+    {
+      "case_id": "dgb_stamped",
+      "legacy_call_path": "Legacy StampingCage structural inspiration only; detailed old Eyeshot shape unavailable.",
+      "legacy_source_refs": [
+        "Core/BallBearing/DeepGroveBallBearing/DGBGeometry.cs:57-61",
+        "Core/BallBearing/DeepGroveBallBearing/DeepGrooveBallBearing.cs:62-70",
+        "BearingModel/Roller/BallRoller.cs:64-95",
+        "BearingModel/Cage/StampingCage.cs:199-305"
+      ],
+      "request": {
+        "schema_version": "bearing-cad.request.v1",
+        "bearing_type": "rolling.deep_groove_ball",
+        "unit": "mm",
+        "detail_level": "functional",
+        "geometry_strategy": "explicit",
+        "parameters": {
+          "bore_d_mm": 40,
+          "outside_d_mm": 68,
+          "width_mm": 15,
+          "ball_d_mm": 8,
+          "pitch_d_mm": 54,
+          "ball_count": 11,
+          "inner_groove_radius_mm": 4.3,
+          "outer_groove_radius_mm": 4.5,
+          "inner_shoulder_d_mm": 47.2,
+          "outer_shoulder_d_mm": 60.8
+        },
+        "cage": {
+          "kind": "stamping_double_half",
+          "inner_d_mm": 48,
+          "outside_d_mm": 60,
+          "width_mm": 11.5,
+          "pocket_clearance_mm": 0.15,
+          "board_thickness_mm": 0.7,
+          "rivet_shaft_d_mm": 1,
+          "rivet_head_d_mm": 1.6,
+          "rivet_hole_clearance_mm": 0.05
+        }
+      },
+      "expected": {
+        "component_ids": [
+          "inner_ring",
+          "outer_ring",
+          "ball",
+          "cage_upper",
+          "cage_lower",
+          "rivet"
+        ],
+        "instance_count": 26,
+        "rolling_component_id": "ball",
+        "rolling_count": 11
+      }
+    },
+    {
+      "case_id": "crb_NU_window",
+      "legacy_call_path": "RoBAS CRB variant NU and axial window cage; explicit CAD gap is intentional.",
+      "legacy_source_refs": [
+        "Core/RollerBearing/CylinderRollerBreaing/CylinderRollerBearing.cs:239-263",
+        "BearingModel/Roller/CylinderRoller.cs:67-101",
+        "BearingModel/Cage/CylinderPocketCage.cs:124-160"
+      ],
+      "request": {
+        "schema_version": "bearing-cad.request.v1",
+        "bearing_type": "rolling.cylindrical_roller",
+        "unit": "mm",
+        "detail_level": "functional",
+        "geometry_strategy": "explicit",
+        "parameters": {
+          "bore_d_mm": 40,
+          "outside_d_mm": 68,
+          "width_mm": 18,
+          "roller_d_mm": 8,
+          "roller_length_mm": 12,
+          "pitch_d_mm": 54,
+          "roller_count": 11,
+          "configuration": "NU",
+          "radial_clearance_mm": 0.05,
+          "axial_clearance_mm": 0.4,
+          "rib_width_mm": 2,
+          "inner_rib_tip_d_mm": 52,
+          "outer_rib_tip_d_mm": 56
+        },
+        "cage": {
+          "kind": "cylindrical_window",
+          "inner_d_mm": 52.6,
+          "outside_d_mm": 55.4,
+          "width_mm": 16,
+          "pocket_clearance_mm": 0.15
+        }
+      },
+      "expected": {
+        "component_ids": [
+          "inner_ring",
+          "outer_ring",
+          "roller",
+          "cage"
+        ],
+        "instance_count": 14,
+        "rolling_component_id": "roller",
+        "rolling_count": 11
+      }
+    },
+    {
+      "case_id": "crb_NUP_window",
+      "legacy_call_path": "NUP separate detachable rib is a Python modeling change, not a proven RoBAS solid-equivalent.",
+      "legacy_source_refs": [
+        "Core/RollerBearing/CylinderRollerBreaing/CylinderRollerBearing.cs:239-263",
+        "BearingModel/Roller/CylinderRoller.cs:67-101",
+        "BearingModel/Cage/CylinderPocketCage.cs:124-160"
+      ],
+      "request": {
+        "schema_version": "bearing-cad.request.v1",
+        "bearing_type": "rolling.cylindrical_roller",
+        "unit": "mm",
+        "detail_level": "functional",
+        "geometry_strategy": "explicit",
+        "parameters": {
+          "bore_d_mm": 40,
+          "outside_d_mm": 68,
+          "width_mm": 18,
+          "roller_d_mm": 8,
+          "roller_length_mm": 12,
+          "pitch_d_mm": 54,
+          "roller_count": 11,
+          "configuration": "NUP",
+          "radial_clearance_mm": 0.05,
+          "axial_clearance_mm": 0.4,
+          "rib_width_mm": 2,
+          "inner_rib_tip_d_mm": 52,
+          "outer_rib_tip_d_mm": 56
+        },
+        "cage": {
+          "kind": "cylindrical_window",
+          "inner_d_mm": 52.6,
+          "outside_d_mm": 55.4,
+          "width_mm": 16,
+          "pocket_clearance_mm": 0.15
+        }
+      },
+      "expected": {
+        "component_ids": [
+          "inner_ring",
+          "outer_ring",
+          "roller",
+          "loose_rib",
+          "cage"
+        ],
+        "instance_count": 15,
+        "rolling_component_id": "roller",
+        "rolling_count": 11
+      }
+    },
+    {
+      "case_id": "acb_15deg",
+      "legacy_call_path": "Legacy 3-degree taper differs from Python stepped race; angle and groove position call paths unresolved.",
+      "legacy_source_refs": [
+        "Core/BallBearing/AngularContactBallBearing/ACBGeometry.cs:64-79",
+        "Core/BallBearing/AngularContactBallBearing/AngularContactBallBearing.cs:448-463",
+        "BearingModel/Race/InnerRace/SingleRowAngularContactInnerRace.cs:380-400",
+        "BearingModel/Race/OuterRace/SingleRowAngularContactOuterRace.cs:303-328",
+        "BearingModel/Cage/StraightPocketCage.cs:322-361"
+      ],
+      "request": {
+        "schema_version": "bearing-cad.request.v1",
+        "bearing_type": "rolling.angular_contact_ball",
+        "unit": "mm",
+        "detail_level": "functional",
+        "geometry_strategy": "explicit",
+        "parameters": {
+          "bore_d_mm": 40,
+          "outside_d_mm": 68,
+          "width_mm": 15,
+          "ball_d_mm": 8,
+          "pitch_d_mm": 54,
+          "ball_count": 11,
+          "inner_groove_radius_mm": 4.3,
+          "outer_groove_radius_mm": 4.5,
+          "contact_angle_deg": 15,
+          "inner_shoulder_left_d_mm": 49,
+          "inner_shoulder_right_d_mm": 47,
+          "outer_shoulder_left_d_mm": 61,
+          "outer_shoulder_right_d_mm": 59
+        }
+      },
+      "expected": {
+        "component_ids": [
+          "inner_ring",
+          "outer_ring",
+          "ball"
+        ],
+        "instance_count": 13,
+        "rolling_component_id": "ball",
+        "rolling_count": 11
+      }
+    },
+    {
+      "case_id": "acb_25deg_window",
+      "legacy_call_path": "Legacy 3-degree taper differs from Python stepped race; angle and groove position call paths unresolved.",
+      "legacy_source_refs": [
+        "Core/BallBearing/AngularContactBallBearing/ACBGeometry.cs:64-79",
+        "Core/BallBearing/AngularContactBallBearing/AngularContactBallBearing.cs:448-463",
+        "BearingModel/Race/InnerRace/SingleRowAngularContactInnerRace.cs:380-400",
+        "BearingModel/Race/OuterRace/SingleRowAngularContactOuterRace.cs:303-328",
+        "BearingModel/Cage/StraightPocketCage.cs:322-361"
+      ],
+      "request": {
+        "schema_version": "bearing-cad.request.v1",
+        "bearing_type": "rolling.angular_contact_ball",
+        "unit": "mm",
+        "detail_level": "functional",
+        "geometry_strategy": "explicit",
+        "parameters": {
+          "bore_d_mm": 40,
+          "outside_d_mm": 68,
+          "width_mm": 15,
+          "ball_d_mm": 8,
+          "pitch_d_mm": 54,
+          "ball_count": 11,
+          "inner_groove_radius_mm": 4.3,
+          "outer_groove_radius_mm": 4.5,
+          "contact_angle_deg": 25,
+          "inner_shoulder_left_d_mm": 49,
+          "inner_shoulder_right_d_mm": 47,
+          "outer_shoulder_left_d_mm": 61,
+          "outer_shoulder_right_d_mm": 59
+        },
+        "cage": {
+          "kind": "straight_pocket",
+          "inner_d_mm": 51,
+          "outside_d_mm": 57,
+          "width_mm": 11,
+          "pocket_clearance_mm": 0.15
+        }
+      },
+      "expected": {
+        "component_ids": [
+          "inner_ring",
+          "outer_ring",
+          "ball",
+          "cage"
+        ],
+        "instance_count": 14,
+        "rolling_component_id": "ball",
+        "rolling_count": 11
+      }
+    },
+    {
+      "case_id": "acb_40deg",
+      "legacy_call_path": "Legacy 3-degree taper differs from Python stepped race; angle and groove position call paths unresolved.",
+      "legacy_source_refs": [
+        "Core/BallBearing/AngularContactBallBearing/ACBGeometry.cs:64-79",
+        "Core/BallBearing/AngularContactBallBearing/AngularContactBallBearing.cs:448-463",
+        "BearingModel/Race/InnerRace/SingleRowAngularContactInnerRace.cs:380-400",
+        "BearingModel/Race/OuterRace/SingleRowAngularContactOuterRace.cs:303-328",
+        "BearingModel/Cage/StraightPocketCage.cs:322-361"
+      ],
+      "request": {
+        "schema_version": "bearing-cad.request.v1",
+        "bearing_type": "rolling.angular_contact_ball",
+        "unit": "mm",
+        "detail_level": "functional",
+        "geometry_strategy": "explicit",
+        "parameters": {
+          "bore_d_mm": 40,
+          "outside_d_mm": 68,
+          "width_mm": 15,
+          "ball_d_mm": 8,
+          "pitch_d_mm": 54,
+          "ball_count": 11,
+          "inner_groove_radius_mm": 4.3,
+          "outer_groove_radius_mm": 4.5,
+          "contact_angle_deg": 40,
+          "inner_shoulder_left_d_mm": 49,
+          "inner_shoulder_right_d_mm": 47,
+          "outer_shoulder_left_d_mm": 61,
+          "outer_shoulder_right_d_mm": 59
+        }
+      },
+      "expected": {
+        "component_ids": [
+          "inner_ring",
+          "outer_ring",
+          "ball"
+        ],
+        "instance_count": 13,
+        "rolling_component_id": "ball",
+        "rolling_count": 11
+      }
+    }
+  ]
+}
