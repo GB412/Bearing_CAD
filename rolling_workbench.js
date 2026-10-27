@@ -2,26 +2,31 @@ import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {STLLoader} from 'three/addons/loaders/STLLoader.js';
 import './rolling_workbench.css';
-import {buildAssemblyIndex, validateArtifact, requestFromFields, apiMessage} from './rolling_manifest.js';
+import {bearingForms, cageFields, buildAssemblyIndex, validateArtifact, requestFromFields, apiMessage} from './rolling_manifest.js';
 
 const $ = id => document.getElementById(id);
-const fields = [
- ['bore_d_mm','内径 d',40],['outside_d_mm','外径 D',68],['width_mm','宽度 B',15],
- ['ball_d_mm','钢球直径',8],['pitch_d_mm','节圆直径',54],['ball_count','钢球数量',11],
- ['inner_groove_radius_mm','内沟曲率半径',4.3],['outer_groove_radius_mm','外沟曲率半径',4.5],
- ['inner_shoulder_d_mm','内圈肩部直径',47.2],['outer_shoulder_d_mm','外圈肩部直径',60.8],
-];
-const cages=[['inner_d_mm','保持架内径',48],['outside_d_mm','保持架外径',60],['width_mm','保持架宽度',11],['pocket_clearance_mm','球兜间隙',.25]];
+let fields=bearingForms['rolling.deep_groove_ball'].fields;
+const cages=cageFields;
 function renderFields(container, prefix, data) {
  container.replaceChildren();
- for (const [key,label,value] of data) {
+ for (const [key,label,value,choices] of data) {
   const el=document.createElement('label');el.className='field';el.textContent=label;
-  const input=document.createElement('input');input.type='number';input.step=key.includes('count')?'1':'any';input.value=String(value);
-  input.id=prefix+key;input.setAttribute('aria-label',label);el.append(input);container.append(el);
+  const field=choices?document.createElement('select'):document.createElement('input');
+  if(choices){
+   for(const option of choices){const item=document.createElement('option');item.value=option;item.textContent=option;field.append(item);}
+   field.value=value;
+  }else{
+   field.type='number';field.step=key.endsWith('_count')?'1':'any';field.value=String(value);
+  }
+  field.id=prefix+key;field.setAttribute('aria-label',label);
+  field.addEventListener(choices?'change':'input',()=>invalidatePreview());
+  el.append(field);container.append(el);
  }
 }
-renderFields($('parameters'),'param-',fields);renderFields($('cageParams'),'cage-',cages);
+renderFields($('parameters'),'param-',fields);
+renderFields($('cageParams'),'cage-',cages);
 let active=null, token=0, controller=null, available=false;
+let supportedTypes=new Set();
 const scene=new THREE.Scene();scene.background=new THREE.Color('#102136');
 const camera=new THREE.PerspectiveCamera(36,1,.1,5000);
 const renderer=new THREE.WebGLRenderer({antialias:true});
@@ -32,7 +37,7 @@ scene.add(new THREE.HemisphereLight('#d5efff','#405c73',2.2));
 const key=new THREE.DirectionalLight('#ffffff',2.6);key.position.set(2,4,6);scene.add(key);
 const fill=new THREE.DirectionalLight('#66b8f7',1.0);fill.position.set(-5,-2,-3);scene.add(fill);
 const clipPlane=new THREE.Plane(new THREE.Vector3(1,0,0),0);
-const palette={inner_ring:0x62a8df,outer_ring:0xa4b8cf,rolling_element:0xe5c88c,cage:0x9aabd3};
+const palette={inner_ring:0x62a8df,outer_ring:0xa4b8cf,rolling_element:0xe5c88c,cage:0x9aabd3,loose_rib:0xdfa86b};
 const loader=new STLLoader();const entries=[];
 function status(msg,error=false){$('status').textContent=msg;$('status').classList.toggle('error',error);}
 function dispose() {
@@ -60,7 +65,7 @@ function applyVisualOptions(){
   object.material.depthWrite=opacity===1;
   object.material.clippingPlanes=$('cutaway').checked?[clipPlane]:[];
   object.position.copy(object.userData.base);
-  const direction=object.userData.role==='outer_ring'?1:object.userData.role==='inner_ring'?-1:object.userData.role==='cage'?0.5:0;
+  const direction=object.userData.role==='outer_ring'?1:object.userData.role==='inner_ring'?-1:object.userData.role==='cage'?0.5:object.userData.role==='loose_rib'?1.7:0;
   object.position.z+=explode*15*direction;
   if(object.userData.role==='rolling_element')object.position.addScaledVector(object.userData.radial,explode*10);
  }
@@ -75,10 +80,32 @@ function presentTree(){
   label.append(check,name);$('parts').append(label);
  }
 }
+function selectedType(){return $('bearingType').value;}
+function canGenerate(){return available&&supportedTypes.has(selectedType());}
+function updateAvailability(){
+ const enabled=canGenerate();$('generate').disabled=!enabled;
+ $('connection').textContent=available?'本地 OCCT 引擎在线':'CAD 引擎不可用';
+ if(available&&!enabled)status('当前 CAD 服务暂不支持所选轴承类型',true);
+}
+function invalidatePreview(message='输入已改变，请重新生成 CAD'){
+ token++;controller?.abort();controller=null;
+ dispose();status(message);
+ $('generate').disabled=!canGenerate();
+}
+function configureForm(){
+ fields=bearingForms[selectedType()].fields;
+ renderFields($('parameters'),'param-',fields);
+ const hasCage=bearingForms[selectedType()].hasCage;
+ $('cagePanel').hidden=!hasCage;
+ $('cageParams').hidden=hasCage&&!$('cageEnabled').checked;
+ invalidatePreview('已切换轴承类型，请重新生成真实 CAD 模型');
+ updateAvailability();
+}
 function getParams(){
  const p={};for(const [key] of fields)p[key]=$('param-'+key).value;
- const c=$('cageEnabled').checked?Object.fromEntries(cages.map(([key])=>[key,$('cage-'+key).value])):null;
- return requestFromFields(p,c);
+ const useCage=bearingForms[selectedType()].hasCage&&$('cageEnabled').checked;
+ const c=useCage?Object.fromEntries(cages.map(([key])=>[key,$('cage-'+key).value])):null;
+ return requestFromFields(p,c,selectedType());
 }
 async function loadArtifacts(result, sequence){
  const {manifest,file_urls}=validateArtifact(result);
@@ -118,7 +145,7 @@ async function loadArtifacts(result, sequence){
  applyVisualOptions();resetCamera();status('CAD 模型已加载：'+instances.length+' 个独立装配实例');
 }
 async function generate(){
- if(!available)return;
+ if(!canGenerate())return;
  controller?.abort();controller=new AbortController();const version=++token;
  $('generate').disabled=true;dispose();status('提交 CAD 请求…');
  try{
@@ -135,19 +162,34 @@ async function generate(){
   await loadArtifacts(payload,version);
  }catch(error){
   if(version===token&&error.name!=='AbortError'){dispose();status('CAD 生成失败：'+error.message,true);}
- }finally{if(version===token){controller=null;$('generate').disabled=!available;}}
+ }finally{if(version===token){controller=null;$('generate').disabled=!canGenerate();}}
 }
 $('generate').addEventListener('click',generate);
-$('resetParams').addEventListener('click',()=>{for(const [key,,value] of fields)$('param-'+key).value=String(value);
- for(const [key,,value] of cages)$('cage-'+key).value=String(value);$('cageEnabled').checked=true;dispose();status('已恢复演示参数；请重新生成 CAD');});
-$('cageEnabled').addEventListener('change',()=>{$('cageParams').hidden=!$('cageEnabled').checked;});
-for(const el of [...document.querySelectorAll('#parameters input,#cageParams input')])el.addEventListener('input',()=>{token++;controller?.abort();dispose();status('参数已更改，请重新生成以查看对应真实实体');});
+$('resetParams').addEventListener('click',()=>{
+ renderFields($('parameters'),'param-',fields);
+ renderFields($('cageParams'),'cage-',cages);
+ $('cageEnabled').checked=true;
+ $('cageParams').hidden=!bearingForms[selectedType()].hasCage;
+ invalidatePreview('已恢复当前轴承类型的演示参数；请重新生成 CAD');
+});
+$('cageEnabled').addEventListener('change',()=>{
+ $('cageParams').hidden=!$('cageEnabled').checked;
+ invalidatePreview('保持架设置已更改，请重新生成 CAD');
+});
+$('bearingType').addEventListener('change',configureForm);
 for(const id of ['cutaway','transparent','explode'])$(id).addEventListener('input',applyVisualOptions);
 $('viewReset').addEventListener('click',()=>{resetCamera();controls.reset();resetCamera();});
-(async()=>{try{const response=await fetch('/api/v2/cad/status');const data=await response.json();
- available=response.ok&&data.available&&data.supported_bearings?.includes('rolling.deep_groove_ball');
- $('connection').textContent=available?'本地 OCCT 引擎在线':'CAD 引擎不可用';
- status(available?'输入参数并生成精确 CAD 模型':'未连接 CAD-V2 服务；请使用 python -m bearing_cad.api --static dist 启动',!available);
- }catch{$('connection').textContent='离线';status('CAD-V2 服务不可用，请启动本地 API',true);}
- $('generate').disabled=!available;})();
+(async()=>{try{
+ const response=await fetch('/api/v2/cad/status');
+ const data=await response.json();
+ available=response.ok&&data.available===true&&Array.isArray(data.supported_bearings);
+ supportedTypes=new Set(available?data.supported_bearings:[]);
+ updateAvailability();
+ if(canGenerate())status('请选择轴承类型、输入参数并生成精确 CAD 模型');
+ else if(!available)status('CAD 服务不可用；启动 python -m bearing_cad.api --static dist',true);
+ }catch{
+  available=false;updateAvailability();status('CAD-V2 服务不可用，请启动本地 API',true);
+ }
+ $('generate').disabled=!canGenerate();
+})();
 window.rollingViewerSnapshot=()=>({instances:entries.map(p=>({id:p.name,role:p.userData.role,visible:p.visible,position:p.position.toArray(),triangles:p.geometry.attributes.position.count/3,opacity:p.material.opacity})),requestHash:active?.manifest.request_hash??null});

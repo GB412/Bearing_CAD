@@ -5,18 +5,18 @@
 <main class="workspace">
 <aside class="side">
 <section class="panel" aria-label="结构参数"><div class="panel-header"><h2>01 / 几何参数</h2><span>mm</span></div><div class="panel-body">
-<label class="field">轴承类型<select id="bearingType"><option value="rolling.deep_groove_ball">单列深沟球轴承</option></select></label>
+<label class="field">轴承类型<select id="bearingType"><option value="rolling.deep_groove_ball">单列深沟球轴承</option><option value="rolling.cylindrical_roller">单列圆柱滚子轴承</option><option value="rolling.angular_contact_ball">单列角接触球轴承</option></select></label>
 <div class="fields" id="parameters"></div>
-<label class="switch"><input id="cageEnabled" type="checkbox" checked><span>显示简化保持架</span></label>
-<div class="cage-fields" id="cageParams"></div>
-<p class="hint">所有内部尺寸均为显式结构输入，不依据型号自动推定。保持架是简化结构，非制造图模型。</p>
+<div id="cagePanel"><label class="switch"><input id="cageEnabled" type="checkbox" checked><span>显示简化保持架</span></label>
+<div class="cage-fields" id="cageParams"></div></div>
+<p class="hint">页面默认值只是几何测试夹具；内外圈、沟道、挡边尺寸必须明确输入，不依据轴承型号自动推定。圆柱滚子与角接触保持架尚未实现，所有模型均未取得制造批准。</p>
 <div class="buttonrow"><button id="generate" class="primary">生成精确 CAD 模型</button><button id="resetParams" class="secondary">复位</button></div>
 <div class="notice" id="status" role="status" aria-live="polite">检查本地引擎连接…</div>
 </div></section>
 </aside>
 <section class="mainpanel">
 <div class="viewer-head"><div><h2>02 / 三维装配</h2><p id="modelLabel">尚未生成模型</p></div><div class="tag">B-REP → STL PREVIEW</div></div>
-<div class="stage" id="viewport"><div class="stage-overlay" id="emptyStage">输入结构参数，点击“生成精确 CAD 模型”<span>预览来自 CAD 引擎生成的网格，不使用 Three.js 代替工程实体</span></div></div>
+<div class="stage" id="viewport"><div class="stage-overlay" id="emptyStage">选择轴承类型、输入参数，点击“生成精确 CAD 模型”<span>预览来自 CAD 引擎生成的网格，不使用 Three.js 代替工程实体</span></div></div>
 <div class="toolbar"><label><input type="checkbox" id="cutaway"> 半剖显示</label><label><input type="checkbox" id="transparent"> 透明显示</label><label>装配爆炸 <input id="explode" type="range" min="0" max="100" value="0"></label><button id="viewReset" class="secondary">重置视角</button></div>
 <div class="lower">
 <section class="pane"><div class="pane-title"><h3>装配零件树</h3><span id="partCount">0 个实例</span></div><div id="parts" class="partlist"><p class="muted">等待模型加载</p></div></section>
