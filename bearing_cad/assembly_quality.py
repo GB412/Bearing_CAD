@@ -85,29 +85,37 @@ def audit_step_roundtrip(model: AssemblyModel, assembly: cq.Assembly,
     if not all(math.isfinite(x) for x in src_bounds + step_bounds):
         raise RuntimeError("Non-finite CAD bounds")
 
-    # Global bbox + sorted volume can miss an interior part displaced while
-    # overall envelope and individual volumes remain unchanged. STEP import
-    # does not preserve a reliable list order; match center-of-mass positions
-    # as an unordered multiset, with individual volume breaking center ties.
-    def centroid_signature(shapes):
-        result = []
+    # Global bbox + sorted volume can miss a part displaced inside the
+    # unchanged envelope. STEP readers reorder parts, so match by compatible
+    # volume first, then nearest center-of-mass, without trusting list indices.
+    # Component volume may differ slightly after multi-cut STEP conversion.
+    def describe(shapes):
+        rows = []
         for solid in shapes:
             center = solid.Center()
             xyz = (float(center.x), float(center.y), float(center.z))
-            if not all(math.isfinite(v) for v in xyz):
-                raise RuntimeError("Non-finite part center of mass")
-            result.append((xyz, float(solid.Volume())))
-        return sorted(result, key=lambda pair: (
-            round(pair[0][0], 5), round(pair[0][1], 5),
-            round(pair[0][2], 5), round(pair[1], 3),
-        ))
+            volume = float(solid.Volume())
+            if not all(math.isfinite(v) for v in (*xyz, volume)) or volume <= 0:
+                raise RuntimeError("Non-finite or empty STEP part geometry")
+            rows.append((xyz, volume))
+        return rows
 
-    source_centers = centroid_signature(source_solids)
-    step_centers = centroid_signature(imported)
-    worst_position_error_mm = max(
-        math.dist(before[0], after[0])
-        for before, after in zip(source_centers, step_centers)
-    )
+    source_centers = describe(source_solids)
+    unmatched = describe(imported)
+    worst_position_error_mm = 0.0
+    # Larger, usually unique parts first; equivalent rolling elements then
+    # match to their corresponding pitch-center, independent of STEP ordering.
+    for source_xyz, source_volume in sorted(source_centers, key=lambda row: -row[1]):
+        candidates = [
+            (math.dist(source_xyz, other_xyz), index)
+            for index, (other_xyz, other_volume) in enumerate(unmatched)
+            if abs(source_volume - other_volume) / source_volume <= STEP_VOLUME_RELATIVE_LIMIT
+        ]
+        if not candidates:
+            raise RuntimeError("STEP part has no volume-compatible source component")
+        position_error, index = min(candidates)
+        worst_position_error_mm = max(worst_position_error_mm, position_error)
+        unmatched.pop(index)
     if worst_position_error_mm > STEP_POSITION_ERROR_LIMIT_MM:
         raise RuntimeError(
             "STEP part center of mass moved from CAD source "
