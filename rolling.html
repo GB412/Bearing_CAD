@@ -1,29 +1,102 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>Rolling Bearing CAD | 参数化轴承工作台</title></head>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f3f5f6">
+  <link rel="icon" href="data:,">
+  <title>滚动轴承三维工作台 | BearingCAD</title>
+</head>
 <body>
-<header class="top"><div><span class="kicker">BEARING CAD / V2</span><h1>滚动轴承参数化工作台</h1><p>结构参数 → OCCT 精确装配 → STEP / STL 成果</p></div><div class="pill" id="connection">连接本地 CAD 引擎…</div></header>
-<main class="workspace">
-<aside class="side">
-<section class="panel" aria-label="结构参数"><div class="panel-header"><h2>01 / 几何参数</h2><span>mm</span></div><div class="panel-body">
-<label class="field">轴承类型<select id="bearingType"><option value="rolling.deep_groove_ball">单列深沟球轴承</option><option value="rolling.cylindrical_roller">单列圆柱滚子轴承</option><option value="rolling.angular_contact_ball">单列角接触球轴承</option></select></label>
-<div class="fields" id="parameters"></div>
-<div id="cagePanel"><label class="switch"><input id="cageEnabled" type="checkbox" checked><span>包含保持架（可选）</span></label>
-<div id="cageOptions"><label class="field">保持架结构<select id="cageKind" aria-label="保持架结构"><option value="simplified_annular">简化环缘保持架（预览级）</option><option value="stamping_double_half">双半笼 + 球兜 + 铆钉</option></select></label>
-<div class="cage-fields" id="cageParams"></div></div></div>
-<p class="hint">三类轴承的保持架均可单独选择或省略；默认尺寸仅为可复现的几何测试夹具，并非厂家选型。请按结构参数校验后生成，任何结果都不是制造许可。</p>
-<div class="buttonrow"><button id="generate" class="primary">生成精确 CAD 模型</button><button id="resetParams" class="secondary">复位</button></div>
-<div class="notice" id="status" role="status" aria-live="polite">检查本地引擎连接…</div>
-</div></section>
-</aside>
-<section class="mainpanel">
-<div class="viewer-head"><div><h2>02 / 三维装配</h2><p id="modelLabel">尚未生成模型</p></div><div class="tag">B-REP → STL PREVIEW</div></div>
-<div class="stage" id="viewport"><div class="stage-overlay" id="emptyStage">选择轴承类型、输入参数，点击“生成精确 CAD 模型”<span>预览来自 CAD 引擎生成的网格，不使用 Three.js 代替工程实体</span></div></div>
-<div class="toolbar"><label><input type="checkbox" id="cutaway"> 半剖显示</label><label><input type="checkbox" id="transparent"> 透明显示</label><label>装配爆炸 <input id="explode" type="range" min="0" max="100" value="0"></label><button id="viewReset" class="secondary">重置视角</button></div>
-<div class="lower">
-<section class="pane"><div class="pane-title"><h3>装配零件树</h3><span id="partCount">0 个实例</span></div><div id="parts" class="partlist"><p class="muted">等待模型加载</p></div></section>
-<section class="pane"><div class="pane-title"><h3>CAD 成果文件</h3><span id="quality">未验证</span></div><div id="downloads" class="downloads"><p class="muted">尚无文件</p></div><p class="footnote" id="provenance">正式工程设计和轴承制造校核需进一步审核。</p></section>
-</div>
-</section></main>
-<footer>CAD V2 · 本地单用户工程预览 · 数据单位 mm · 非制造批准模型 <a href="/api/v2/cad/status">CAD 服务状态</a></footer>
-<script type="module" src="./rolling_workbench.js"></script>
-</body></html>
+  <header class="top">
+    <div class="brand">
+      <span class="brand-symbol" aria-hidden="true"></span>
+      <div>
+        <span class="kicker">BEARINGCAD · 3D WORKBENCH</span>
+        <h1>滚动轴承三维工作台</h1>
+        <p>参数化实体建模 · 三维装配 · STEP / STL</p>
+      </div>
+    </div>
+    <div class="pill" id="connection" data-state="connecting" role="status">正在连接本地 CAD 引擎</div>
+  </header>
+  <main class="workspace">
+    <aside class="side">
+      <section class="panel" aria-label="结构参数">
+        <div class="panel-header"><h2>模型参数</h2><span>单位 mm</span></div>
+        <div class="panel-body">
+          <label class="field">轴承类型
+            <select id="bearingType">
+              <option value="rolling.deep_groove_ball">单列深沟球轴承</option>
+              <option value="rolling.cylindrical_roller">单列圆柱滚子轴承</option>
+              <option value="rolling.angular_contact_ball">单列角接触球轴承</option>
+            </select>
+          </label>
+          <div class="section-heading">几何尺寸</div>
+          <div class="fields" id="parameters"></div>
+          <div id="cagePanel">
+            <div class="section-heading">保持架</div>
+            <label class="switch"><input id="cageEnabled" type="checkbox" checked><span>包含保持架</span></label>
+            <div id="cageOptions">
+              <label class="field">保持架结构
+                <select id="cageKind" aria-label="保持架结构">
+                  <option value="simplified_annular">简化环缘保持架</option>
+                  <option value="stamping_double_half">双半笼 + 球兜 + 铆钉</option>
+                </select>
+              </label>
+              <div class="cage-fields" id="cageParams"></div>
+            </div>
+          </div>
+          <p class="hint">预设数据用于几何测试，不代表厂家选型或制造公差。</p>
+          <div class="buttonrow">
+            <button id="generate" class="primary">生成三维模型</button>
+            <button id="resetParams" class="secondary">恢复默认</button>
+          </div>
+          <div class="notice" id="status" role="status" aria-live="polite">正在检查 CAD 引擎…</div>
+        </div>
+      </section>
+    </aside>
+    <section class="mainpanel" aria-label="三维装配工作区">
+      <div class="viewer-head">
+        <div><h2>三维装配</h2><p id="modelLabel">尚未生成模型</p></div>
+        <span class="tag">OCCT / B-REP</span>
+      </div>
+      <div class="stage" id="viewport">
+        <div class="stage-overlay" id="emptyStage">
+          模型将在此显示
+          <span>选择轴承类型和尺寸后，点击“生成三维模型”</span>
+        </div>
+        <div class="material-legend" aria-label="零件颜色说明">
+          <span class="legend-item"><i class="swatch outer"></i>外圈</span>
+          <span class="legend-item"><i class="swatch inner"></i>内圈</span>
+          <span class="legend-item"><i class="swatch rolling"></i>滚动体</span>
+          <span class="legend-item"><i class="swatch cage"></i>保持架</span>
+          <span class="legend-item"><i class="swatch rib"></i>挡圈</span>
+          <span class="legend-item"><i class="swatch rivet"></i>铆钉</span>
+        </div>
+      </div>
+      <div class="toolbar">
+        <label><input type="checkbox" id="cutaway"> 剖切视图</label>
+        <label><input type="checkbox" id="transparent"> 透明显示</label>
+        <label>爆炸距离 <input id="explode" type="range" min="0" max="100" value="0"></label>
+        <button id="viewReset" class="secondary">复位视角</button>
+      </div>
+      <div class="lower">
+        <section class="pane">
+          <div class="pane-title"><h3>装配结构</h3><span id="partCount">0 个实例</span></div>
+          <div id="parts" class="partlist"><p class="muted">生成模型后显示零件</p></div>
+        </section>
+        <section class="pane">
+          <div class="pane-title"><h3>导出文件</h3><span id="quality">未验证</span></div>
+          <div id="downloads" class="downloads"><p class="muted">暂无可下载文件</p></div>
+          <p class="footnote" id="provenance">三维模型需进一步进行专业设计和制造校核。</p>
+        </section>
+      </div>
+    </section>
+  </main>
+  <footer>
+    <span>BearingCAD · 本地工程建模工作台 · 非制造批准模型</span>
+    <a href="/api/v2/cad/status">查看 CAD 服务状态</a>
+  </footer>
+  <script type="module" src="./rolling_workbench.js"></script>
+</body>
+</html>

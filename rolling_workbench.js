@@ -27,17 +27,43 @@ renderFields($('parameters'),'param-',fields);
 renderFields($('cageParams'),'cage-',cages);
 let active=null, token=0, controller=null, available=false;
 let supportedTypes=new Set();
-const scene=new THREE.Scene();scene.background=new THREE.Color('#102136');
+const scene=new THREE.Scene();scene.background=null;
 const camera=new THREE.PerspectiveCamera(36,1,.1,5000);
-const renderer=new THREE.WebGLRenderer({antialias:true});
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+renderer.setClearColor(0xffffff,0);
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.18;
 renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
 renderer.localClippingEnabled=true;$('viewport').prepend(renderer.domElement);
 const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;
-scene.add(new THREE.HemisphereLight('#d5efff','#405c73',2.2));
-const key=new THREE.DirectionalLight('#ffffff',2.6);key.position.set(2,4,6);scene.add(key);
-const fill=new THREE.DirectionalLight('#66b8f7',1.0);fill.position.set(-5,-2,-3);scene.add(fill);
+scene.add(new THREE.HemisphereLight('#ffffff','#aabcc5',1.65));
+const key=new THREE.DirectionalLight('#ffffff',2.1);key.position.set(2,4,6);scene.add(key);
+const fill=new THREE.DirectionalLight('#cad8df',0.9);fill.position.set(-5,-2,-3);scene.add(fill);
+const rim=new THREE.DirectionalLight('#ffffff',0.55);rim.position.set(0,-5,4);scene.add(rim);
 const clipPlane=new THREE.Plane(new THREE.Vector3(1,0,0),0);
-const palette={inner_ring:0x62a8df,outer_ring:0xa4b8cf,rolling_element:0xe5c88c,cage:0x9aabd3,loose_rib:0xdfa86b};
+// Materials, legend and part tree share the same palette in CSS.
+const partColorVars={
+ inner_ring:'--part-inner',outer_ring:'--part-outer',
+ rolling_element:'--part-rolling',cage:'--part-cage',
+ cage_upper:'--part-cage-upper',cage_lower:'--part-cage-lower',
+ loose_rib:'--part-rib',rivet:'--part-rivet'
+};
+const partLabels={
+ inner_ring:'内圈',outer_ring:'外圈',cage:'保持架',
+ cage_upper:'上半笼',cage_lower:'下半笼',loose_rib:'活动挡圈'
+};
+function partColor(partId,role){
+ const variable=partColorVars[partId]||partColorVars[role]||'--part-default';
+ return getComputedStyle(document.documentElement).getPropertyValue(variable).trim();
+}
+function partLabel(part){
+ const id=part.userData.partId;
+ if(partLabels[id])return partLabels[id];
+ const match=/^(ball|roller|rivet)_(\d+)$/.exec(part.name);
+ if(match)return ({ball:'钢球',roller:'滚子',rivet:'铆钉'}[match[1]])+' '+String(Number(match[2])).padStart(2,'0');
+ return ({ball:'钢球',roller:'滚子',rivet:'铆钉'}[id])||part.name;
+}
 const loader=new STLLoader();const entries=[];
 function status(msg,error=false){$('status').textContent=msg;$('status').classList.toggle('error',error);}
 function dispose() {
@@ -83,8 +109,12 @@ function presentTree(){
   const label=document.createElement('label');label.className='partrow';
   const check=document.createElement('input');check.type='checkbox';check.checked=true;check.setAttribute('aria-label','显示 '+part.name);
   check.addEventListener('change',()=>{part.visible=check.checked;});
-  const name=document.createElement('span');name.textContent=part.name;
-  label.append(check,name);$('parts').append(label);
+  const color=document.createElement('span');
+  color.className='swatch';color.style.backgroundColor=part.userData.partColor;
+  color.setAttribute('aria-hidden','true');
+  const name=document.createElement('span');name.className='part-name';name.textContent=partLabel(part);
+  const code=document.createElement('small');code.className='part-code';code.textContent=part.name;
+  label.append(check,color,name,code);$('parts').append(label);
  }
 }
 function selectedType(){return $('bearingType').value;}
@@ -92,6 +122,7 @@ function canGenerate(){return available&&supportedTypes.has(selectedType());}
 function updateAvailability(){
  const enabled=canGenerate();$('generate').disabled=!enabled;
  $('connection').textContent=available?'本地 OCCT 引擎在线':'CAD 引擎不可用';
+ $('connection').dataset.state=available?'ready':'offline';
  if(available&&!enabled)status('当前 CAD 服务暂不支持所选轴承类型',true);
 }
 function invalidatePreview(message='输入已改变，请重新生成 CAD'){
@@ -147,9 +178,12 @@ async function loadArtifacts(result, sequence){
  dispose();
  for(const instance of instances){
   const g=templates.get(instance.part_id).clone();g.computeVertexNormals();
-  const material=new THREE.MeshStandardMaterial({color:palette[instance.role]||0xb3c6d8,metalness:.45,roughness:.35,side:THREE.DoubleSide});
+  const color=partColor(instance.part_id,instance.role);
+  const material=new THREE.MeshStandardMaterial({
+   color,metalness:.34,roughness:.42,side:THREE.DoubleSide
+  });
   const mesh=new THREE.Mesh(g,material);mesh.name=instance.id;mesh.userData.role=instance.role;
-  mesh.userData.partId=instance.part_id;
+  mesh.userData.partId=instance.part_id;mesh.userData.partColor=color;
   mesh.userData.base=new THREE.Vector3(...instance.translation_mm);
   // Keep exactly the same Z-axis instance rotation as the STEP assembly.
   mesh.rotation.z=THREE.MathUtils.degToRad(instance.rotation_about_z_deg);
@@ -220,4 +254,4 @@ $('viewReset').addEventListener('click',()=>{resetCamera();controls.reset();rese
  }
  $('generate').disabled=!canGenerate();
 })();
-window.rollingViewerSnapshot=()=>({instances:entries.map(p=>({id:p.name,role:p.userData.role,visible:p.visible,position:p.position.toArray(),triangles:p.geometry.attributes.position.count/3,opacity:p.material.opacity,rotationZDeg:THREE.MathUtils.radToDeg(p.rotation.z)})),requestHash:active?.manifest.request_hash??null});
+window.rollingViewerSnapshot=()=>({instances:entries.map(p=>({id:p.name,role:p.userData.role,visible:p.visible,position:p.position.toArray(),triangles:p.geometry.attributes.position.count/3,opacity:p.material.opacity,rotationZDeg:THREE.MathUtils.radToDeg(p.rotation.z),color:p.userData.partColor})),requestHash:active?.manifest.request_hash??null});

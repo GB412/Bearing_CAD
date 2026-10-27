@@ -25,6 +25,15 @@ test('rolling workbench expands STL prototypes and handles changes',async({page}
  await expect.poll(()=>page.evaluate(()=>window.rollingViewerSnapshot?.().instances.length)).toBe(14);
  const before=await page.evaluate(()=>window.rollingViewerSnapshot());
  expect(before.instances.filter(p=>p.role==='rolling_element')).toHaveLength(11);
+ // CAD roles are visibly distinguished and the part tree swatches match
+ // the exact colors used for the 3D part material (not just a static legend).
+ const sample=id=>before.instances.find(p=>p.id===id)?.color;
+ expect(new Set([sample('inner_ring'),sample('outer_ring'),sample('ball_1'),sample('cage')]).size).toBe(4);
+ expect(sample('inner_ring')).toMatch(/^#[0-9a-fA-F]{6}$/);
+ const treeSwatches=await page.locator('#parts .partrow .swatch').evaluateAll(nodes=>
+  nodes.map(n=>getComputedStyle(n).backgroundColor));
+ expect(new Set(treeSwatches).size).toBeGreaterThanOrEqual(4);
+ await expect(page.locator('#parts .part-name').first()).toHaveText('内圈');
  expect(before.instances.find(p=>p.id==='ball_1').rotationZDeg).toBeCloseTo(90,6);
  expect(new Set(before.instances.filter(p=>p.role==='rolling_element').map(p=>p.position.slice(0,2).join(','))).size).toBe(11);
  await expect(page.locator('#parts input')).toHaveCount(14);
