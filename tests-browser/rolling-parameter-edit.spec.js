@@ -47,3 +47,29 @@ test('cylindrical zero clearances accepted but count over 64 is highlighted',asy
  await expect(page.locator('#validation')).toContainText('roller_count');
  await expect(page.locator('#param-roller_count')).toHaveAttribute('aria-invalid','true');
 });
+
+test('backend-only rolling collision rejects job with field-specific Chinese error',async({page})=>{
+ let postCount=0;
+ await page.route('**/api/v2/cad/**',route=>{
+  const pathname=new URL(route.request().url()).pathname;
+  if(pathname==='/api/v2/cad/status')
+   return route.fulfill({json:{available:true,supported_bearings:[
+    'rolling.deep_groove_ball','rolling.cylindrical_roller','rolling.angular_contact_ball'
+   ]}});
+  if(pathname==='/api/v2/cad/jobs'){
+   postCount++;
+   return route.fulfill({status:422,json:{error:{
+    error_code:'PARAMETER_INVALID',field_path:'/parameters/ball_count',
+    message:'Adjacent balls overlap'
+   }}});
+  }
+  return route.fulfill({status:404,json:{}});
+ });
+ await page.goto('/rolling.html');
+ await page.locator('#param-ball_count').fill('40');
+ await expect(page.locator('#validation')).toBeHidden();
+ await page.locator('#generate').click();
+ await expect(page.locator('#status')).toContainText('相邻滚动体发生重叠');
+ await expect(page.locator('#param-ball_count')).toHaveAttribute('aria-invalid','true');
+ expect(postCount).toBe(1);
+});
