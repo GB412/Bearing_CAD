@@ -52,6 +52,8 @@ def build_cylindrical_roller(request: BearingRequest) -> AssemblyModel:
     """
     if request.bearing_type != BearingType.CYLINDRICAL:
         raise ContractError("NOT_SUPPORTED", "/bearing_type", "Expected cylindrical roller bearing")
+    if request.detail_level != "functional":
+        raise ContractError("NOT_SUPPORTED", "/detail_level", "Only functional B-Rep is supported")
     p = request.parameters
     config = p["configuration"]
     if config not in _CONFIGURATIONS:
@@ -68,6 +70,9 @@ def build_cylindrical_roller(request: BearingRequest) -> AssemblyModel:
     outer_race = pitch_radius + roller_radius + radial_gap
     if not (d / 2 < inner_race < inner_tip < outer_tip < outer_race < D / 2):
         raise ContractError("PARAMETER_INVALID", "/parameters", "Invalid radial raceway/flange order or ring wall thickness")
+    # axial_gap is a minimum required end allowance; it does not change the
+    # nominal, centered roller B-Rep. The remaining end space is calculated
+    # from the explicit roller length, bearing width and rib width.
     if not (roller_length / 2 + axial_gap < B / 2 - rib_width):
         raise ContractError("PARAMETER_INVALID", "/parameters/rib_width_mm", "No axial end clearance for ribs")
     if count > 1 and pitch * math.sin(math.pi / count) <= roller_d:

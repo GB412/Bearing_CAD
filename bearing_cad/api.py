@@ -17,7 +17,7 @@ import secrets
 from urllib.parse import urlsplit
 
 from .artifacts import generate_bundle, verify_bundle
-from .contracts import ContractError, parse_request
+from .contracts import ContractError, parse_request, MAX_ROLLING_ELEMENTS, MAX_CAD_DIMENSION_MM
 
 _MAX_BODY = 16 * 1024
 _MAX_JOBS = 128
@@ -148,7 +148,7 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
                 dimensions.extend(float(value) for value in asdict(request.cage).values()
                                   if type(value) in (float, int))
             count = request.parameters.get("ball_count", request.parameters.get("roller_count", 0))
-            if count > 64 or max(dimensions) > 1000:
+            if count > MAX_ROLLING_ELEMENTS or max(dimensions) > MAX_CAD_DIMENSION_MM:
                 return self._error(422, "RESOURCE_LIMIT", "CAD service resource budget exceeded", "/parameters")
             if not build_lock.acquire(blocking=False):
                 return self._error(503, "BUSY", "One CAD build is already running")

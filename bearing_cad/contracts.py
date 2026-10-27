@@ -138,6 +138,7 @@ _COUNTS = {"ball_count", "roller_count"}
 _TEXT = {"configuration"}
 # All entry points use the same local CAD resource limit (not a bearing standard).
 MAX_ROLLING_ELEMENTS = 64
+MAX_CAD_DIMENSION_MM = 1000.0
 # Zero geometric clearance is a valid contact case; negative interference is not.
 _NONNEGATIVE = {"radial_clearance_mm", "axial_clearance_mm"}
 
@@ -169,10 +170,12 @@ def parse_request(data: Mapping[str, Any]) -> BearingRequest:
         kind = BearingType(envelope["bearing_type"])
     except (ValueError, TypeError):
         raise ContractError("NOT_SUPPORTED", "/bearing_type", "Unsupported bearing type") from None
-    for name, allowed in (("unit", {"mm"}), ("detail_level", {"functional", "detailed", "envelope"}),
-                          ("geometry_strategy", {"explicit"})):
+    for name, allowed in (("unit", {"mm"}), ("geometry_strategy", {"explicit"})):
         if not isinstance(envelope[name], str) or envelope[name] not in allowed:
             raise ContractError("PARAMETER_INVALID", f"/{name}", f"Unsupported {name}")
+
+    if envelope["detail_level"] != "functional":
+        raise ContractError("NOT_SUPPORTED", "/detail_level", "Only functional CAD detail is implemented")
 
     fields = _TYPES[kind]
     raw = _closed_object(envelope["parameters"], set(fields), "/parameters")
@@ -204,7 +207,7 @@ def parse_request(data: Mapping[str, Any]) -> BearingRequest:
             elif val < 0.0 or (val == 0.0 and field not in _NONNEGATIVE):
                 raise ContractError("PARAMETER_INVALID", path,
                                     "Dimension must be positive, or nonnegative geometric clearance in mm")
-            if val > 1000.0:
+            if val > MAX_CAD_DIMENSION_MM:
                 raise ContractError("RESOURCE_LIMIT", path,
                                     "CAD service numeric budget exceeded (1000 mm)")
             params[field] = val
@@ -240,6 +243,9 @@ def parse_request(data: Mapping[str, Any]) -> BearingRequest:
                 finite = False
             if not finite or value <= 0:
                 raise ContractError("PARAMETER_INVALID", f"/cage/{field}", "Expected finite positive mm")
+            if value > MAX_CAD_DIMENSION_MM:
+                raise ContractError("RESOURCE_LIMIT", f"/cage/{field}",
+                                    "CAD service cage numeric budget exceeded (1000 mm)")
             values[field] = float(value)
         if values["inner_d_mm"] >= values["outside_d_mm"]:
             raise ContractError("PARAMETER_INVALID", "/cage/outside_d_mm", "Cage outer must exceed cage inner")

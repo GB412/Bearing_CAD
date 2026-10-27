@@ -79,6 +79,42 @@ class ContractTests(unittest.TestCase):
         angle["parameters"]["contact_angle_deg"] = 90
         with self.assertRaises(ContractError): parse_request(angle)
 
+    def test_only_functional_detail_level_for_all_bearing_families(self):
+        from test_cylindrical_roller import cylindrical_request
+        from test_angular_contact import request as angular_request
+        from test_stamping_cage import stamping_request
+        from test_cylindrical_cage import with_cage as cylindrical_with_cage
+        from test_straight_pocket_cage import angular_with_cage
+        sources=(deep_request(),cylindrical_request(),angular_request(),
+                 stamping_request(),cylindrical_with_cage("NUP"),
+                 angular_with_cage(25))
+        for payload in sources:
+            for level in ("detailed","envelope"):
+                with self.subTest(type=payload["bearing_type"],level=level):
+                    invalid=copy.deepcopy(payload)
+                    invalid["detail_level"]=level
+                    with self.assertRaises(ContractError) as err:
+                        parse_request(invalid)
+                    self.assertEqual(err.exception.field_path,"/detail_level")
+
+    def test_all_cage_kinds_use_same_resource_cap_as_regular_dimensions(self):
+        from test_stamping_cage import stamping_request
+        from test_cylindrical_cage import with_cage as cylindrical_with_cage
+        from test_straight_pocket_cage import angular_with_cage
+        base=deep_request()
+        base["cage"]={"kind":"simplified_annular","inner_d_mm":48,
+                      "outside_d_mm":60,"width_mm":11,"pocket_clearance_mm":.25}
+        for payload in (base,stamping_request(),cylindrical_with_cage("NUP"),
+                        angular_with_cage(25)):
+            for key in ("inner_d_mm","outside_d_mm","width_mm","pocket_clearance_mm"):
+                invalid=copy.deepcopy(payload)
+                invalid["cage"][key]=1001
+                with self.subTest(type=payload["bearing_type"],key=key):
+                    with self.assertRaises(ContractError) as err:
+                        parse_request(invalid)
+                    self.assertEqual(err.exception.error_code,"RESOURCE_LIMIT")
+                    self.assertEqual(err.exception.field_path,"/cage/"+key)
+
     def test_unimplemented_builder_fails_closed(self):
         with self.assertRaises(ContractError) as ctx:
             BuilderRegistry().build(parse_request(deep_request()))

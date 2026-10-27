@@ -12,7 +12,7 @@ import tempfile
 
 import cadquery as cq
 
-from .contracts import BearingRequest, BearingType, ContractError
+from .contracts import BearingRequest, BearingType, ContractError, parse_request
 from .cylindrical_roller import build_cylindrical_roller
 from .angular_contact import build_angular_contact
 from .deep_groove import build_deep_groove
@@ -63,6 +63,8 @@ def verify_bundle(directory: Path, expected_key: str | None = None) -> dict:
 
 
 def generate_bundle(request: BearingRequest, output_root: Path) -> Path:
+    # Recheck manually constructed dataclasses before any CAD/cached output.
+    parse_request(json.loads(request.canonical_json()))
     output_root = Path(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
     key = _identity(request)

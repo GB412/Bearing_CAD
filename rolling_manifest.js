@@ -20,7 +20,7 @@ export const bearingForms = Object.freeze({
       ['pitch_d_mm','节圆直径',54], ['roller_count','滚子数量',11],
       ['configuration','挡边构型','NU',['N','NU','NJ','NF','NUP']],
       ['radial_clearance_mm','径向几何净距',.05],
-      ['axial_clearance_mm','端部轴向净距',.4],
+      ['axial_clearance_mm','端部最小要求净距',.4],
       ['rib_width_mm','挡边宽度',2],
       ['inner_rib_tip_d_mm','内挡边顶径',52],
       ['outer_rib_tip_d_mm','外挡边顶径',56]],
