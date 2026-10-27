@@ -84,7 +84,7 @@ test('one workbench drives cylindrical NUP and angular contact without stale res
   stamped.instances.find(p=>p.id==='cage_upper').color,
   stamped.instances.find(p=>p.id==='cage_lower').color,
   stamped.instances.find(p=>p.id.startsWith('rivet_')).color
- ])).size.toBe(3);
+ ]).size).toBe(3);
  await expect(page.locator('#parts .part-name').filter({hasText:'铆钉'})).toHaveCount(11);
  expect(requests.at(-1).cage.kind).toBe('stamping_double_half');
  await page.locator('#explode').fill('60');
