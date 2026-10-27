@@ -26,6 +26,8 @@ class CylindricalApiTests(unittest.TestCase):
                 body = json.loads(response.read())
                 self.assertEqual(response.status, 201, body)
                 self.assertEqual(body["status"], "succeeded")
+                conn.close()  # POST response sets Connection: close.
+                conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=90)
                 conn.request("GET", body["manifest_url"])
                 artifact_response = conn.getresponse()
                 artifact = json.loads(artifact_response.read())
@@ -33,6 +35,8 @@ class CylindricalApiTests(unittest.TestCase):
                 manifest = artifact["manifest"]
                 self.assertEqual(manifest["configuration"], "NUP")
                 self.assertEqual(len(manifest["instances"]), 14)
+                conn.close()
+                conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=90)
                 conn.request("GET", artifact["file_urls"]["bearing_assembly.step"])
                 step_response = conn.getresponse()
                 self.assertEqual(step_response.status, 200)
