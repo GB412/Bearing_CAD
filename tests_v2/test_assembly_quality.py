@@ -66,6 +66,14 @@ class AssemblyQualityTests(unittest.TestCase):
             error=quality["step_roundtrip"]["worst_relative_solid_volume_error"]
             self.assertLess(error,quality["step_roundtrip"]["allowed_relative_volume_error"])
             self.assertGreaterEqual(error,0)
+            self.assertGreater(
+                quality["step_roundtrip"]["radial_window_cage_relative_volume_limit"],
+                quality["step_roundtrip"]["allowed_relative_volume_error"],
+            )
+            self.assertGreater(
+                quality["step_roundtrip"]["radial_window_cage_centroid_limit_mm"],
+                quality["step_roundtrip"]["allowed_part_centroid_error_mm"],
+            )
 
     def test_interior_part_shift_rejected_even_if_total_bbox_and_volume_unchanged(self):
         # Three equal-volume solids: moving only the middle solid leaves both

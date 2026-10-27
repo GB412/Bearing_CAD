@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {bearingForms,cageFields,cageForms,cageChoices,defaultCageEnabled,requestFromFields,validateArtifact,buildAssemblyIndex,apiMessage} from './rolling_manifest.js';
+import {bearingForms,cageFields,cageForms,cageChoices,defaultCageEnabled,requestFromFields,validateArtifact,buildAssemblyIndex,apiMessage,geometryIssues,scaleGeometryFields,describeCadError} from './rolling_manifest.js';
 
 const values=kind=>Object.fromEntries(bearingForms[kind].fields.map(([key,,value])=>[key,String(value)]));
 const deep='rolling.deep_groove_ball', cylindrical='rolling.cylindrical_roller', angular='rolling.angular_contact_ball';
@@ -105,4 +105,55 @@ test('Z rotation is preserved for STL instances and legacy manifest defaults to 
  assert.throws(()=>buildAssemblyIndex(legacy),/旋转/);
  legacy.instances[1].rotation_about_z_deg='90';
  assert.throws(()=>buildAssemblyIndex(legacy),/旋转/);
+});
+
+test('angular bore 40→50 reports linked shoulders and groove instead of CAD failure',()=>{
+ const raw=values(angular);raw.bore_d_mm='50';
+ const issues=geometryIssues(requestFromFields(raw,null,angular));
+ assert.ok(issues.some(i=>i.message.includes('内圈右肩')));
+ assert.ok(issues.some(i=>i.message.includes('内沟道')));
+ assert.equal(issues[0].fieldPath,'/parameters/bore_d_mm');
+ const error=describeCadError({error:{error_code:'PARAMETER_INVALID',
+  field_path:'/parameters',message:'Expected bore < inner right < inner left < pitch < outer right < outer left < outside'}},422);
+ assert.match(error.message,/内圈右肩/);
+});
+test('explicit proportional scaling preserves counts, contact angle, configuration and cage',()=>{
+ const a=scaleGeometryFields(values(angular),null,angular,'50');
+ const request=requestFromFields(a.values,a.cage,angular);
+ assert.equal(request.parameters.bore_d_mm,50);
+ assert.equal(request.parameters.outside_d_mm,85);
+ assert.equal(request.parameters.pitch_d_mm,67.5);
+ assert.equal(request.parameters.inner_shoulder_right_d_mm,58.75);
+ assert.equal(request.parameters.contact_angle_deg,25);
+ assert.equal(request.parameters.ball_count,11);
+ assert.deepEqual(geometryIssues(request),[]);
+ const cage=kind=>({kind,...Object.fromEntries(cageForms[kind].fields.map(([k,,v])=>[k,String(v)]))});
+ for(const [type,kind] of [[deep,'simplified_annular'],[deep,'stamping_double_half'],[cylindrical,'cylindrical_window'],[angular,'straight_pocket']]){
+  const changed=scaleGeometryFields(values(type),cage(kind),type,50);
+  const value=requestFromFields(changed.values,changed.cage,type);
+  assert.equal(value.parameters.bore_d_mm,50);
+  assert.equal(value.parameters.outside_d_mm,85);
+  assert.equal(value.cage.inner_d_mm,Number(cage(kind).inner_d_mm)*1.25);
+  assert.deepEqual(geometryIssues(value),[]);
+ }
+ const cyl=scaleGeometryFields(values(cylindrical),null,cylindrical,50);
+ assert.equal(cyl.values.configuration,'NU');
+ assert.equal(cyl.values.roller_count,'11');
+});
+test('front-end matches backend local budget and zero-clearance semantics',()=>{
+ const base=values(cylindrical);
+ const zero={...base,radial_clearance_mm:'0',axial_clearance_mm:'0'};
+ assert.equal(requestFromFields(zero,null,cylindrical).parameters.radial_clearance_mm,0);
+ assert.deepEqual(geometryIssues(requestFromFields(zero,null,cylindrical)),[]);
+ assert.throws(()=>requestFromFields({...base,radial_clearance_mm:'-0.1'},null,cylindrical),/无效/);
+ assert.throws(()=>requestFromFields({...base,roller_count:'65'},null,cylindrical),/无效/);
+ assert.throws(()=>requestFromFields({...base,outside_d_mm:'1001'},null,cylindrical),/无效/);
+ assert.throws(()=>requestFromFields({...values(angular),contact_angle_deg:'90'},null,angular),/接触角/);
+ const angularChanged=values(angular);angularChanged.bore_d_mm='50';
+ assert.notDeepEqual(geometryIssues(requestFromFields(angularChanged,null,angular)),[]);
+});
+test('oversize simplified annular cage is rejected in front-end preflight',()=>{
+ const cage=Object.fromEntries(cageForms.simplified_annular.fields.map(([k,,v])=>[k,String(v)]));
+ const request=requestFromFields(values(deep),{kind:'simplified_annular',...cage,width_mm:'24'},deep);
+ assert.ok(geometryIssues(request).some(i=>i.fieldPath==='/cage/width_mm'));
 });

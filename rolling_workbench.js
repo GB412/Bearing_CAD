@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {STLLoader} from 'three/addons/loaders/STLLoader.js';
 import './rolling_workbench.css';
-import {bearingForms, cageForms, cageChoices, defaultCageEnabled, buildAssemblyIndex, validateArtifact, requestFromFields, apiMessage} from './rolling_manifest.js';
+import {bearingForms, cageForms, cageChoices, defaultCageEnabled, buildAssemblyIndex, validateArtifact, requestFromFields, geometryIssues, scaleGeometryFields, describeCadError, ParameterInputError} from './rolling_manifest.js';
 
 const $ = id => document.getElementById(id);
 let fields=bearingForms['rolling.deep_groove_ball'].fields;
@@ -19,7 +19,9 @@ function renderFields(container, prefix, data) {
    field.type='number';field.step=key.endsWith('_count')?'1':'any';field.value=String(value);
   }
   field.id=prefix+key;field.setAttribute('aria-label',label);
-  field.addEventListener(choices?'change':'input',()=>invalidatePreview());
+  field.addEventListener(choices?'change':'input',()=>{
+   invalidatePreview();showDraftIssues();
+  });
   el.append(field);container.append(el);
  }
 }
@@ -118,6 +120,49 @@ function presentTree(){
  }
 }
 function selectedType(){return $('bearingType').value;}
+function rawDraft(){
+ const p={};for(const [key] of fields)p[key]=$('param-'+key).value;
+ const c=$('cageEnabled').checked
+  ?{kind:$('cageKind').value,...Object.fromEntries(cages.map(([key])=>[key,$('cage-'+key).value]))}
+  :null;
+ return {values:p,cage:c};
+}
+function paintIssues(issues){
+ document.querySelectorAll('#parameters .field, #cageParams .field')
+  .forEach(label=>{
+   label.removeAttribute('data-invalid');
+   const control=label.querySelector('input,select');
+   if(control)control.removeAttribute('aria-invalid');
+  });
+ const panel=$('validation');
+ if(!issues.length){panel.hidden=true;panel.textContent='';return;}
+ const first=issues[0];
+ panel.hidden=false;
+ panel.textContent=first.message+(issues.length>1?'（另有 '+(issues.length-1)+' 项待检查）':'');
+ const all=new Set(issues.flatMap(issue=>[issue.fieldPath,...(issue.related??[])]));
+ for(const path of all){
+  const segments=path?.split('/');
+  if(!segments||segments.length!==3)continue;
+  const prefix=segments[1]==='cage'?'cage-':'param-';
+  const input=$(prefix+segments[2]);
+  if(!input)continue;
+  input.setAttribute('aria-invalid','true');
+  input.closest('.field')?.setAttribute('data-invalid','true');
+ }
+}
+function showDraftIssues(){
+ try{
+  const draft=rawDraft();
+  const request=requestFromFields(draft.values,draft.cage,selectedType());
+  const issues=geometryIssues(request);
+  paintIssues(issues);
+  return issues;
+ }catch(error){
+  const issue={fieldPath:error.fieldPath??'',message:error.message};
+  paintIssues([issue]);
+  return [issue];
+ }
+}
 function canGenerate(){return available&&supportedTypes.has(selectedType());}
 function updateAvailability(){
  const enabled=canGenerate();$('generate').disabled=!enabled;
@@ -149,16 +194,14 @@ function configureForm(){
  renderFields($('parameters'),'param-',fields);
  $('cageEnabled').checked=defaultCageEnabled[selectedType()];
  configureCageKind(true);
+ $('scaleTarget').value=$('param-bore_d_mm').value;
  invalidatePreview('已切换轴承类型，请重新生成真实 CAD 模型');
+ showDraftIssues();
  updateAvailability();
 }
 function getParams(){
- const p={};for(const [key] of fields)p[key]=$('param-'+key).value;
- const c=$('cageEnabled').checked
-  ?{kind:$('cageKind').value,
-     ...Object.fromEntries(cages.map(([key])=>[key,$('cage-'+key).value]))}
-  :null;
- return requestFromFields(p,c,selectedType());
+ const draft=rawDraft();
+ return requestFromFields(draft.values,draft.cage,selectedType());
 }
 async function loadArtifacts(result, sequence){
  const {manifest,file_urls}=validateArtifact(result);
@@ -209,9 +252,17 @@ async function generate(){
  $('generate').disabled=true;dispose();status('提交 CAD 请求…');
  try{
   const data=getParams();
+  const problems=geometryIssues(data);
+  if(problems.length){
+   paintIssues(problems);
+   throw new ParameterInputError(problems[0].message,problems[0].fieldPath);
+  }
   const response=await fetch('/api/v2/cad/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:controller.signal});
   const reply=await response.json();
-  if(!response.ok)throw Error(apiMessage(reply,response.status));
+  if(!response.ok){
+   const detail=describeCadError(reply,response.status);
+   throw new ParameterInputError(detail.message,detail.fieldPath);
+  }
   if(reply.status!=='succeeded'||typeof reply.manifest_url!=='string')throw Error('服务返回的任务状态无效');
   if(version!==token)return;
   status('STEP 已生成，正在加载真实 STL 网格…');
@@ -220,7 +271,11 @@ async function generate(){
   const payload=await result.json();if(version!==token)return;
   await loadArtifacts(payload,version);
  }catch(error){
-  if(version===token&&error.name!=='AbortError'){dispose();status('CAD 生成失败：'+error.message,true);}
+  if(version===token&&error.name!=='AbortError'){
+   dispose();
+   if(error.fieldPath)paintIssues([{fieldPath:error.fieldPath,message:error.message}]);
+   status('CAD 生成失败：'+error.message,true);
+  }
  }finally{if(version===token){controller=null;$('generate').disabled=!canGenerate();}}
 }
 $('generate').addEventListener('click',generate);
@@ -228,17 +283,34 @@ $('resetParams').addEventListener('click',()=>{
  renderFields($('parameters'),'param-',fields);
  $('cageEnabled').checked=defaultCageEnabled[selectedType()];
  configureCageKind(true);
+ $('scaleTarget').value=$('param-bore_d_mm').value;
  invalidatePreview('已恢复当前轴承类型的几何测试参数；请重新生成 CAD');
+ showDraftIssues();
+});
+$('scaleApply').addEventListener('click',()=>{
+ try{
+  const draft=rawDraft();
+  const modified=scaleGeometryFields(draft.values,draft.cage,selectedType(),$('scaleTarget').value);
+  const problems=geometryIssues(requestFromFields(modified.values,modified.cage,selectedType()));
+  if(problems.length){paintIssues(problems);throw new Error(problems[0].message+' 如当前参数已冲突，请先恢复默认值再整体缩放。');}
+  for(const [key] of fields)$('param-'+key).value=modified.values[key];
+  if(modified.cage)for(const [key] of cages)$('cage-'+key).value=modified.cage[key];
+  invalidatePreview('已按当前几何整体等比例缩放，请生成三维模型');
+  showDraftIssues();
+ }catch(error){status('比例调整未应用：'+error.message,true);}
 });
 $('cageEnabled').addEventListener('change',()=>{
  $('cageOptions').hidden=!$('cageEnabled').checked;
  invalidatePreview('保持架设置已更改，请重新生成 CAD');
+ showDraftIssues();
 });
 $('cageKind').addEventListener('change',()=>{
  configureCageKind();
  invalidatePreview('保持架结构已更改，请重新生成 CAD');
+ showDraftIssues();
 });
 $('bearingType').addEventListener('change',configureForm);
+showDraftIssues();
 for(const id of ['cutaway','transparent','explode'])$(id).addEventListener('input',applyVisualOptions);
 $('viewReset').addEventListener('click',()=>{resetCamera();controls.reset();resetCamera();});
 (async()=>{try{

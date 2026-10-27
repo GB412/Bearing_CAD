@@ -77,3 +77,26 @@ test('browser, real CAD API, STEP and STL complete all migrated cage assemblies'
  await expect(page.locator('#downloads a')).toHaveCount(0);
  expect(errors).toEqual([]);
 });
+
+
+test('real OCCT builds a rescaled 50 mm bore angular-contact assembly',async({page})=>{
+ await page.goto('/rolling.html');
+ await expect(page.locator('#generate')).toBeEnabled();
+ await page.locator('#bearingType').selectOption('rolling.angular_contact_ball');
+ await page.locator('#scaleTarget').fill('50');
+ await page.locator('#scaleApply').click();
+ await expect(page.locator('#validation')).toBeHidden();
+ await page.locator('#generate').click();
+ await expect.poll(()=>page.evaluate(()=>window.rollingViewerSnapshot().instances.length),
+  {timeout:160_000}).toBe(13);
+ const stepLink=page.locator('#downloads a').filter({hasText:'bearing_assembly.step'});
+ await expect(stepLink).toBeVisible();
+ const href=await stepLink.getAttribute('href');
+ const url=href.replace('/files/bearing_assembly.step','');
+ const meta=await (await page.request.get(url)).json();
+ const design=(await (await page.request.get(meta.file_urls['design_snapshot.json'])).json());
+ expect(design.parameters.bore_d_mm).toBe(50);
+ expect(design.parameters.outside_d_mm).toBe(85);
+ expect(design.parameters.contact_angle_deg).toBe(25);
+ expect(meta.manifest.instances).toHaveLength(13);
+});

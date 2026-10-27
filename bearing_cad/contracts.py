@@ -136,6 +136,10 @@ _TYPES: dict[BearingType, tuple[str, ...]] = {
 }
 _COUNTS = {"ball_count", "roller_count"}
 _TEXT = {"configuration"}
+# All entry points use the same local CAD resource limit (not a bearing standard).
+MAX_ROLLING_ELEMENTS = 64
+# Zero geometric clearance is a valid contact case; negative interference is not.
+_NONNEGATIVE = {"radial_clearance_mm", "axial_clearance_mm"}
 
 
 def _closed_object(value: Any, allowed: set[str], path: str) -> Mapping[str, Any]:
@@ -181,8 +185,8 @@ def parse_request(data: Mapping[str, Any]) -> BearingRequest:
                 raise ContractError("PARAMETER_INVALID", path, "Invalid roller configuration")
             params[field] = val
         elif field in _COUNTS:
-            if type(val) is not int or not 1 <= val <= 10000:
-                raise ContractError("PARAMETER_INVALID", path, "Expected positive integer (max 10000)")
+            if type(val) is not int or not 1 <= val <= MAX_ROLLING_ELEMENTS:
+                raise ContractError("PARAMETER_INVALID", path, "Expected positive integer (max 64)")
             params[field] = val
         else:
             if type(val) not in (float, int) or (isinstance(val, int) and val.bit_length() > 1024):
@@ -197,8 +201,12 @@ def parse_request(data: Mapping[str, Any]) -> BearingRequest:
             if field == "contact_angle_deg":
                 if not 0.0 < val < 90.0:
                     raise ContractError("PARAMETER_INVALID", path, "Contact angle must be between 0 and 90 degrees")
-            elif val <= 0.0:
-                raise ContractError("PARAMETER_INVALID", path, "Dimension must be positive mm")
+            elif val < 0.0 or (val == 0.0 and field not in _NONNEGATIVE):
+                raise ContractError("PARAMETER_INVALID", path,
+                                    "Dimension must be positive, or nonnegative geometric clearance in mm")
+            if val > 1000.0:
+                raise ContractError("RESOURCE_LIMIT", path,
+                                    "CAD service numeric budget exceeded (1000 mm)")
             params[field] = val
     if params["bore_d_mm"] >= params["outside_d_mm"]:
         raise ContractError("PARAMETER_INVALID", "/parameters/outside_d_mm", "Outer diameter must exceed bore")
