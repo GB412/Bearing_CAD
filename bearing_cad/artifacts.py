@@ -12,12 +12,13 @@ import tempfile
 
 import cadquery as cq
 
-from .contracts import BearingRequest
+from .contracts import BearingRequest, BearingType, ContractError
+from .cylindrical_roller import build_cylindrical_roller
 from .deep_groove import build_deep_groove
 from .geometry_checks import inspect_solid
 
 BUNDLE_VERSION = "cad-v2-artifacts/1"
-GENERATOR_VERSION = "0.5.0"
+GENERATOR_VERSION = "0.8.0"
 
 
 def _digest(path: Path) -> str:
@@ -68,7 +69,12 @@ def generate_bundle(request: BearingRequest, output_root: Path) -> Path:
         verify_bundle(final, key)  # Corrupt cache entries fail closed.
         return final
 
-    model = build_deep_groove(request)
+    if request.bearing_type == BearingType.DEEP_GROOVE:
+        model = build_deep_groove(request)
+    elif request.bearing_type == BearingType.CYLINDRICAL:
+        model = build_cylindrical_roller(request)
+    else:
+        raise ContractError("NOT_SUPPORTED", "/bearing_type", "CAD builder not implemented")
     parts = {component.component_id: component.shape for component in model.components}
     assembly = cq.Assembly(name="bearing_assembly")
     for instance in model.instances:
@@ -97,6 +103,8 @@ def generate_bundle(request: BearingRequest, output_root: Path) -> Path:
             "artifact_key": key,
             "request_hash": request.request_hash,
             "geometry_unit": "mm",
+            "bearing_type": request.bearing_type.value,
+            "configuration": request.parameters.get("configuration"),
             "status": "GEOMETRY_VALIDATED",
             "completeness": "SIMPLIFIED_CAGE" if request.cage else "CAGE_OMITTED",
             "parts": [{"id": part.component_id, "role": part.role} for part in model.components],
