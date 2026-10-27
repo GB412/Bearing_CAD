@@ -12,6 +12,7 @@ from .contracts import (AssemblyModel, BearingRequest, BearingType,
                         ComponentDefinition, ComponentInstance, ContractError)
 from .geometry import circular_positions, cylindrical_roller, revolve_radial_profile, annulus
 from .geometry_checks import inspect_solid, interference_volume
+from .cages import cylindrical_window_cage
 
 # Integral flanges: left (-Z), right (+Z). NUP includes a distinct loose rib.
 _CONFIGURATIONS = {
@@ -51,8 +52,6 @@ def build_cylindrical_roller(request: BearingRequest) -> AssemblyModel:
     """
     if request.bearing_type != BearingType.CYLINDRICAL:
         raise ContractError("NOT_SUPPORTED", "/bearing_type", "Expected cylindrical roller bearing")
-    if request.cage is not None:
-        raise ContractError("NOT_SUPPORTED", "/cage", "Cylindrical cage is not supported")
     p = request.parameters
     config = p["configuration"]
     if config not in _CONFIGURATIONS:
@@ -118,4 +117,20 @@ def build_cylindrical_roller(request: BearingRequest) -> AssemblyModel:
         raise ContractError("ASSEMBLY_INTERFERENCE", "/geometry", "Inner and outer rings intersect")
     if loose and interference_volume(inner, components[-1].shape) > 1e-6:
         raise ContractError("ASSEMBLY_INTERFERENCE", "/geometry/loose_rib", "Loose rib penetrates inner ring")
+    if request.cage is not None:
+        cage = cylindrical_window_cage(
+            request.cage, pitch_d_mm=pitch, roller_d_mm=roller_d,
+            roller_length_mm=roller_length, roller_count=count,
+            bearing_width_mm=B, inner_rib_tip_d_mm=2 * inner_tip,
+            outer_rib_tip_d_mm=2 * outer_tip,
+        )
+        for part in components:
+            if part.component_id != "roller" and interference_volume(cage, part.shape) > 1e-6:
+                raise ContractError("ASSEMBLY_INTERFERENCE", "/cage",
+                                    "Window cage overlaps " + part.component_id)
+        if interference_volume(cage, first_roller) > 1e-6:
+            raise ContractError("ASSEMBLY_INTERFERENCE", "/cage",
+                                "Window cage penetrates a roller")
+        components.append(ComponentDefinition("cage", "cage", cage))
+        instances.append(ComponentInstance("cage", "cage"))
     return AssemblyModel(BearingType.CYLINDRICAL, tuple(components), tuple(instances))

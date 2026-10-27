@@ -190,12 +190,15 @@ def parse_request(data: Mapping[str, Any]) -> BearingRequest:
         raise ContractError("PARAMETER_INVALID", "/parameters/pitch_d_mm", "Pitch diameter must lie between bore and outside diameters")
     cage = None
     if cage_present:
-        if kind != BearingType.DEEP_GROOVE:
-            raise ContractError("NOT_SUPPORTED", "/cage", "Cage supported only for deep-groove bearings")
+        if kind == BearingType.ANGULAR_CONTACT:
+            raise ContractError("NOT_SUPPORTED", "/cage", "Angular-contact cage not yet implemented")
         fields = {"kind", "inner_d_mm", "outside_d_mm", "width_mm", "pocket_clearance_mm"}
         obj = _closed_object(cage_raw, fields, "/cage")
-        if obj["kind"] != "simplified_annular":
-            raise ContractError("NOT_SUPPORTED", "/cage/kind", "Detailed cage not implemented")
+        allowed_kind = {BearingType.DEEP_GROOVE: "simplified_annular",
+                        BearingType.CYLINDRICAL: "cylindrical_window"}[kind]
+        if obj["kind"] != allowed_kind:
+            raise ContractError("NOT_SUPPORTED", "/cage/kind",
+                                f"Cage kind not implemented for {kind.value}")
         values = {}
         for field in fields - {"kind"}:
             value = obj[field]
@@ -210,6 +213,6 @@ def parse_request(data: Mapping[str, Any]) -> BearingRequest:
             values[field] = float(value)
         if values["inner_d_mm"] >= values["outside_d_mm"]:
             raise ContractError("PARAMETER_INVALID", "/cage/outside_d_mm", "Cage outer must exceed cage inner")
-        cage = CageSpec(kind="simplified_annular", **values)
+        cage = CageSpec(kind=allowed_kind, **values)
     return BearingRequest(SCHEMA_VERSION, kind, "mm", envelope["detail_level"],
                           "explicit", params, cage)
