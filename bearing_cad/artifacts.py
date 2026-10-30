@@ -17,10 +17,11 @@ from .cylindrical_roller import build_cylindrical_roller
 from .angular_contact import build_angular_contact
 from .deep_groove import build_deep_groove
 from .geometry_checks import inspect_solid
+from .rolling_drawings import generate_review_drawings
 from .assembly_quality import build_assembly, audit_step_roundtrip
 
 BUNDLE_VERSION = "cad-v2-artifacts/1"
-GENERATOR_VERSION = "0.9.6"
+GENERATOR_VERSION = "0.10.0"
 
 
 def _digest(path: Path) -> str:
@@ -35,7 +36,7 @@ def _identity(request: BearingRequest) -> str:
     payload = json.dumps(
         {"request_hash": request.request_hash, "bundle_version": BUNDLE_VERSION,
          "generator_version": GENERATOR_VERSION, "cadquery_version": cq.__version__,
-         "formats": ["step", "stl"]},
+         "formats": ["step", "stl", "dxf", "svg"]},
         sort_keys=True, separators=(",", ":"),
     )
     return sha256(payload.encode("utf-8")).hexdigest()
@@ -98,6 +99,7 @@ def generate_bundle(request: BearingRequest, output_root: Path) -> Path:
             cq.exporters.export(component.shape, str(folder / (component.component_id + ".stl")),
                                 exportType="STL")
 
+        drawing_report = generate_review_drawings(request, model, folder)
         (folder / "design_snapshot.json").write_text(request.canonical_json(), encoding="utf-8")
         files = {path.name: {"sha256": _digest(path), "size_bytes": path.stat().st_size}
                  for path in sorted(folder.iterdir()) if path.is_file()}
@@ -112,6 +114,8 @@ def generate_bundle(request: BearingRequest, output_root: Path) -> Path:
             "configuration": request.parameters.get("configuration"),
             "contact_angle_deg": request.parameters.get("contact_angle_deg"),
             "status": "GEOMETRY_VALIDATED",
+            "drawing_status": drawing_report["status"],
+            "drawing_sheets": drawing_report["sheets"],
             "completeness": (
                 "CAGE_OMITTED" if request.cage is None else
                 "CYLINDRICAL_WINDOW_CAGE" if request.cage.kind == "cylindrical_window"
