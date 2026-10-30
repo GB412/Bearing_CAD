@@ -1,4 +1,4 @@
-"""Two pressed halves and separate rivets, inspired by RoBAS StampingCage.cs.
+"""Two pressed spherical-cup halves and separate rivets, inspired by RoBAS StampingCage.cs.
 
 All dimensions are explicit mm. This is not certified manufacturer geometry.
 """
@@ -28,10 +28,13 @@ def stamped_cage_components(spec: StampedCageSpec, *, pitch_d_mm: float,
     if head_radius >= min((pitch_d_mm-spec.inner_d_mm)/2,
                           (spec.outside_d_mm-pitch_d_mm)/2):
         raise ContractError("PARAMETER_INVALID", "/cage/rivet_head_d_mm", "Head exceeds cage band")
-    half_height = spec.width_mm / 2 - head_radius
+    half_height = spec.width_mm / 2
     ball_radius = ball_d_mm / 2
-    if half_height <= ball_radius + spec.pocket_clearance_mm + spec.board_thickness_mm:
-        raise ContractError("PARAMETER_INVALID", "/cage/width_mm", "Insufficient pocket-side board material")
+    thickness = spec.board_thickness_mm
+    if half_height <= ball_radius + spec.pocket_clearance_mm + thickness:
+        raise ContractError("PARAMETER_INVALID", "/cage/width_mm", "Insufficient envelope for spherical shell")
+    if thickness + head_radius > half_height:
+        raise ContractError("PARAMETER_INVALID", "/cage/width_mm", "Rivet head exceeds axial cage envelope")
     if ball_count > 1 and pitch_d_mm*math.sin(math.pi/(2*ball_count)) <= (
             ball_radius + head_radius + spec.pocket_clearance_mm):
         raise ContractError("PARAMETER_INVALID", "/cage/rivet_head_d_mm", "Rivets too close to balls")
@@ -41,28 +44,39 @@ def stamped_cage_components(spec: StampedCageSpec, *, pitch_d_mm: float,
         pitch_d_mm/2*math.cos((i+.5)*2*math.pi/ball_count),
         pitch_d_mm/2*math.sin((i+.5)*2*math.pi/ball_count), 0.
     ) for i in range(ball_count))
+    # RoBAS StampingCage.halfCage construction: subtract two annuli
+    # with differently sized spherical pockets. The remainder is a thin
+    # joining board and curved spherical cup wall, not a full-thickness ring.
     pocket = sphere(ball_d_mm + 2*spec.pocket_clearance_mm)
-    bore = cylindrical_roller(spec.rivet_shaft_d_mm+2*spec.rivet_hole_clearance_mm,
-                              2*half_height+.2)
-    halves=[]
-    for sign in (1,-1):
-        half=annulus(spec.inner_d_mm,spec.outside_d_mm,half_height)
-        half=half.translate((0,0,sign*half_height/2))
-        for position in positions:
-            half=half.cut(pocket.translate(position))
-        for position in rivet_positions:
-            half=half.cut(bore.translate(position))
-        if not inspect_solid(half).valid:
-            raise ContractError("BREP_INVALID", "/cage", "Stamped half invalid or disconnected")
-        halves.append(half)
+    offset_pocket = sphere(ball_d_mm + 2*(spec.pocket_clearance_mm + thickness))
+    first = annulus(spec.inner_d_mm,spec.outside_d_mm,half_height)
+    first = first.translate((0,0,half_height/2))
+    inset = annulus(spec.inner_d_mm,spec.outside_d_mm,half_height-thickness)
+    inset = inset.translate((0,0,(half_height+thickness)/2))
+    for position in positions:
+        first = first.cut(pocket.translate(position))
+        inset = inset.cut(offset_pocket.translate(position))
+    upper = first.cut(inset)
+    # Rivets pierce only the flat central joining board.
+    hole = cylindrical_roller(spec.rivet_shaft_d_mm+2*spec.rivet_hole_clearance_mm,
+                              thickness+.2)
+    for position in rivet_positions:
+        upper = upper.cut(hole.translate((position[0],position[1],thickness/2)))
+    if not inspect_solid(upper).valid:
+        raise ContractError("BREP_INVALID", "/cage", "Stamped shell invalid or disconnected")
+    upper_solid = upper.val()
+    lower_solid = upper_solid.mirror("XY")
+    if not inspect_solid(lower_solid).valid:
+        raise ContractError("BREP_INVALID", "/cage", "Mirrored stamped shell invalid")
+    halves = [upper_solid, lower_solid]
 
-    shaft=cylindrical_roller(spec.rivet_shaft_d_mm,2*half_height+.2)
+    shaft=cylindrical_roller(spec.rivet_shaft_d_mm,2*thickness+.2)
     head=sphere(spec.rivet_head_d_mm)
     side=4*head_radius
     above=cq.Workplane("XY").box(side,side,2*head_radius).translate((0,0,head_radius))
     below=cq.Workplane("XY").box(side,side,2*head_radius).translate((0,0,-head_radius))
-    rivet=shaft.union(head.intersect(above).translate((0,0,half_height)))
-    rivet=rivet.union(head.intersect(below).translate((0,0,-half_height)))
+    rivet=shaft.union(head.intersect(above).translate((0,0,thickness)))
+    rivet=rivet.union(head.intersect(below).translate((0,0,-thickness)))
     if not inspect_solid(rivet).valid:
         raise ContractError("BREP_INVALID", "/cage/rivet", "Rivet B-Rep invalid")
     reference_ball=sphere(ball_d_mm).translate(positions[0])
