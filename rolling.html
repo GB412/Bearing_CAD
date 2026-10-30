@@ -100,6 +100,13 @@
           <p class="footnote" id="provenance">三维模型需进一步进行专业设计和制造校核。</p>
         </section>
       </div>
+      <section class="pane" id="drawingPanel" hidden style="margin:14px 20px 20px;padding:18px;border:1px solid #d9e2e8;border-radius:12px;background:#fff">
+        <div class="pane-title"><h3>二维图纸 · 设计审查稿</h3><span>SVG / DXF</span></div>
+        <p class="footnote">从同一 CAD 实体生成套圈剖面，滚动体为代表性示意；未包含制造公差与保持架详图，不可作为制造图。</p>
+        <label for="drawingView">图纸视图</label>
+        <select id="drawingView"><option value="bearing_assembly_review.svg">总装剖视</option><option value="bearing_inner_ring_review.svg">内圈剖视</option><option value="bearing_outer_ring_review.svg">外圈剖视</option></select>
+        <div style="margin-top:12px"><img id="drawingPreview" alt="二维轴承审查图预览" style="width:100%;height:auto;max-height:600px;object-fit:contain;background:#fff;border:1px solid #e1e6eb"></div>
+      </section>
     </section>
   </main>
   <footer>
