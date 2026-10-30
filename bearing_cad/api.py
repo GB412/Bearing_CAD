@@ -25,7 +25,8 @@ _TOKEN = r"([a-f0-9]{32})"
 _JOB_ROUTE = re.compile(r"^/api/v2/cad/jobs/" + _TOKEN + r"$")
 _ARTIFACT_ROUTE = re.compile(r"^/api/v2/cad/artifacts/" + _TOKEN + r"$")
 _FILE_ROUTE = re.compile(r"^/api/v2/cad/artifacts/" + _TOKEN + r"/files/([a-zA-Z0-9_.-]+)$")
-_CONTENT_TYPES = {".step": "model/step", ".stl": "model/stl", ".json": "application/json"}
+_CONTENT_TYPES = {".step": "model/step", ".stl": "model/stl", ".json": "application/json",
+                  ".dxf": "application/dxf", ".svg": "image/svg+xml"}
 
 
 def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"),
