@@ -73,6 +73,7 @@ function dispose() {
  entries.length=0;active=null;$('parts').replaceChildren();$('downloads').replaceChildren();
  $('partCount').textContent='0 个实例';$('quality').textContent='未验证';$('provenance').textContent='正式工程设计和轴承制造校核需进一步审核。';
  $('modelLabel').textContent='尚未生成模型';$('emptyStage').hidden=false;
+ $('drawingPanel').hidden=true;$('drawingPreview').removeAttribute('src');
 }
 function resetCamera(){
  const bounds=new THREE.Box3();
@@ -235,13 +236,22 @@ async function loadArtifacts(result, sequence){
   entries.push(mesh);scene.add(mesh);
  }
  for(const geometry of templates.values())geometry.dispose();
- active={manifest,instances};$('emptyStage').hidden=true;$('quality').textContent='CAD 几何已检查';
+ active={manifest,instances,file_urls};$('emptyStage').hidden=true;$('quality').textContent='CAD 几何已检查';
  $('modelLabel').textContent='零件原型 '+manifest.parts.length+' · 装配实例 '+instances.length+' · 轴向 Z · 单位 mm';
  $('provenance').textContent='完整度：'+manifest.completeness+' · SHA256: '+manifest.request_hash.slice(0,20)+'…  · 非制造批准';
  $('downloads').replaceChildren();
  for(const [name,url] of Object.entries(file_urls)){
   const link=document.createElement('a');link.textContent=name;link.href=url;link.download=name;
   $('downloads').append(link);
+ }
+ const drawings=['bearing_assembly_review.svg','bearing_inner_ring_review.svg','bearing_outer_ring_review.svg'];
+ const found=drawings.filter(name=>typeof file_urls[name]==='string');
+ $('drawingPanel').hidden=found.length===0;
+ if(found.length){
+  const sel=$('drawingView');sel.replaceChildren();
+  for(const name of found){const opt=document.createElement('option');opt.value=name;
+   opt.textContent=({'bearing_assembly_review.svg':'总装剖视','bearing_inner_ring_review.svg':'内圈剖视','bearing_outer_ring_review.svg':'外圈剖视'})[name];sel.append(opt);}
+  $('drawingPreview').src=file_urls[sel.value];
  }
  presentTree();$('cutaway').checked=false;$('transparent').checked=false;$('explode').value='0';
  applyVisualOptions();resetCamera();status('CAD 模型已加载：'+instances.length+' 个独立装配实例');
@@ -279,6 +289,7 @@ async function generate(){
  }finally{if(version===token){controller=null;$('generate').disabled=!canGenerate();}}
 }
 $('generate').addEventListener('click',generate);
+$('drawingView').addEventListener('change',()=>{const name=$('drawingView').value;if(active&&active.file_urls?.[name])$('drawingPreview').src=active.file_urls[name];});
 $('resetParams').addEventListener('click',()=>{
  renderFields($('parameters'),'param-',fields);
  $('cageEnabled').checked=defaultCageEnabled[selectedType()];
