@@ -20,6 +20,7 @@ from .drawing_legacy_technical import technical_condition_rows, apply_technical_
 from .drawing_legacy_chamfer import apply_robas_chamfer
 from .drawing_legacy_dimensions import apply_deep_groove_dimensions, apply_angular_contact_dimensions
 from .drawing_legacy_roller import apply_cylindrical_roller_dimensions
+from .drawing_legacy_ratings import apply_robas_loads
 
 SHEETS = ("assembly", "outer_ring", "inner_ring", "cage")
 TEMPLATES = {
@@ -122,6 +123,9 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
         report = apply_cylindrical_roller_dimensions(
             report=report, parameters=parameters, legacy_values=legacy_values,
             resources=Path(resources))
+    report = apply_robas_loads(
+        report=report, resources=Path(resources),
+        bearing_type=bearing_type, parameters=parameters)
     if chamfer1_mm is not None:
         report = apply_robas_chamfer(
             report=report, resources=Path(resources),
@@ -198,6 +202,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
             "diameter_series": diameter_series,
             "chamfer_lookup_warning": report.get("chamfer_lookup_warning"),
             "accuracy_class": accuracy_class,
+            "robas_load_evidence": report.get("legacy_load_evidence"),
             "manufacturing_approved": False,
             "bearing_type": bearing_type,
             "request_hash": request_hash,
