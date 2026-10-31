@@ -1,0 +1,12 @@
+bin/
+obj/
+*.dll
+*.pdb
+*.exe
+*.dwg
+*.DWG
+*.dxf
+*.DXF
+*.shx
+*.db
+licensed-assets/
