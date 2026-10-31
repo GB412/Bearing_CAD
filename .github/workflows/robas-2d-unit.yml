@@ -1,0 +1,24 @@
+name: RoBAS 2D Python Unit Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  drawing-python-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install isolated drawing dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest==8.3.5 ezdxf==1.4.2
+      - name: Run RoBAS 2D domain and DXF reference tests
+        run: |
+          python -m pytest -q tests_v2/test_drawing_variables.py tests_v2/test_drawing_runner.py tests_v2/test_drawing_reference.py tests_v2/test_drawing_standards.py tests_v2/test_cadimport_preflight.py
