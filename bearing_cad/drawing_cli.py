@@ -24,10 +24,10 @@ def _read_request(path: Path):
     data=json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data,dict) or set(data)!={"request","drawing"}:
         raise ValueError("Expected request and drawing objects")
-    request=parse_request(data["request"])
     options=data["drawing"]
     if not isinstance(options,dict) or set(options)-_ALLOWED:
         raise ValueError("Unsupported drawing option")
+    request=parse_request(data["request"])
     return request,options
 
 def main(argv=None):
