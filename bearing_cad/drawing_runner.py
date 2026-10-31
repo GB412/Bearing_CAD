@@ -109,6 +109,8 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
     The Windows CADImport real-DWG runtime remains mandatory.
     """
     templates = resolve_templates(resources, bearing_type, configuration)
+    if os.name != "nt":
+        raise DrawingExportError("CADImport bridge requires licensed Windows/.NET runtime")
     report = prepare_variables(resources=Path(resources), bearing_type=bearing_type,
                                parameters=parameters, model=model,
                                accuracy_class=accuracy_class,
@@ -144,8 +146,6 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
     # Faithfully reproduce FrmMain.ChangeCADTexts: all DataTable rows participate
     # in the original replacement loop, including blank/DBNull values.
     # The original software does not require the complete database to be filled.
-    if os.name != "nt":
-        raise DrawingExportError("CADImport bridge requires licensed Windows/.NET runtime")
     bridge = Path(bridge).resolve()
     if not bridge.is_file():
         raise DrawingExportError("Compiled licensed CADImportBridge.exe not found")
