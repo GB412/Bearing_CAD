@@ -16,6 +16,7 @@ import tempfile
 import ezdxf
 
 from .drawing_variables import prepare_variables, bridge_values
+from .drawing_legacy_technical import technical_condition_rows, apply_technical_conditions
 
 SHEETS = ("assembly", "outer_ring", "inner_ring", "cage")
 TEMPLATES = {
@@ -65,7 +66,8 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
                             request_hash: str, model: str | None = None,
                             accuracy_class: str | None = None,
                             checked_values: dict[str, str] | None = None,
-                            configuration: str | None = None) -> Path:
+                            configuration: str | None = None,
+                            diameter_series: str | None = None) -> Path:
     """Produce four DXF sheets with RoBAS's original TEXT replacement behavior.
 
     Empty SQLite variables become blank text as in original ChangeCADTexts.
@@ -77,6 +79,16 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
                                parameters=parameters, model=model,
                                accuracy_class=accuracy_class,
                                checked_values=checked_values)
+    if diameter_series is not None:
+        if accuracy_class is None:
+            raise DrawingExportError("RoBAS technical conditions require accuracy_class")
+        lookups = technical_condition_rows(
+            resources=Path(resources), bearing_type=bearing_type,
+            bore_d_mm=parameters["bore_d_mm"],
+            outside_d_mm=parameters["outside_d_mm"],
+            accuracy_class=accuracy_class,
+            diameter_series=diameter_series)
+        report = apply_technical_conditions(report, lookups)
     # Faithfully reproduce FrmMain.ChangeCADTexts: all DataTable rows participate
     # in the original replacement loop, including blank/DBNull values.
     # The original software does not require the complete database to be filled.
@@ -133,6 +145,9 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
             "status": "ROBAS_TEMPLATE_TEXT_EXPORTED_UNREVIEWED",
             "unfilled_database_variable_names": report["unresolved_names"],
             "unfilled_database_variable_count": report["unresolved_count"],
+            "technical_condition_rows": report.get("technical_rows_applied", 0),
+            "diameter_series": diameter_series,
+            "accuracy_class": accuracy_class,
             "manufacturing_approved": False,
             "bearing_type": bearing_type,
             "request_hash": request_hash,
