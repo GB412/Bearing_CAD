@@ -44,6 +44,33 @@ def _digest(file: Path) -> str:
     return h.hexdigest()
 
 
+def verify_drawing_bundle(folder: Path, expected_key: str | None = None) -> dict:
+    """Verify a complete previously exported RoBAS four-sheet DXF bundle."""
+    folder = Path(folder)
+    manifest = json.loads((folder / "drawing_manifest.json").read_text(encoding="utf-8"))
+    if manifest.get("schema_version") != "robas.drawing.bundle.v1":
+        raise DrawingExportError("Unsupported RoBAS drawing manifest")
+    if expected_key is not None and manifest.get("bundle_key") != expected_key:
+        raise DrawingExportError("RoBAS drawing cache identity mismatch")
+    sheets = manifest.get("sheets")
+    if not isinstance(sheets, list) or len(sheets) != 4:
+        raise DrawingExportError("Incomplete RoBAS four-sheet manifest")
+    if [sheet.get("view") for sheet in sheets] != list(SHEETS):
+        raise DrawingExportError("Unexpected drawing-sheet order")
+    for sheet in sheets:
+        name = sheet.get("file")
+        if not isinstance(name, str) or name != Path(name).name or name not in {
+            "assembly.dxf", "outer_ring.dxf", "inner_ring.dxf", "cage.dxf"
+        }:
+            raise DrawingExportError("Unsafe drawing-sheet filename")
+        path = folder / name
+        if path.is_symlink() or not path.is_file() or path.stat().st_size != sheet.get("size_bytes"):
+            raise DrawingExportError("Missing or modified DXF: " + name)
+        if _digest(path) != sheet.get("sha256"):
+            raise DrawingExportError("DXF checksum mismatch: " + name)
+    return manifest
+
+
 def resolve_templates(resources: Path, bearing_type: str, configuration: str | None = None):
     kind = bearing_type
     if bearing_type == "rolling.cylindrical_roller":
@@ -129,7 +156,8 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
     }, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
     destination = target_root / identity
     if destination.exists():
-        raise DrawingExportError("Preexisting drawing bundle requires independent verification")
+        verify_drawing_bundle(destination, identity)
+        return destination
     with tempfile.TemporaryDirectory(prefix=".drawing-staging-", dir=target_root) as temp:
         folder = Path(temp)
         mapping = folder / "variables.json"
@@ -181,5 +209,11 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
         (folder / "drawing_manifest.json").write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
         mapping.unlink()  # Source variable values remain in the source SQLite DB.
-        folder.rename(destination)  # Only complete, audited output is published.
+        verify_drawing_bundle(folder, identity)
+        try:
+            folder.rename(destination)
+        except OSError:
+            if not destination.exists():
+                raise
+            verify_drawing_bundle(destination, identity)
     return destination
