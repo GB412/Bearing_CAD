@@ -16,8 +16,14 @@ import tempfile
 import ezdxf
 
 from .drawing_variables import prepare_variables, bridge_values
+from .drawing_reference import compare_reference
 
 SHEETS = ("assembly", "outer_ring", "inner_ring", "cage")
+REFERENCE_DXF = {
+    "rolling.deep_groove_ball": ("深沟球轴承总图.dxf", "深沟球轴承外圈.dxf", "深沟球轴承内圈.dxf", "深沟球轴承保持架.dxf"),
+    "rolling.angular_contact_ball": ("角接触球轴承总图.dxf", "角接触球轴承外圈.dxf", "角接触球轴承内圈.dxf", "角接触球轴承保持架.dxf"),
+    "rolling.cylindrical_roller": ("单列圆柱滚子轴承总图.dxf", "单列圆柱滚子轴承外圈.dxf", "单列圆柱滚子轴承内圈.dxf", "单列圆柱滚子轴承保持架.dxf"),
+}
 TEMPLATES = {
     "rolling.deep_groove_ball": ("深沟球DWG",
         ("0_00KS.DWG", "0_01KS.DWG", "0_02.DWG", "0_07.DWG")),
@@ -114,14 +120,22 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
                 raise DrawingExportError(f"CADImport response is not JSON for {name}") from error
             if response.get("exact_match_count", 0) < 1 or not output.is_file():
                 raise DrawingExportError(f"CADImport did not replace any TEXT in {name}")
-            doc = ezdxf.readfile(str(output))
-            audit = doc.audit()
-            if audit.errors or audit.fixes:
-                raise DrawingExportError(f"DXF audit failed for {name}: {len(audit.errors)} errors, {len(audit.fixes)} fixes")
+            # Original RoBAS reference DXFs contain known recoverable
+            # header/dictionary handle fixes (Auditor code 202); those alone
+            # do not mean the newly exported geometry is incorrect.
+            reference = Path(resources) / "temp" / REFERENCE_DXF[bearing_type][len(sheets)]
+            if not reference.is_file():
+                raise DrawingExportError(f"Missing original RoBAS reference DXF: {reference.name}")
+            fidelity = compare_reference(reference, output)
+            if fidelity["blocking_findings"]:
+                raise DrawingExportError(f"Generated DXF differs from original non-text drawing geometry: {fidelity['blocking_findings']}")
             sheets.append({
                 "view": name, "file": output.name, "size_bytes": output.stat().st_size,
                 "sha256": _digest(output), "template_sha256": _digest(template),
                 "text_replacements": response["exact_match_count"],
+                "reference_comparison": fidelity["status"],
+                "reference_review_warnings": fidelity["review_warnings"],
+                "audit_fix_count": fidelity["generated"]["audit_fixes"],
                 "non_text_entities": response.get("non_text_entity_count"),
             })
         manifest = {
