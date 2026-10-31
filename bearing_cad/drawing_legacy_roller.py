@@ -13,6 +13,8 @@ from .drawing_legacy_dimensions import (number,text,overlay,common_dimensions,
 
 def roller_groove_width_deviation(resources: Path, roller_length_mm: float) -> dict:
     length=number(roller_length_mm,"roller length")
+    if length <= 0:
+        raise DrawingDataError("Roller length must be positive")
     db_path=Path(resources)/"Data"/"CRBData.db"
     if not db_path.is_file() or db_path.is_symlink():
         raise DrawingDataError("Missing original CRB SQLite database")
