@@ -37,7 +37,9 @@ def _chamfer_source(resources: Path, bearing_type: str, rmin: float):
                 (float(rmin),)).fetchone()
     except sqlite3.Error as error:
         raise DrawingDataError("RoBAS chamfer table lookup failed") from error
-    return [_text(value) for value in row] if row else None
+    # DataControl.GetChamferSize creates a new DataTable and copies SQL
+    # columns 2..21 into DataRow columns 0..19; do not use raw SQL offsets.
+    return [_text(value) for value in row[2:22]] if row else None
 
 
 def _raw(chamfer, pairs):
