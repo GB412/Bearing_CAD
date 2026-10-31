@@ -104,3 +104,39 @@ def get_width_deviation(*, resources, bearing_type, bore_d_mm, size_series):
     return {"source": "轴承宽度公差", "status": "LOOKUP_ONLY",
             "size_series": size_series,
             "upper_mm": _known(row[first]), "lower_mm": _known(row[second])}
+
+
+def prepare_standard_variables(*, resources, bearing_type, bore_d_mm,
+                               accuracy_class, clearance_group, size_series):
+    """Produce exact RoBAS database variable keys, for separate expert review.
+
+    Explicit selections are mandatory. The returned values are not certified
+    for manufacture; caller must retain the lookup context and approvals.
+    """
+    radial = get_radial_clearance(resources=resources, bearing_type=bearing_type,
+                                  bore_d_mm=bore_d_mm, group=clearance_group)
+    surface = get_roughness(resources=resources, bearing_type=bearing_type,
+                            bore_d_mm=bore_d_mm, accuracy_class=accuracy_class)
+    width = get_width_deviation(resources=resources, bearing_type=bearing_type,
+                                bore_d_mm=bore_d_mm, size_series=size_series)
+    fields = dict(surface["values"])
+    fields.update({
+        "Cmin": format(radial["minimum_mm"], ".15g"),
+        "Cmax": format(radial["maximum_mm"], ".15g"),
+        "B_Upper": width["upper_mm"],
+        "B_Lower": width["lower_mm"],
+    })
+    return {
+        "status": "LOOKUP_ONLY_REQUIRES_APPROVAL",
+        "values": fields,
+        "sources": {
+            "clearance": radial["source"],
+            "roughness": surface["source"],
+            "width_deviation": width["source"],
+        },
+        "selections": {
+            "accuracy_class": accuracy_class,
+            "clearance_group": clearance_group,
+            "size_series": size_series,
+        },
+    }
