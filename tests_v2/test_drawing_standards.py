@@ -56,3 +56,16 @@ def test_reject_out_of_range_and_invalid_diameter(resources):
         get_radial_clearance(resources=resources,bearing_type="rolling.deep_groove_ball",bore_d_mm=200,group="C0")
     with pytest.raises(StandardsLookupError):
         get_radial_clearance(resources=resources,bearing_type="rolling.deep_groove_ball",bore_d_mm=0,group="C0")
+
+
+def test_explict_standard_values_are_not_approved(resources):
+    from bearing_cad.drawing_standards import prepare_standard_variables
+    report=prepare_standard_variables(
+        resources=resources, bearing_type="rolling.deep_groove_ball",
+        bore_d_mm=40, accuracy_class="P5", clearance_group="C0",
+        size_series="2")
+    assert report["status"] == "LOOKUP_ONLY_REQUIRES_APPROVAL"
+    assert report["values"]["Cmin"] == "0.008"
+    assert report["values"]["Cmax"] == "0.014"
+    assert report["values"]["B_Lower"] == "-0.4"
+    assert report["values"]["@Dds"] == "0.5"
