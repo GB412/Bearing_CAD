@@ -56,18 +56,17 @@ namespace BearingCad.CadImportBridge
                     }
                     if (values == null || values.Count == 0 || values.Count > 2000)
                         throw new ArgumentException("Variable mapping must contain 1..2000 rows.");
-                    Dictionary<string, string> seen = new Dictionary<string, string>(StringComparer.Ordinal);
                     foreach (Replacement value in values)
                     {
                         if (value == null || String.IsNullOrWhiteSpace(value.name) ||
                             value.value == null || value.name.Length > 256 || value.value.Length > 4096 ||
                             value.name.IndexOfAny(new [] { '\r', '\n', '\0' }) >= 0 ||
                             value.value.IndexOfAny(new [] { '\r', '\n', '\0' }) >= 0)
-                            throw new ArgumentException("Mapping entries must have safe, single-line name/value pairs.");
-                        string previous;
-                        if (seen.TryGetValue(value.name, out previous) && previous != value.value)
-                            throw new ArgumentException("Conflicting duplicate variable: " + value.name);
-                        seen[value.name] = value.value;
+                            throw new ArgumentException("Mapping rows require a safe name and a single-line value.");
+                        // Important: RoBAS DataTable may contain duplicate names.
+                        // Do not deduplicate or reject them: the nested original
+                        // TEXT loop compares each row in its original order.
+                        // Empty replacement is valid (DBNull.ToString() == "").
                     }
                 }
 
