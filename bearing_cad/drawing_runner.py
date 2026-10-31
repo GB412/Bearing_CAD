@@ -52,9 +52,9 @@ def resolve_templates(resources: Path, bearing_type: str, configuration: str | N
     selected = []
     for name in names:
         match = available.get(name.casefold())
-        if match is None or match.is_symlink() or match.read_bytes()[:6] != b"AC1027":
-            # Reject missing/malformed original DWG. AC1027 indicates DWG 2013;
-            # a future supported revision should be a deliberate migration.
+        if match is None or match.is_symlink() or match.read_bytes()[:6] not in {b"AC1015", b"AC1021", b"AC1027"}:
+            # Original provided RoBAS templates use AC1021 (DWG 2007),
+            # with additional templates using AC1015 (DWG 2000).
             raise DrawingExportError(f"Missing or unsupported original DWG template: {name}")
         selected.append(match)
     return tuple(selected)
