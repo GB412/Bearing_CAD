@@ -24,7 +24,9 @@ def _choose(series: str, mapping: dict[str, int], default: int | None = None):
 
 
 def _entry(key: str, row: tuple, index: int | None, source: str):
-    value = "0" if index is None else row[index]
+    # Only *_Upper is explicitly 0 in the original. Unselected series
+    # branches remain DBNull (empty), rather than being silently set to 0.
+    value = ("0" if key in ("d_Upper", "Dd_Upper") else None) if index is None else row[index]
     return {"name": key, "value": "" if value is None else str(value),
             "source": source}
 
