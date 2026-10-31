@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {STLLoader} from 'three/addons/loaders/STLLoader.js';
 import './rolling_workbench.css';
+import {initDrawingWorkbench} from './rolling_drawing.js';
 import {bearingForms, cageForms, cageChoices, defaultCageEnabled, buildAssemblyIndex, validateArtifact, requestFromFields, geometryIssues, scaleGeometryFields, describeCadError, ParameterInputError} from './rolling_manifest.js';
 
 const $ = id => document.getElementById(id);
@@ -279,6 +280,7 @@ async function generate(){
  }finally{if(version===token){controller=null;$('generate').disabled=!canGenerate();}}
 }
 $('generate').addEventListener('click',generate);
+initDrawingWorkbench(getParams);
 $('resetParams').addEventListener('click',()=>{
  renderFields($('parameters'),'param-',fields);
  $('cageEnabled').checked=defaultCageEnabled[selectedType()];

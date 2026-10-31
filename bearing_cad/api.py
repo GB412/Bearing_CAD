@@ -18,6 +18,7 @@ from urllib.parse import urlsplit
 
 from .artifacts import generate_bundle, verify_bundle
 from .contracts import ContractError, parse_request, MAX_ROLLING_ELEMENTS, MAX_CAD_DIMENSION_MM
+from .drawing_http import drawing_status, create_drawing, serve_drawing
 
 _MAX_BODY = 16 * 1024
 _MAX_JOBS = 128
@@ -29,13 +30,17 @@ _CONTENT_TYPES = {".step": "model/step", ".stl": "model/stl", ".json": "applicat
 
 
 def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"),
-                host: str = "127.0.0.1", static_root: Path | None = None) -> ThreadingHTTPServer:
+                host: str = "127.0.0.1", static_root: Path | None = None,
+                robas_resources: Path | None = None,
+                cadimport_bridge: Path | None = None) -> ThreadingHTTPServer:
     """Bind to IPv4 loopback only. No network deployment or implicit auth."""
     if host != "127.0.0.1":
         raise ValueError("CAD-V2 API only supports IPv4 loopback")
     root = Path(artifacts_root).resolve()
     root.mkdir(parents=True, exist_ok=True)
     static = Path(static_root).resolve(strict=True) if static_root is not None else None
+    robas_resources = Path(robas_resources).resolve() if robas_resources is not None else None
+    cadimport_bridge = Path(cadimport_bridge).resolve() if cadimport_bridge is not None else None
     if static is not None and not (static / "rolling.html").is_file():
         raise ValueError("Build rolling.html with npm run build before serving")
     jobs: OrderedDict[str, dict] = OrderedDict()
@@ -102,7 +107,8 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
             self.close_connection = True
             if not self._host_allowed():
                 return self._error(403, "HOST_FORBIDDEN", "Invalid loopback host")
-            if self._route() != "/api/v2/cad/jobs":
+            route = self._route()
+            if route not in ("/api/v2/cad/jobs", "/api/v2/cad/drawings"):
                 return self._error(404, "NOT_FOUND", "Unknown route")
             if not self._origin_allowed():
                 return self._error(403, "ORIGIN_FORBIDDEN", "A same-origin browser request is required")
@@ -132,6 +138,9 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
                                   object_pairs_hook=_no_duplicate_keys)
             except (ValueError, UnicodeError, json.JSONDecodeError):
                 return self._error(400, "INVALID_JSON", "Malformed JSON document")
+            if route == "/api/v2/cad/drawings":
+                return create_drawing(self, data, root, robas_resources,
+                                      cadimport_bridge, build_lock)
             try:
                 request = parse_request(data)
             except ContractError as error:
@@ -219,6 +228,10 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
                                            "supported_bearings": ["rolling.deep_groove_ball",
                                                                   "rolling.cylindrical_roller",
                                                                   "rolling.angular_contact_ball"]})
+            if route == "/api/v2/cad/drawings/status":
+                return drawing_status(self, robas_resources, cadimport_bridge)
+            if serve_drawing(self, route, root):
+                return
             match = _JOB_ROUTE.fullmatch(route or "")
             if match:
                 job_id = match.group(1)
@@ -278,8 +291,14 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8090)
     parser.add_argument("--artifacts", type=Path, default=Path("artifacts/cad-v2"))
     parser.add_argument("--static", type=Path, default=None, help="Vite dist directory for the V2 workbench")
+    parser.add_argument("--robas-resources", type=Path, default=None,
+                        help="Licensed original RoBAS_Resources directory")
+    parser.add_argument("--cadimport-bridge", type=Path, default=None,
+                        help="Windows x64 licensed CadImportBridge.exe")
     args = parser.parse_args()
-    server = make_server(port=args.port, artifacts_root=args.artifacts, static_root=args.static)
+    server = make_server(port=args.port, artifacts_root=args.artifacts,
+                         static_root=args.static, robas_resources=args.robas_resources,
+                         cadimport_bridge=args.cadimport_bridge)
     print(f"CAD-V2 API http://127.0.0.1:{server.server_port}/api/v2/cad/status", flush=True)
     try:
         server.serve_forever()

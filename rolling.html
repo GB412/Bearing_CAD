@@ -63,6 +63,38 @@
           <div class="notice" id="status" role="status" aria-live="polite">正在检查 CAD 引擎…</div>
         </div>
       </section>
+      <section class="panel" aria-label="RoBAS 二维图纸">
+        <div class="panel-header"><h2>二维图纸 · RoBAS 模板</h2><span>DXF × 4</span></div>
+        <div class="panel-body">
+          <p class="hint">按师兄原版 DWG 哑图及变量替换方式导出，不重新绘制轮廓。</p>
+          <label class="field">轴承型号
+            <input id="drawingModel" type="text" value="6208" maxlength="40" autocomplete="off">
+          </label>
+          <label class="field">精度等级
+            <select id="drawingAccuracy">
+              <option value="P0">P0</option><option value="P6">P6</option>
+              <option value="P5" selected>P5</option><option value="P4">P4</option><option value="P2">P2</option>
+            </select>
+          </label>
+          <label class="field">直径系列
+            <select id="drawingSeries">
+              <option value="0">0</option><option value="1">1</option>
+              <option value="2" selected>2</option><option value="3">3</option><option value="4">4</option>
+              <option value="7">7</option><option value="8">8</option><option value="9">9</option>
+            </select>
+          </label>
+          <label class="field">倒角 1（mm；可不填）
+            <input id="drawingChamfer1" type="number" min="0" step="any" placeholder="原 RoBAS 倒角值">
+          </label>
+          <label class="field">倒角 2（mm；可不填）
+            <input id="drawingChamfer2" type="number" min="0" step="any" placeholder="仅角接触 / 圆柱滚子">
+          </label>
+          <div class="buttonrow"><button id="generate2d" class="primary" disabled>生成原版模板二维图纸</button></div>
+          <div class="notice" id="drawingStatus" role="status" aria-live="polite">正在检查 RoBAS 出图引擎…</div>
+          <div class="downloads" id="drawingDownloads"></div>
+          <p class="hint">需本地 Windows + 已授权 CADImport + 原版 RoBAS 资源；未配置时三维功能不受影响。</p>
+        </div>
+      </section>
     </aside>
     <section class="mainpanel" aria-label="三维装配工作区">
       <div class="viewer-head">
