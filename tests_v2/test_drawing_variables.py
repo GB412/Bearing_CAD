@@ -88,3 +88,15 @@ def test_forbidden_or_unrecognised_data(mock_resources):
                           parameters=PARAMS,checked_values={"NOT_A_VARIABLE":"42"})
     with pytest.raises(DrawingDataError):
         bridge_values({"schema_version":"wrong","variables":[]})
+
+def test_robas_null_rows_become_blank_replacements(mock_resources):
+    """RoBAS DataRow DBNull.ToString() -> '' and every row participates."""
+    report = prepare_variables(resources=mock_resources,
+        bearing_type="rolling.deep_groove_ball", parameters=PARAMS,
+        model="6008", accuracy_class="P5")
+    rows = bridge_values(report)
+    assert len(rows) == len(FIELDS["rolling.deep_groove_ball"][1])
+    assert [row for row in rows if row["name"] == "Cr"] == [
+        {"name": "Cr", "value": ""}]
+    assert [row["value"] for row in rows if row["name"] == "Dw"] == ["8.2", "8.2"]
+    assert [row["name"] for row in rows] == FIELDS["rolling.deep_groove_ball"][1]
