@@ -68,3 +68,47 @@ def test_bad_values_rejected():
     with pytest.raises(DrawingDataError):
         apply_deep_groove_dimensions(report=report(["Cr"]),parameters=P,
                                    legacy_values="bad")
+
+
+def test_acb_lock_height_width_and_non_symmetric_cage():
+    from bearing_cad.drawing_legacy_dimensions import apply_angular_contact_dimensions
+    p={**P,"contact_angle_deg":25}
+    names=["Ri","Re","De","di","a","ae","ai","Dd2","d2","t_SK",
+           "t_SK_Upper","t_SK_Lower","T_","T_Lower","Dcp","C_",
+           "Dc","Dc_Lower","Bc","Bca","Bca_Lower","Deltac",
+           "Deltac_Upper","e_Upper","Cr","Cor","UNSET"]
+    old={"inner_groove_d_mm":54,"outer_groove_d_mm":56,
+         "inner_groove_position_mm":6,"outer_groove_position_mm":7,
+         "inner_race_groove_position_mm":6.5,"outer_sidewall_d_mm":60,
+         "inner_sidewall_d_mm":47,"lock_height_mm":.15,
+         "cage_pitch_d_mm":54,"cage_pocket_spacing_mm":15,
+         "cage_outer_d_mm":58,"cage_outer_d_tolerance_mm":.2,
+         "cage_width_mm":10,"cage_width_tolerance_mm":.1,
+         "cage_pocket_d_mm":8.5,"cage_pocket_d_upper_tolerance_mm":.05,
+         "cage_chamfer_upper_text":"——","dynamic_load_n":12600,
+         "static_load_n":12500}
+    r=apply_angular_contact_dimensions(report=report(names),parameters=p,legacy_values=old)
+    v={row["name"]:row["value"] for row in r["variables"]}
+    assert v["Ri"]=="4.20"
+    assert v["a"]=="6.0±0.03"  # RoBAS angular uses outside diameter.
+    assert v["ae"]=="7±0.03"
+    assert v["t_SK_Lower"]=="-0.02"
+    assert v["T_Lower"]=="-0.3"
+    assert v["Dcp"]=="54±0.015"
+    assert v["C_"]=="15±0.05"
+    assert v["Dc_Lower"]=="-0.2"
+    assert v["Bca"]=="5"
+    assert v["Bca_Lower"]=="-0.1"
+    assert v["Deltac_Upper"]=="0.05"
+    assert v["Cr"]=="12.60" and v["Cor"]=="12.50"
+    assert v["e_Upper"] is None and v["UNSET"] is None
+
+def test_acb_lock_height_breakpoints():
+    from bearing_cad.drawing_legacy_dimensions import lock_height_deviation,acb_width_deviation
+    assert lock_height_deviation(.07)=="-0.01"
+    assert lock_height_deviation(.1)=="-0.015"
+    assert lock_height_deviation(.29)=="-0.03"
+    assert lock_height_deviation(.5)=="-0.05"
+    assert acb_width_deviation(10)=="0.2"
+    assert acb_width_deviation(40)=="0.3"
+    assert acb_width_deviation(100)=="0.5"

@@ -18,7 +18,7 @@ import ezdxf
 from .drawing_variables import prepare_variables, bridge_values
 from .drawing_legacy_technical import technical_condition_rows, apply_technical_conditions
 from .drawing_legacy_chamfer import apply_robas_chamfer
-from .drawing_legacy_dimensions import apply_deep_groove_dimensions
+from .drawing_legacy_dimensions import apply_deep_groove_dimensions, apply_angular_contact_dimensions
 
 SHEETS = ("assembly", "outer_ring", "inner_ring", "cage")
 TEMPLATES = {
@@ -86,6 +86,9 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
                                checked_values=checked_values)
     if bearing_type == "rolling.deep_groove_ball":
         report = apply_deep_groove_dimensions(
+            report=report, parameters=parameters, legacy_values=legacy_values)
+    if bearing_type == "rolling.angular_contact_ball":
+        report = apply_angular_contact_dimensions(
             report=report, parameters=parameters, legacy_values=legacy_values)
     if chamfer1_mm is not None:
         report = apply_robas_chamfer(
