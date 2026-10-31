@@ -142,8 +142,16 @@ def prepare_variables(*, resources: Path, bearing_type: str,
 
 
 def bridge_values(report: dict) -> list[dict[str, str]]:
-    """Ordered non-null pairs, compatible with RoBAS's TEXT loop semantics."""
+    """Preserve every RoBAS DataTable row, including DBNull and duplicates.
+
+    In FrmMain.ChangeCADTexts, dtVariable.Rows[j][1].ToString() yields an
+    empty string for DBNull. Dropping that row changes the original output.
+    Do not deduplicate: the nested loops in RoBAS can replace text repeatedly.
+    """
     if report.get("schema_version") != "robas.drawing.variables.v1":
         raise DrawingDataError("Unsupported variable contract")
-    return [{"name": row["name"], "value": row["value"]}
-            for row in report["variables"] if row["value"] is not None]
+    values = []
+    for row in report["variables"]:
+        value = row["value"]
+        values.append({"name": row["name"], "value": "" if value is None else str(value)})
+    return values
