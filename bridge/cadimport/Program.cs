@@ -13,7 +13,7 @@ namespace BearingCad.CadImportBridge
     {
         private static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
 
-        private sealed class Replacement
+        public sealed class Replacement
         {
             public string name { get; set; }
             public string value { get; set; }
