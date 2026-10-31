@@ -124,3 +124,57 @@ def apply_deep_groove_dimensions(*,report,parameters,legacy_values=None):
     for k,key in (("Cr","dynamic_load_n"),("Cor","static_load_n")):
         if key in old:v[k]=f"{number(old[key],key)/1000:.2f}"
     return overlay(report,v,"robas_dgb_SetCADTextValue")
+
+
+def lock_height_deviation(t):
+    """AngularContactBallBearing.DetermineLockHeightDeviation."""
+    v=number(t,"lock height")
+    return "-"+text(lookup(v,((.07,.01),(.1,.015),(.2,.02),(.29,.03),(.39,.04),(math.inf,.05))))
+
+def acb_width_deviation(bore_mm):
+    """AngularContactBallBearing.DetermineBearingWidthDeviation."""
+    return text(lookup(number(bore_mm,"bore"),((10,.2),(80,.3),(math.inf,.5))))
+
+def apply_angular_contact_dimensions(*,report,parameters,legacy_values=None):
+    """Original ACB variable TEXT, including asymmetric groove and cage.
+
+    The RoBAS model is not the current OCCT model; groove positions and
+    shoulder values which are not in the CAD request are explicit inputs.
+    """
+    old=legacy_values or {}
+    if not isinstance(old,dict): raise DrawingDataError("legacy_values must be a mapping")
+    v=common_dimensions(parameters,old,"rolling.angular_contact_ball")
+    pt=groove_position_tolerance(parameters["outside_d_mm"],angular=True)
+    for label,key in (("ae","outer_groove_position_mm"),("ai","inner_race_groove_position_mm")):
+        if key in old:v[label]=text(number(old[key],key))+"±"+text(pt)
+    if "lock_height_mm" in old:
+        height=number(old["lock_height_mm"],"lock height")
+        v.update(t_SK=text(height),t_SK_Upper="0",t_SK_Lower=lock_height_deviation(height))
+    v.update(T_=text(number(parameters["width_mm"],"width")),T_Upper="0",
+             T_Lower="-"+acb_width_deviation(parameters["bore_d_mm"]))
+    if "cage_pitch_d_mm" in old:
+        v["Dcp"]=text(number(old["cage_pitch_d_mm"],"pitch"))+"±0.015"
+    if "cage_pocket_spacing_mm" in old:
+        v["C_"]=text(number(old["cage_pocket_spacing_mm"],"spacing"))+"±0.05"
+    for label,key in (("Dc","cage_outer_d_mm"),("Dc1","cage_inner_d_mm"),
+                      ("Deltac","cage_pocket_d_mm"),("Bc","cage_width_mm"),
+                      ("e_","cage_chamfer_mm")):
+        if key in old:v[label]=text(number(old[key],key))
+    if "cage_width_mm" in old:
+        v["Bca"]=text(number(old["cage_width_mm"],"width")/2)
+    for label,key in (("Dc_Lower","cage_outer_d_tolerance_mm"),
+                      ("Dc1_Lower","cage_inner_d_tolerance_mm"),
+                      ("Bca_Lower","cage_width_tolerance_mm"),
+                      ("Bc_Lower","cage_width_tolerance_mm")):
+        if key in old:v[label]="-"+text(number(old[key],key))
+    for label in ("Dc","Dc1","Bca","Bc"):
+        if label in v:v[label+"_Upper"]="0"
+    if "cage_pocket_d_upper_tolerance_mm" in old:
+        v["Deltac_Upper"]=text(number(old["cage_pocket_d_upper_tolerance_mm"],"pocket tolerance"))
+        v["Deltac_Lower"]="0"
+    for label,key in (("e_Upper","cage_chamfer_upper_text"),("e_Lower","cage_chamfer_lower_text")):
+        if key in old and old[key]!="——":
+            v[label]=str(old[key])
+    for label,key in (("Cr","dynamic_load_n"),("Cor","static_load_n")):
+        if key in old:v[label]=f"{number(old[key],key)/1000:.2f}"
+    return overlay(report,v,"robas_acb_SetCADTextValue")
