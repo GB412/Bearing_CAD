@@ -1,10 +1,9 @@
-// Minimal faithful RoBAS DWG -> CADText exact match -> DXF probe.
+// Minimal faithful RoBAS DWG -> CADText exact match -> DXF bridge.
 // Source: RoBAS/Frm/FrmMain.cs LoadCadAndChangeText, ChangeCADTexts.
-// Requires licensed CADImport 14.1.0.40930 on Windows .NET Framework 4.5.2.
+// Windows .NET Framework 4.5.2, licensed CADImport 14.1.0.40930 required.
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Web.Script.Serialization;
 using CADImport;
 
@@ -14,95 +13,121 @@ namespace BearingCad.CadImportBridge
     {
         private static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
 
+        private sealed class Replacement
+        {
+            public string name { get; set; }
+            public string value { get; set; }
+        }
+
         private static int Main(string[] args)
         {
             try
             {
-                if (args.Length != 2 && args.Length != 5)
+                bool inspect = args.Length == 2 && args[0] == "inspect";
+                bool replace = args.Length == 5 && args[0] == "replace";
+                bool batch = args.Length == 4 && args[0] == "batch";
+                if (!inspect && !replace && !batch)
                     throw new ArgumentException(
-                        "Usage: CadImportBridge.exe inspect <original.dwg> OR replace <original.dwg> <result.dxf> <key> <value>");
+                        "Usage: inspect <source.dwg> | replace <source.dwg> <out.dxf> <key> <value> | batch <source.dwg> <out.dxf> <variables.json>");
 
-                bool replace = args[0] == "replace" && args.Length == 5;
-                bool inspect = args[0] == "inspect" && args.Length == 2;
-                if (!replace && !inspect)
-                    throw new ArgumentException("Unsupported mode. Use inspect or replace.");
-
-                string sourcePath = Path.GetFullPath(args[1]);
-                if (!File.Exists(sourcePath) ||
-                    !String.Equals(Path.GetExtension(sourcePath), ".dwg", StringComparison.OrdinalIgnoreCase))
-                    throw new ArgumentException("Source must be an existing DWG template.");
-
-                string destination = null;
-                string key = null;
-                string value = null;
-                if (replace)
+                string source = Path.GetFullPath(args[1]);
+                if (!File.Exists(source) ||
+                    !String.Equals(Path.GetExtension(source), ".dwg", StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException("Source must be an existing DWG.");
+                string output = null;
+                List<Replacement> values = new List<Replacement>();
+                if (!inspect)
                 {
-                    destination = Path.GetFullPath(args[2]);
-                    key = args[3];
-                    value = args[4];
-                    if (String.IsNullOrWhiteSpace(key) || String.IsNullOrEmpty(value) ||
-                        key.Contains("\r") || key.Contains("\n") ||
-                        value.Contains("\r") || value.Contains("\n"))
-                        throw new ArgumentException("Key and replacement must be non-empty single-line text.");
-                    if (String.Equals(sourcePath, destination, StringComparison.OrdinalIgnoreCase) ||
-                        !String.Equals(Path.GetExtension(destination), ".dxf", StringComparison.OrdinalIgnoreCase) ||
-                        File.Exists(destination) || !Directory.Exists(Path.GetDirectoryName(destination)))
-                        throw new ArgumentException("Output must be a new .dxf in an existing directory, different from DWG.");
-                }
-
-                CADImage image = CADImage.CreateImageByExtension(sourcePath);
-                image.LoadFromFile(sourcePath);
-                if (image.CurrentLayout == null)
-                    throw new InvalidDataException("CADImport returned no CurrentLayout.");
-
-                int total = image.CurrentLayout.Count;
-                int textEntities = 0;
-                int replaced = 0;
-                List<string> originalTexts = new List<string>();
-                for (int i = 0; i < total; ++i)
-                {
-                    var entity = image.CurrentLayout.Entities[i];
-                    if (entity.EntType != EntityType.Text)
-                        continue; // Original RoBAS semantics: no MText, ATTRIB, block expansion.
-                    ++textEntities;
-                    CADText cadText = (CADText)entity;
-                    string original = cadText.Text ?? "";
-                    originalTexts.Add(original);
-                    if (replace && String.Equals(original, key, StringComparison.Ordinal))
+                    output = Path.GetFullPath(args[2]);
+                    if (String.Equals(source, output, StringComparison.OrdinalIgnoreCase) ||
+                        !String.Equals(Path.GetExtension(output), ".dxf", StringComparison.OrdinalIgnoreCase) ||
+                        File.Exists(output) || !Directory.Exists(Path.GetDirectoryName(output)))
+                        throw new ArgumentException("Output must be a new DXF beside an existing directory, not the source file.");
+                    if (replace)
+                        values.Add(new Replacement { name = args[3], value = args[4] });
+                    else
                     {
-                        cadText.Text = value;
-                        ++replaced;
+                        string file = Path.GetFullPath(args[3]);
+                        if (!File.Exists(file) ||
+                            !String.Equals(Path.GetExtension(file), ".json", StringComparison.OrdinalIgnoreCase))
+                            throw new ArgumentException("Variable mapping must be an existing JSON file.");
+                        Json.MaxJsonLength = 16 * 1024 * 1024;
+                        values = Json.Deserialize<List<Replacement>>(File.ReadAllText(file));
+                    }
+                    if (values == null || values.Count == 0 || values.Count > 2000)
+                        throw new ArgumentException("Variable mapping must contain 1..2000 rows.");
+                    Dictionary<string, string> seen = new Dictionary<string, string>(StringComparer.Ordinal);
+                    foreach (Replacement value in values)
+                    {
+                        if (value == null || String.IsNullOrWhiteSpace(value.name) ||
+                            value.value == null || value.name.Length > 256 || value.value.Length > 4096 ||
+                            value.name.IndexOfAny(new [] { '\r', '\n', '\0' }) >= 0 ||
+                            value.value.IndexOfAny(new [] { '\r', '\n', '\0' }) >= 0)
+                            throw new ArgumentException("Mapping entries must have safe, single-line name/value pairs.");
+                        string previous;
+                        if (seen.TryGetValue(value.name, out previous) && previous != value.value)
+                            throw new ArgumentException("Conflicting duplicate variable: " + value.name);
+                        seen[value.name] = value.value;
                     }
                 }
 
-                if (replace)
-                {
-                    if (replaced == 0)
-                        throw new InvalidDataException("No CADText exactly matched the requested key: " + key);
-                    CADImport.Export.DirectCADtoDXF.CADtoDXF exporter =
-                        new CADImport.Export.DirectCADtoDXF.CADtoDXF(image);
-                    exporter.SaveToFile(destination);
-                    if (!File.Exists(destination) || new FileInfo(destination).Length == 0)
-                        throw new InvalidDataException("Exporter returned without creating a non-empty DXF.");
-                }
+                CADImage image = CADImage.CreateImageByExtension(source);
+                image.LoadFromFile(source);
+                if (image.CurrentLayout == null)
+                    throw new InvalidDataException("CADImport returned no CurrentLayout.");
 
+                int count = image.CurrentLayout.Count;
+                int texts = 0;
+                int changed = 0;
+                List<string> originalTexts = new List<string>();
+                Dictionary<string, int> matched = new Dictionary<string, int>(StringComparer.Ordinal);
+                for (int i = 0; i < count; i++)
+                {
+                    var entity = image.CurrentLayout.Entities[i];
+                    if (entity.EntType != EntityType.Text)
+                        continue; // Deliberately keep exact RoBAS scope (no MTEXT/attributes).
+                    texts++;
+                    CADText t = (CADText)entity;
+                    originalTexts.Add(t.Text ?? "");
+                    // Original RoBAS rechecks the text after each assignment.
+                    foreach (Replacement pair in values)
+                    {
+                        if (String.Equals(t.Text, pair.name, StringComparison.Ordinal))
+                        {
+                            t.Text = pair.value;
+                            changed++;
+                            matched[pair.name] = matched.ContainsKey(pair.name) ? matched[pair.name] + 1 : 1;
+                        }
+                    }
+                }
+                if (!inspect)
+                {
+                    if (changed == 0)
+                        throw new InvalidDataException("No source DWG CADText matched the supplied variables.");
+                    CADImport.Export.DirectCADtoDXF.CADtoDXF export =
+                        new CADImport.Export.DirectCADtoDXF.CADtoDXF(image);
+                    export.SaveToFile(output);
+                    if (!File.Exists(output) || new FileInfo(output).Length == 0)
+                        throw new InvalidDataException("CADImport failed to produce a nonempty DXF.");
+                }
                 Dictionary<string, object> report = new Dictionary<string, object>();
-                report["mode"] = inspect ? "inspect" : "replace";
-                report["source"] = sourcePath;
-                report["output"] = destination;
-                report["layout_entity_count"] = total;
-                report["text_entity_count"] = textEntities;
-                report["non_text_entity_count"] = total - textEntities;
-                report["exact_match_count"] = replaced;
-                report["target_key"] = key;
+                report["mode"] = inspect ? "inspect" : (replace ? "replace" : "batch");
+                report["source"] = source;
+                report["output"] = output;
+                report["layout_entity_count"] = count;
+                report["text_entity_count"] = texts;
+                report["non_text_entity_count"] = count - texts;
+                report["exact_match_count"] = changed;
+                report["target_key"] = replace ? args[3] : null;
+                report["matched_keys"] = matched;
                 report["texts"] = originalTexts;
                 report["status"] = "CADIMPORT_COMPLETED_NOT_YET_DXF_AUDITED";
                 Console.WriteLine(Json.Serialize(report));
                 return 0;
             }
-            catch (Exception ex)
+            catch (Exception error)
             {
-                Console.Error.WriteLine("CADIMPORT_SPIKE_FAILED: " + ex);
+                Console.Error.WriteLine("CADIMPORT_SPIKE_FAILED: " + error);
                 return 2;
             }
         }
