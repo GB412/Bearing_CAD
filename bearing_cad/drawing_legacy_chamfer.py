@@ -89,8 +89,6 @@ def apply_robas_chamfer(*, report: dict, resources: Path, bearing_type: str,
         if second is not None:
             for prefix, index in _SECONDARY:
                 sources[prefix] = (second, index)
-            for prefix, index in _EXTRA_ROLLER:
-                sources[prefix] = (first, index)
         mapping = {}
     for target in values:
         key = target["name"]
