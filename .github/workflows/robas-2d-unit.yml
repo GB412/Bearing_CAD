@@ -21,4 +21,4 @@ jobs:
           python -m pip install pytest==8.3.5 ezdxf==1.4.2
       - name: Run RoBAS 2D domain and DXF reference tests
         run: |
-          python -m pytest -q tests_v2/test_drawing_variables.py tests_v2/test_drawing_runner.py tests_v2/test_drawing_reference.py tests_v2/test_drawing_standards.py
+          python -m pytest -q tests_v2/test_drawing_variables.py tests_v2/test_drawing_runner.py tests_v2/test_drawing_reference.py tests_v2/test_drawing_standards.py tests_v2/test_drawing_legacy_technical.py
