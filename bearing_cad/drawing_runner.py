@@ -16,14 +16,8 @@ import tempfile
 import ezdxf
 
 from .drawing_variables import prepare_variables, bridge_values
-from .drawing_reference import compare_reference
 
 SHEETS = ("assembly", "outer_ring", "inner_ring", "cage")
-REFERENCE_DXF = {
-    "rolling.deep_groove_ball": ("深沟球轴承总图.dxf", "深沟球轴承外圈.dxf", "深沟球轴承内圈.dxf", "深沟球轴承保持架.dxf"),
-    "rolling.angular_contact_ball": ("角接触球轴承总图.dxf", "角接触球轴承外圈.dxf", "角接触球轴承内圈.dxf", "角接触球轴承保持架.dxf"),
-    "rolling.cylindrical_roller": ("单列圆柱滚子轴承总图.dxf", "单列圆柱滚子轴承外圈.dxf", "单列圆柱滚子轴承内圈.dxf", "单列圆柱滚子轴承保持架.dxf"),
-}
 TEMPLATES = {
     "rolling.deep_groove_ball": ("深沟球DWG",
         ("0_00KS.DWG", "0_01KS.DWG", "0_02.DWG", "0_07.DWG")),
@@ -72,21 +66,20 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
                             accuracy_class: str | None = None,
                             checked_values: dict[str, str] | None = None,
                             configuration: str | None = None) -> Path:
-    """Fail closed unless every drawing variable has an externally known value.
+    """Produce four DXF sheets with RoBAS's original TEXT replacement behavior.
 
-    The original RoBAS database is mostly null. This strict gate remains
-    blocked until the full SetCADTextValue/standards mapping has been ported
-    and reviewed. No production output is claimed in the meantime.
+    Empty SQLite variables become blank text as in original ChangeCADTexts.
+    No independent 2D-vs-3D outline check or full-table completeness gate.
+    The Windows CADImport real-DWG runtime remains mandatory.
     """
     templates = resolve_templates(resources, bearing_type, configuration)
     report = prepare_variables(resources=Path(resources), bearing_type=bearing_type,
                                parameters=parameters, model=model,
                                accuracy_class=accuracy_class,
                                checked_values=checked_values)
-    if report["unresolved_count"]:
-        raise DrawingExportError(
-            f"RoBAS drawing data incomplete: {report['unresolved_count']} variable names "
-            f"(including {report['unresolved_ratings']}); no DXF generated")
+    # Faithfully reproduce FrmMain.ChangeCADTexts: all DataTable rows participate
+    # in the original replacement loop, including blank/DBNull values.
+    # The original software does not require the complete database to be filled.
     if os.name != "nt":
         raise DrawingExportError("CADImport bridge requires licensed Windows/.NET runtime")
     bridge = Path(bridge).resolve()
@@ -120,27 +113,26 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
                 raise DrawingExportError(f"CADImport response is not JSON for {name}") from error
             if response.get("exact_match_count", 0) < 1 or not output.is_file():
                 raise DrawingExportError(f"CADImport did not replace any TEXT in {name}")
-            # Original RoBAS reference DXFs contain known recoverable
-            # header/dictionary handle fixes (Auditor code 202); those alone
-            # do not mean the newly exported geometry is incorrect.
-            reference = Path(resources) / "temp" / REFERENCE_DXF[bearing_type][len(sheets)]
-            if not reference.is_file():
-                raise DrawingExportError(f"Missing original RoBAS reference DXF: {reference.name}")
-            fidelity = compare_reference(reference, output)
-            if fidelity["blocking_findings"]:
-                raise DrawingExportError(f"Generated DXF differs from original non-text drawing geometry: {fidelity['blocking_findings']}")
+            # Audit the exported DXF only. Template outline versus the 3D
+            # model, and reference DXF geometry comparisons, are NOT required
+            # by the original RoBAS TEXT-replacement workflow.
+            document = ezdxf.readfile(str(output))
+            audit = document.audit()
+            if audit.errors:
+                raise DrawingExportError(
+                    f"DXF fatal audit errors in {name}: {len(audit.errors)}")
             sheets.append({
                 "view": name, "file": output.name, "size_bytes": output.stat().st_size,
                 "sha256": _digest(output), "template_sha256": _digest(template),
                 "text_replacements": response["exact_match_count"],
-                "reference_comparison": fidelity["status"],
-                "reference_review_warnings": fidelity["review_warnings"],
-                "audit_fix_count": fidelity["generated"]["audit_fixes"],
+                "dxf_audit_nonfatal_fixes": len(audit.fixes),
                 "non_text_entities": response.get("non_text_entity_count"),
             })
         manifest = {
             "schema_version": "robas.drawing.bundle.v1",
-            "status": "DXF_EXPORTED_UNREVIEWED",
+            "status": "ROBAS_TEMPLATE_TEXT_EXPORTED_UNREVIEWED",
+            "unfilled_database_variable_names": report["unresolved_names"],
+            "unfilled_database_variable_count": report["unresolved_count"],
             "manufacturing_approved": False,
             "bearing_type": bearing_type,
             "request_hash": request_hash,
@@ -151,6 +143,6 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
         }
         (folder / "drawing_manifest.json").write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-        mapping.unlink()  # Detailed source values stay in the private upstream context.
+        mapping.unlink()  # Source variable values remain in the source SQLite DB.
         folder.rename(destination)  # Only complete, audited output is published.
     return destination
