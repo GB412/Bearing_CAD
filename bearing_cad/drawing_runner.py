@@ -17,6 +17,7 @@ import ezdxf
 
 from .drawing_variables import prepare_variables, bridge_values
 from .drawing_legacy_technical import technical_condition_rows, apply_technical_conditions
+from .drawing_legacy_chamfer import apply_robas_chamfer
 
 SHEETS = ("assembly", "outer_ring", "inner_ring", "cage")
 TEMPLATES = {
@@ -67,7 +68,9 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
                             accuracy_class: str | None = None,
                             checked_values: dict[str, str] | None = None,
                             configuration: str | None = None,
-                            diameter_series: str | None = None) -> Path:
+                            diameter_series: str | None = None,
+                            chamfer1_mm: float | None = None,
+                            chamfer2_mm: float | None = None) -> Path:
     """Produce four DXF sheets with RoBAS's original TEXT replacement behavior.
 
     Empty SQLite variables become blank text as in original ChangeCADTexts.
@@ -79,6 +82,11 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
                                parameters=parameters, model=model,
                                accuracy_class=accuracy_class,
                                checked_values=checked_values)
+    if chamfer1_mm is not None:
+        report = apply_robas_chamfer(
+            report=report, resources=Path(resources),
+            bearing_type=bearing_type,
+            chamfer1_mm=chamfer1_mm, chamfer2_mm=chamfer2_mm)
     if diameter_series is not None:
         if accuracy_class is None:
             raise DrawingExportError("RoBAS technical conditions require accuracy_class")
@@ -147,6 +155,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
             "unfilled_database_variable_count": report["unresolved_count"],
             "technical_condition_rows": report.get("technical_rows_applied", 0),
             "diameter_series": diameter_series,
+            "chamfer_lookup_warning": report.get("chamfer_lookup_warning"),
             "accuracy_class": accuracy_class,
             "manufacturing_approved": False,
             "bearing_type": bearing_type,
