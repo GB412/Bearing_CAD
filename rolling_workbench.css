@@ -459,7 +459,7 @@ footer a:hover { text-decoration: underline; }
   border-radius: 50%;
   background: #a7b4ba;
 }
-.drawing-head-status:not(.is-error):has(+ *) .status-dot {
+.drawing-head-status.is-ready .status-dot {
   background: #5b9b86;
 }
 .drawing-head-status.is-error {
