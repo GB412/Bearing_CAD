@@ -5,22 +5,22 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#f3f5f6">
   <link rel="icon" href="data:,">
-  <title>滚动轴承三维工作台 | BearingCAD</title>
+  <title>滚动轴承 CAD 工作台 | BearingCAD</title>
 </head>
 <body>
   <header class="top">
     <div class="brand">
       <span class="brand-symbol" aria-hidden="true"></span>
       <div>
-        <span class="kicker">BEARINGCAD · 3D WORKBENCH</span>
-        <h1>滚动轴承三维工作台</h1>
-        <p>参数化实体建模 · 三维装配 · STEP / STL</p>
+        <span class="kicker">BEARINGCAD · ROLLING BEARING CAD</span>
+        <h1>滚动轴承 CAD 工作台</h1>
+        <p>参数化三维建模 · 原版二维工程图 · STEP / DXF</p>
       </div>
     </div>
     <div class="pill" id="connection" data-state="connecting" role="status">正在连接本地 CAD 引擎</div>
   </header>
   <main class="workspace">
-    <aside class="side">
+    <aside class="side" aria-label="轴承设计控制区">
       <section class="panel" aria-label="结构参数">
         <div class="panel-header"><h2>模型参数</h2><span>单位 mm</span></div>
         <div class="panel-body">
@@ -63,79 +63,151 @@
           <div class="notice" id="status" role="status" aria-live="polite">正在检查 CAD 引擎…</div>
         </div>
       </section>
+
       <section class="panel" aria-label="RoBAS 二维图纸">
-        <div class="panel-header"><h2>二维图纸 · RoBAS 模板</h2><span>SVG 预览 · DXF × 4</span></div>
+        <div class="panel-header"><h2>二维图纸 · RoBAS 模板</h2><span>SVG 预览 · DXF 输出</span></div>
         <div class="panel-body">
-          <p class="hint">按师兄原版 DWG 哑图及变量替换方式导出；下方 SVG 仅用于网页预览，DXF 才是下载文件。</p>
-          <label class="field">轴承型号
-            <input id="drawingModel" type="text" value="6208" maxlength="40" autocomplete="off">
-          </label>
-          <label class="field">精度等级
-            <select id="drawingAccuracy">
-              <option value="P0">P0</option><option value="P6">P6</option>
-              <option value="P5" selected>P5</option><option value="P4">P4</option><option value="P2">P2</option>
-            </select>
-          </label>
-          <label class="field">直径系列
-            <select id="drawingSeries">
-              <option value="0">0</option><option value="1">1</option>
-              <option value="2" selected>2</option><option value="3">3</option><option value="4">4</option>
-              <option value="7">7</option><option value="8">8</option><option value="9">9</option>
-            </select>
-          </label>
-          <label class="field">倒角 1（mm；可不填）
-            <input id="drawingChamfer1" type="number" min="0" step="any" placeholder="原 RoBAS 倒角值">
-          </label>
-          <label class="field">倒角 2（mm；可不填）
-            <input id="drawingChamfer2" type="number" min="0" step="any" placeholder="仅角接触 / 圆柱滚子">
-          </label>
-          <div class="buttonrow"><button id="generate2d" class="primary" disabled>生成原版模板二维图纸</button></div>
-          <div class="notice" id="drawingStatus" role="status" aria-live="polite">正在检查 RoBAS 出图引擎…</div>
-          <div class="downloads" id="drawingDownloads"></div>
-          <p class="hint">需本地 Windows + 已授权 CADImport + 原版 RoBAS 资源；未配置时三维功能不受影响。</p>
+          <p class="hint drawing-intro">沿用原版 DWG 模板和变量替换流程。生成后可在右侧工作区查看 SVG 预览并下载 DXF。</p>
+          <div id="drawingControls">
+            <label class="field">轴承型号
+              <input id="drawingModel" type="text" value="6208" maxlength="40" autocomplete="off">
+            </label>
+            <div class="drawing-fields">
+              <label class="field">精度等级
+                <select id="drawingAccuracy">
+                  <option value="P0">P0</option><option value="P6">P6</option>
+                  <option value="P5" selected>P5</option><option value="P4">P4</option><option value="P2">P2</option>
+                </select>
+              </label>
+              <label class="field">直径系列
+                <select id="drawingSeries">
+                  <option value="0">0</option><option value="1">1</option>
+                  <option value="2" selected>2</option><option value="3">3</option><option value="4">4</option>
+                  <option value="7">7</option><option value="8">8</option><option value="9">9</option>
+                </select>
+              </label>
+            </div>
+            <div class="drawing-fields">
+              <label class="field">倒角 1（mm）
+                <input id="drawingChamfer1" type="number" min="0" step="any" placeholder="原 RoBAS 倒角值">
+              </label>
+              <label class="field">倒角 2（mm）
+                <input id="drawingChamfer2" type="number" min="0" step="any" placeholder="按轴承类型选填">
+              </label>
+            </div>
+          </div>
+          <div class="buttonrow drawing-buttonrow">
+            <button id="generate2d" class="primary" disabled>生成原版模板二维图纸</button>
+          </div>
+          <div class="notice drawing-status" id="drawingStatus" role="status" aria-live="polite">正在检查 RoBAS 出图引擎…</div>
+          <p class="hint drawing-footnote">图纸预览用于查看；DXF 为实际交付文件。图纸仍需按工程要求审核，不代表制造批准。</p>
         </div>
       </section>
     </aside>
-    <section class="mainpanel" aria-label="三维装配工作区">
-      <div class="viewer-head">
-        <div><h2>三维装配</h2><p id="modelLabel">尚未生成模型</p></div>
-        <span class="tag">OCCT / B-REP</span>
+
+    <section class="mainpanel" aria-label="CAD 主工作区">
+      <div class="workspace-tabs" role="tablist" aria-label="工作区视图">
+        <button id="workspace3dTab" class="workspace-tab is-active" type="button" role="tab"
+                aria-selected="true" aria-controls="modelWorkspace">
+          <span class="workspace-tab-icon">3D</span>
+          <span><strong>三维模型</strong><small>装配与几何检查</small></span>
+        </button>
+        <button id="workspace2dTab" class="workspace-tab" type="button" role="tab"
+                aria-selected="false" aria-controls="drawingWorkspace">
+          <span class="workspace-tab-icon">2D</span>
+          <span><strong>二维图纸</strong><small id="drawingTabCount">等待生成</small></span>
+        </button>
       </div>
-      <div class="stage" id="viewport">
-        <div class="stage-overlay" id="emptyStage">
-          模型将在此显示
-          <span>选择轴承类型和尺寸后，点击“生成三维模型”</span>
+
+      <section id="modelWorkspace" class="workspace-view" role="tabpanel" aria-labelledby="workspace3dTab">
+        <div class="viewer-head">
+          <div><h2>三维装配预览</h2><p id="modelLabel">尚未生成模型</p></div>
+          <span class="tag">OCCT / B-REP</span>
         </div>
-        <div class="material-legend" aria-label="零件颜色说明">
-          <span class="legend-item"><i class="swatch outer"></i>外圈</span>
-          <span class="legend-item"><i class="swatch inner"></i>内圈</span>
-          <span class="legend-item"><i class="swatch rolling"></i>滚动体</span>
-          <span class="legend-item"><i class="swatch cage"></i>保持架</span>
-          <span class="legend-item"><i class="swatch rib"></i>挡圈</span>
-          <span class="legend-item"><i class="swatch rivet"></i>铆钉</span>
+        <div class="stage" id="viewport">
+          <div class="stage-overlay" id="emptyStage">
+            模型将在此显示
+            <span>选择轴承类型和尺寸后，点击“生成三维模型”</span>
+          </div>
+          <div class="material-legend" aria-label="零件颜色说明">
+            <span class="legend-item"><i class="swatch outer"></i>外圈</span>
+            <span class="legend-item"><i class="swatch inner"></i>内圈</span>
+            <span class="legend-item"><i class="swatch rolling"></i>滚动体</span>
+            <span class="legend-item"><i class="swatch cage"></i>保持架</span>
+            <span class="legend-item"><i class="swatch rib"></i>挡圈</span>
+            <span class="legend-item"><i class="swatch rivet"></i>铆钉</span>
+          </div>
         </div>
-      </div>
-      <div class="toolbar">
-        <label><input type="checkbox" id="cutaway"> 剖切视图</label>
-        <label><input type="checkbox" id="transparent"> 透明显示</label>
-        <label>爆炸距离 <input id="explode" type="range" min="0" max="100" value="0"></label>
-        <button id="viewReset" class="secondary">复位视角</button>
-      </div>
-      <div class="lower">
-        <section class="pane">
-          <div class="pane-title"><h3>装配结构</h3><span id="partCount">0 个实例</span></div>
-          <div id="parts" class="partlist"><p class="muted">生成模型后显示零件</p></div>
-        </section>
-        <section class="pane">
-          <div class="pane-title"><h3>导出文件</h3><span id="quality">未验证</span></div>
-          <div id="downloads" class="downloads"><p class="muted">暂无可下载文件</p></div>
-          <p class="footnote" id="provenance">三维模型需进一步进行专业设计和制造校核。</p>
-        </section>
-      </div>
+        <div class="toolbar">
+          <label><input type="checkbox" id="cutaway"> 剖切视图</label>
+          <label><input type="checkbox" id="transparent"> 透明显示</label>
+          <label>爆炸距离 <input id="explode" type="range" min="0" max="100" value="0"></label>
+          <button id="viewReset" class="secondary">复位视角</button>
+        </div>
+        <div class="lower">
+          <section class="pane">
+            <div class="pane-title"><h3>装配结构</h3><span id="partCount">0 个实例</span></div>
+            <div id="parts" class="partlist"><p class="muted">生成模型后显示零件</p></div>
+          </section>
+          <section class="pane">
+            <div class="pane-title"><h3>导出文件</h3><span id="quality">未验证</span></div>
+            <div id="downloads" class="downloads"><p class="muted">暂无可下载文件</p></div>
+            <p class="footnote" id="provenance">三维模型需进一步进行专业设计和制造校核。</p>
+          </section>
+        </div>
+      </section>
+
+      <section id="drawingWorkspace" class="workspace-view drawing-workspace" role="tabpanel"
+               aria-labelledby="workspace2dTab" hidden>
+        <div class="drawing-viewer-head">
+          <div class="drawing-viewer-title">
+            <span class="drawing-eyebrow">ROBAS · ORIGINAL DWG TEMPLATE</span>
+            <h2>二维工程图预览</h2>
+            <p id="drawingWorkspaceSubtitle">生成图纸后，在这里查看四张原版模板图纸。</p>
+          </div>
+          <div class="drawing-head-status" id="drawingWorkspaceStatus" role="status" aria-live="polite">
+            <span class="status-dot"></span>等待生成
+          </div>
+        </div>
+
+        <div class="drawing-toolbar">
+          <div id="drawingSheetTabs" class="drawing-sheet-tabs" role="tablist" aria-label="选择图纸">
+            <span class="drawing-tabs-placeholder">生成成功后显示图纸列表</span>
+          </div>
+          <div class="drawing-zoom-tools" aria-label="预览缩放控制">
+            <button id="drawingZoomOut" type="button" class="icon-button" aria-label="缩小预览" title="缩小">−</button>
+            <span id="drawingZoomLabel" class="zoom-label">适应窗口</span>
+            <button id="drawingZoomIn" type="button" class="icon-button" aria-label="放大预览" title="放大">+</button>
+            <button id="drawingFit" type="button" class="fit-button">适应窗口</button>
+          </div>
+        </div>
+
+        <div id="drawingPreviewStage" class="drawing-preview-stage" aria-label="二维图纸预览画布">
+          <div id="drawingPreviewEmpty" class="drawing-preview-empty">
+            <div class="drawing-empty-mark" aria-hidden="true"><span>DWG</span><i>↗</i></div>
+            <strong id="drawingPreviewEmptyTitle">暂无二维图纸</strong>
+            <span id="drawingPreviewEmptyText">请在左侧填写轴承图纸参数，然后生成原版模板二维图纸。</span>
+          </div>
+          <img id="drawingPreviewImage" alt="原版 DWG 模板 SVG 预览" hidden draggable="false">
+          <div class="drawing-canvas-hint" id="drawingCanvasHint" hidden>滚轮缩放 · 放大后拖动平移</div>
+        </div>
+
+        <div class="drawing-meta-bar">
+          <div class="drawing-meta">
+            <span class="drawing-meta-kicker">当前图纸</span>
+            <strong id="drawingSheetTitle">尚未选择图纸</strong>
+            <span id="drawingSheetFile">生成后显示 DXF 文件名</span>
+          </div>
+          <div class="drawing-meta-actions">
+            <span class="drawing-output-note">SVG 网页预览 · DXF 原始交付</span>
+            <a id="drawingDownloadCurrent" class="drawing-download-current" href="#" hidden>下载当前 DXF <span aria-hidden="true">↓</span></a>
+          </div>
+        </div>
+      </section>
     </section>
   </main>
   <footer>
-    <span>BearingCAD · 本地工程建模工作台 · 非制造批准模型</span>
+    <span>BearingCAD · 本地工程设计工作台 · 非制造批准模型</span>
     <a href="/api/v2/cad/status">查看 CAD 服务状态</a>
   </footer>
   <script type="module" src="./rolling_workbench.js"></script>

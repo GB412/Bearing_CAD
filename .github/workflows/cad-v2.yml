@@ -44,6 +44,10 @@ jobs:
         run: npm run build
       - name: Ensure V2 HTML is emitted
         run: test -s dist/rolling.html
+      - name: Install Chromium for rolling workbench browser regressions
+        run: npx playwright install --with-deps chromium
+      - name: Run rolling workbench browser regressions
+        run: npx playwright test
 
   rolling-real-e2e:
     runs-on: ubuntu-24.04

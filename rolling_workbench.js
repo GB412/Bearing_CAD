@@ -83,8 +83,20 @@ function resetCamera(){
  controls.target.copy(center);camera.position.copy(center).add(new THREE.Vector3(size*.9,size*.65,size*.85));
  camera.near=Math.max(.01,size/500);camera.far=size*35;camera.updateProjectionMatrix();controls.update();
 }
-function resize(){const width=$('viewport').clientWidth;const height=renderer.domElement.parentElement.clientHeight;renderer.setSize(width,height,false);camera.aspect=width/height;camera.updateProjectionMatrix();}
-new ResizeObserver(resize).observe($('viewport'));resize();
+function resize(){
+ const viewport=$('viewport');
+ const width=viewport.clientWidth;
+ const height=viewport.clientHeight;
+ // The 3D panel is intentionally hidden while the 2D drawing workspace is active.
+ // Keep the last valid camera dimensions until the model tab becomes visible again.
+ if(width<=0||height<=0)return;
+ renderer.setSize(width,height,false);
+ camera.aspect=width/height;
+ camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe($('viewport'));
+window.addEventListener('resize',resize);
+resize();
 renderer.setAnimationLoop(()=>{controls.update();renderer.render(scene,camera);});
 function applyVisualOptions(){
  const opacity=$('transparent').checked?0.43:1;
