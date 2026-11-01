@@ -6,6 +6,7 @@ export function initDrawingWorkbench(getDesign) {
   const downloads=$('drawingDownloads');
   let online=false;
   let allowed=new Set();
+  let failures=[];
   let busy=false;
   function update(message, error=false){
     status.textContent=message;
@@ -15,7 +16,7 @@ export function initDrawingWorkbench(getDesign) {
     const supported=designType==='rolling.cylindrical_roller'
       ?allowed.has(designType+':'+variant):allowed.has(designType);
     button.disabled=!online||!supported||busy;
-    if(online&&!supported&&!busy)status.textContent='RoBAS 当前仅支持圆柱滚子 N 型原版模板';
+      if(online&&!supported&&!busy)status.textContent='RoBAS 当前仅支持圆柱滚子 N 型原版模板';
   }
   function clear(){downloads.replaceChildren();}
   async function refresh(){
@@ -24,7 +25,9 @@ export function initDrawingWorkbench(getDesign) {
       const data=await response.json();
       online=response.ok&&data.available===true;
       allowed=new Set(data.supported_bearings||[]);
-      update(online?'原版 RoBAS DWG 图纸服务已配置':'本机未配置 Windows/CADImport 原版出图引擎',!online);
+      failures=Array.isArray(data.failures)?data.failures:[];
+      const detail=failures.length?'：'+failures.join('；'):'';
+      update(online?'原版 RoBAS DWG 图纸服务已配置':'原版出图引擎未就绪'+detail,!online);
     }catch{
       online=false;update('RoBAS 二维图纸服务暂不可用',true);
     }
@@ -54,17 +57,31 @@ export function initDrawingWorkbench(getDesign) {
         body:JSON.stringify({design,drawing}),
       });
       const reply=await response.json();
-      if(!response.ok)throw Error(reply?.error?.message||'二维出图失败');
+      if(!response.ok){
+        const code=reply?.error?.error_code||reply?.error?.code;
+        if(code==='CADIMPORT_LICENSE_REQUIRED')throw Error('CADImport 未完成授权注册，无法打开原版 DWG 模板');
+        throw Error(reply?.error?.message||'二维出图失败');
+      }
       const manifestResponse=await fetch(reply.manifest_url,{cache:'no-store'});
       if(!manifestResponse.ok)throw Error('DXF 成果清单不可用');
       const results=await manifestResponse.json();
       if(results.manifest?.request_hash!==reply.request_hash)throw Error('成果参数不一致');
       for(const sheet of results.manifest.sheets){
         const url=results.file_urls?.[sheet.file];
-        if(!url)throw Error('缺少 '+sheet.file+' 下载地址');
+        const previewUrl=sheet.preview_file&&results.file_urls?.[sheet.preview_file];
+        if(!url||!previewUrl)throw Error('缺少 '+sheet.file+' 预览或下载地址');
+        const card=document.createElement('article');
+        card.className='drawing-result';
+        const title=document.createElement('div');
+        title.className='drawing-result-title';
+        title.textContent=sheet.view+' · '+sheet.file;
+        const image=document.createElement('img');
+        image.src=previewUrl;image.alt=sheet.view+' 原版 DWG 模板 SVG 预览';
+        image.loading='lazy';
         const link=document.createElement('a');
-        link.href=url;link.download=sheet.file;link.textContent=sheet.file;
-        downloads.append(link);
+        link.href=url;link.download=sheet.file;link.textContent='下载 '+sheet.file;
+        card.append(title,image,link);
+        downloads.append(card);
       }
       update('已按原版模板生成四张 DXF（未作制造批准）');
     }catch(error){

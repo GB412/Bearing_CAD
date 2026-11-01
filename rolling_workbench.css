@@ -233,6 +233,14 @@ input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px;
 }
 .downloads a:hover { color: #254b60; text-decoration: underline; }
 .downloads a:last-child { border-bottom: 0; }
+.drawing-result { padding: 10px 0 12px; border-bottom: 1px solid #e6ecef; }
+.drawing-result:last-child { border-bottom: 0; }
+.drawing-result-title { color: #334753; font-size: 11px; margin-bottom: 7px; }
+.drawing-result img {
+  display: block; width: 100%; height: 180px; object-fit: contain;
+  background: #212830; border: 1px solid #d9e2e6; margin-bottom: 6px;
+}
+.drawing-result a { display: inline-block; padding: 0; border: 0; }
 .footnote { padding: 0 14px 12px; margin: 3px 0 0; }
 footer {
   display: flex; justify-content: space-between; gap: 16px;

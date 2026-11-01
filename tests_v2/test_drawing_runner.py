@@ -60,7 +60,7 @@ def test_original_blank_variables_are_not_a_new_export_gate(resources,tmp_path):
     # Unlike the first port, an incomplete *database* is not an export
     # blocker: original RoBAS replaces DBNull with empty text.
     # On this Linux test runner, only the missing Windows runtime is blocking.
-    with pytest.raises(DrawingExportError,match="licensed Windows"):
+    with pytest.raises(DrawingExportError,match="CADImportBridge.exe"):
         generate_drawing_bundle(
             resources=resources,bridge=tmp_path/"fake.exe",output_root=target,
             bearing_type="rolling.deep_groove_ball",parameters=P,
