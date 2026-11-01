@@ -2,4 +2,5 @@
 # CadQuery installation is platform-specific; use the official conda package channel.
 cadquery==2.5.2
 ezdxf==1.4.2
+Pillow==13.0.0
 svgwrite==1.4.3

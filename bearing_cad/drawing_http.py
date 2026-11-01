@@ -20,19 +20,91 @@ from .drawing_runner import (
 )
 
 _DRAW_TOKEN=r"([a-f0-9]{32})"
-SHEET_ROUTE=re.compile(r"^/api/v2/cad/drawings/"+_DRAW_TOKEN+r"/files/(assembly|outer_ring|inner_ring|cage)\.dxf$")
+SHEET_ROUTE=re.compile(r"^/api/v2/cad/drawings/"+_DRAW_TOKEN+r"/files/(assembly|outer_ring|inner_ring|cage)\.(dxf|svg)$")
 MANIFEST_ROUTE=re.compile(r"^/api/v2/cad/drawings/"+_DRAW_TOKEN+r"$")
 _OPTIONS={"model","accuracy_class","diameter_series","chamfer1_mm","chamfer2_mm","legacy_values","checked_values"}
 
+_REQUIRED_TEMPLATES = {
+    "深沟球DWG": ("0_00KS.DWG", "0_01KS.DWG", "0_02.DWG", "0_07.DWG"),
+    "角接触DWG": ("6_00_ZDSTW.dwg", "6_01SK.DWG", "6_02SK.DWG", "6_07_ZDST.dwg"),
+    "单列圆柱DWG": ("N-00.dwg", "N-01.dwg", "N-02.dwg", "N-06.dwg"),
+}
+_REQUIRED_DATABASES = ("DGBData.db", "ACBData.db", "CRBData.db")
+_REQUIRED_CSV = ("球轴承零件相关系数.csv", "圆柱滚子轴承相关系数.csv", "BallDB.csv", "CylinderRollerDB.csv", "CylinderRollerDiameterDB.csv")
+
+
+def environment_check(resources: Path | None, bridge: Path | None) -> dict:
+    """Return actionable readiness details without treating file presence as CAD success."""
+    failures = []
+    root = Path(resources).resolve() if resources is not None else None
+    if os.name != "nt":
+        failures.append("Windows x64 is required")
+    if root is None or not root.is_dir():
+        failures.append("RoBAS resources directory is missing")
+    else:
+        for directory, names in _REQUIRED_TEMPLATES.items():
+            folder = root / "Resource" / "哑图" / directory
+            available = {p.name.casefold(): p for p in folder.iterdir()} if folder.is_dir() else {}
+            for name in names:
+                path = available.get(name.casefold())
+                if path is None:
+                    failures.append("Missing DWG template: " + str(folder / name))
+                elif path.read_bytes()[:4] != b"AC10":
+                    failures.append("Invalid DWG signature: " + str(path))
+        for name in _REQUIRED_DATABASES:
+            database = root / "Data" / name
+            if not database.is_file():
+                failures.append("Missing SQLite database: " + name)
+                continue
+            try:
+                import sqlite3
+                with sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True) as db:
+                    tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                    required = {"变量表", "倒角尺寸表"}
+                    if name == "CRBData.db":
+                        required.add("滚道宽度公差")
+                    missing = sorted(required - tables)
+                    if missing:
+                        failures.append(f"SQLite {name} is missing required tables: {', '.join(missing)}")
+                    elif "变量表" in tables:
+                        columns = {row[1] for row in db.execute('PRAGMA table_info("变量表")')}
+                        if not {"变量名", "变量值"}.issubset(columns):
+                            failures.append(f"SQLite {name} has an incompatible 变量表 schema")
+            except sqlite3.DatabaseError:
+                failures.append("Invalid SQLite database: " + name)
+        for name in _REQUIRED_CSV:
+            csv_path = root / "Resource" / name
+            if not csv_path.is_file():
+                failures.append("Missing coefficient CSV: " + name)
+            elif csv_path.stat().st_size == 0:
+                failures.append("Empty coefficient CSV: " + name)
+    bridge_path = Path(bridge).resolve() if bridge is not None else None
+    if bridge_path is None or not bridge_path.is_file():
+        failures.append("CADImport bridge executable is missing")
+    elif bridge_path.suffix.lower() != ".exe":
+        failures.append("CADImport bridge must be a Windows .exe")
+    doctor = None
+    if not failures and bridge_path is not None:
+        try:
+            result = subprocess.run([str(bridge_path), "doctor"], capture_output=True, text=True, timeout=10, check=False)
+            doctor = json.loads(result.stdout) if result.stdout.strip() else {"error": result.stderr.strip()}
+            if result.returncode != 0 or doctor.get("status") != "READY_FOR_DWG_PROBE":
+                failures.append("CADImport bridge doctor failed")
+        except (OSError, subprocess.SubprocessError, ValueError) as error:
+            failures.append("CADImport bridge doctor unavailable: " + str(error))
+    return {"available": not failures, "failures": failures, "doctor": doctor}
+
 
 def enabled(resources: Path | None,bridge: Path | None) -> bool:
-    return (os.name=="nt" and resources is not None and bridge is not None and
-            (Path(resources)/"Data"/"DGBData.db").is_file() and Path(bridge).is_file())
+    return environment_check(resources, bridge)["available"]
 
 
 def drawing_status(handler,resources,bridge):
+    check = environment_check(resources, bridge)
     handler._respond(200,{
-        "available": enabled(resources,bridge),
+        "available": check["available"],
+        "failures": check["failures"],
+        "doctor": check["doctor"],
         "mode":"original_robas_dwg_text_replacement",
         "supported_bearings":["rolling.deep_groove_ball","rolling.angular_contact_ball",
                               "rolling.cylindrical_roller:N"],
@@ -77,11 +149,18 @@ def create_drawing(handler,data,root,resources,bridge,build_lock):
     except (DrawingDataError,DrawingExportError,ValueError,KeyError) as error:
         handler._set_job(jid,{"status":"failed","kind":"robas_drawing",
                               "error_code":"DRAWING_INVALID"})
+        if "license registration is required" in str(error).lower():
+            return handler._error(503,"CADIMPORT_LICENSE_REQUIRED",
+                                  "CADImport license registration is required before original DWG export",job_id=jid)
         return handler._error(422,"DRAWING_INVALID",str(error),job_id=jid)
-    except (OSError,subprocess.SubprocessError):
+    except (OSError,subprocess.SubprocessError) as error:
         logging.exception("Original RoBAS CADImport drawing export failed: %s",jid)
         handler._set_job(jid,{"status":"failed","kind":"robas_drawing",
                               "error_code":"DRAWING_EXPORT_FAILED"})
+        detail = str(error)
+        if "License is required" in detail or "license registration failed" in detail.lower():
+            return handler._error(503,"CADIMPORT_LICENSE_REQUIRED",
+                                  "CADImport license registration is required before original DWG export",job_id=jid)
         return handler._error(500,"DRAWING_EXPORT_FAILED",
                               "Original DWG export failed; inspect local server logs",job_id=jid)
     finally:
@@ -108,18 +187,26 @@ def serve_drawing(handler,route,root):
         if manifest["request_hash"]!=job["request_hash"]:
             raise DrawingExportError("Drawing manifest request mismatch")
         if manifest_match:
+            file_urls = {}
+            for row in manifest["sheets"]:
+                file_urls[row["file"]] = f"/api/v2/cad/drawings/{job_id}/files/{row['file']}"
+                if row.get("preview_file"):
+                    file_urls[row["preview_file"]] = f"/api/v2/cad/drawings/{job_id}/files/{row['preview_file']}"
             handler._respond(200,{
                 "job_id":job_id,"manifest":manifest,
-                "file_urls":{row["file"]:f"/api/v2/cad/drawings/{job_id}/files/{row['file']}"
-                             for row in manifest["sheets"]}})
+                "file_urls":file_urls})
             return True
-        name=matched.group(2)+".dxf"
+        name=matched.group(2)+"."+matched.group(3)
         path=(folder/name).resolve(strict=True)
         if path.parent!=folder:
             raise DrawingExportError("Unsafe DXF path")
         handler.send_response(200)
-        handler.send_header("Content-Type","application/dxf")
-        handler.send_header("Content-Disposition",f'attachment; filename="{name}"')
+        content_type = "application/dxf" if matched.group(3) == "dxf" else "image/svg+xml; charset=utf-8"
+        handler.send_header("Content-Type",content_type)
+        if matched.group(3) == "dxf":
+            handler.send_header("Content-Disposition",f'attachment; filename="{name}"')
+        else:
+            handler.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
         handler.send_header("Content-Length",str(path.stat().st_size))
         handler.send_header("Cache-Control","no-store")
         handler.send_header("X-Content-Type-Options","nosniff")

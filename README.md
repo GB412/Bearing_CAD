@@ -1,5 +1,9 @@
 # BearingCAD Studio — 滑动轴承演示 + 滚动轴承三维参数化 CAD
 
+本仓库的本地部署、目录说明、外部资源边界和给其他 AI 的审查入口见 [`docs/LOCAL_SETUP.md`](docs/LOCAL_SETUP.md)。
+
+在已配置本机资源的 Windows 环境中，可直接运行 `.\scripts\run_bearing_cad_with_robas.ps1` 启动完整二维/三维工作台；GitHub 提交只应包含源码和 `config/robas.local.example.json`，不包含商业 CADImport 或 RoBAS 原始资源。
+
 这个仓库包含**两个不同的工作台**：
 
 - **滚动轴承三维工作台**（`rolling.html`）：深沟球、圆柱滚子 N/NU/NJ/NF/NUP、角接触球三类功能级三维模型；可选对应保持架、独立零件、真实 CadQuery/OCCT B-Rep、STEP/STL、几何质量与参数快照。
@@ -35,7 +39,9 @@ python -m bearing_cad.api --port 8090 --static dist
 
 滚动轴承工作台新增独立“二维图纸 · RoBAS 模板”区域，沿用原 DWG 哑图、SQLite 变量表、`CADText.Text` 精确替换与 DXF 导出流程。此功能与现有三维 OCCT 工作流相互独立，**不依据三维模型重画二维轮廓**。
 
-原二维桥接目前仍在 [PR #38](https://github.com/GB412/Bearing_CAD/pull/38) 等待真实 Windows 编译/授权及原图 DWG→DXF 实机验收，故**不能宣称已通过 12 张图纸端到端验收**。需要从该 PR 取得桥接源码，在 Windows + .NET Framework 4.5.2 + 原 CADImport.dll 正式编译并验证输出。不能提交授权 DLL、原 DWG、原 SQLite 到公共仓库。
+当前仓库已包含独立的 `bridge/cadimport` 桥接源码，沿用 RoBAS 原始 `CADImage`/`EntityType.Text`/`CADText.Text`/`CADtoDXF.SaveToFile` 链路。它只提交源码，不包含商业 DLL、DWG、SQLite 或字体；这些资源必须从原始完整项目或受授权的本机目录提供。真实 Windows 编译、DWG→DXF 冒烟和第三方 CAD 打开仍需现场执行，故**不能宣称已通过 12 张图纸端到端验收**。
+
+二维网页预览会读取已生成的 DXF 并由 `ezdxf` 渲染为 SVG；SVG 只用于浏览器预览，下载的 DXF 仍是 CADImport 从原始 DWG 导出的文件。安装 `requirements-cad.txt` 时会同时安装 SVG 渲染所需的 Pillow。
 
 桥接验收通过后，在原有命令后增加两个本地参数：
 
@@ -44,6 +50,21 @@ python -m bearing_cad.api --port 8090 --static dist \
   --robas-resources "D:\\RoBAS_Resources" \
   --cadimport-bridge "D:\\Bridge\\CadImportBridge.exe"
 ```
+
+Windows 部署顺序：
+
+```powershell
+.\scripts\check_robas_environment.ps1 `
+  -ResourcesPath "D:\\RoBAS_Resources" `
+  -CadImportDllPath "D:\\licensed\\CADImport.dll"
+.\scripts\build_cadimport_bridge.ps1 `
+  -CadImportDllPath "D:\\licensed\\CADImport.dll"
+.\scripts\start_bearing_cad_with_robas.ps1 `
+  -ResourcesPath "D:\\RoBAS_Resources" `
+  -CadImportBridgePath ".\\bridge\\cadimport\\bin\\Release\\CadImportBridge.exe"
+```
+
+预检报告写入 `artifacts/cadimport/environment_report.json`。它会记录资源、SQLite 完整性和变量表结构、DWG 签名与 SHA-256、系数 CSV、SHX/字体文件、CADImport 程序集版本以及具体失败原因。桥接 `doctor` 命令还会检查 CADImport 程序集、CLR 和进程架构。预检通过只表示环境具备尝试出图的条件；必须继续执行真实 DWG `inspect`、单变量替换、DXF `ezdxf` 审计，并由工程人员在 AutoCAD/QCAD/FreeCAD 中打开确认。
 
 未配置上述环境时，工作台二维按钮会显示不可用，已有三维 STEP/STL 建模和下载功能正常。配置完成后二维工作台使用相同的`bearing-cad.request.v1`参数，输入型号、精度和直径系列并调用原版 DWG 模板替换，结果下载总图、外圈、内圈、保持架四张 DXF。原版 RoBAS 特有的沟道、挡边和保持架参数若不在现有 CAD 参数合同中，需要由原版计算逻辑或显式设计上下文提供；不猜测缺失值。圆柱滚子第一版仅启用原版 N 型模板。输出属于原版模板文字替换结果，不代表重新建立的二维参数化几何。
 

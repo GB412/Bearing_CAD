@@ -17,3 +17,8 @@ RoBAS
 
 # Generated CAD artifacts
 artifacts/
+
+# Local machine configuration and CADImport build output
+config/robas.local.json
+bridge/cadimport/bin/
+bridge/cadimport/obj/

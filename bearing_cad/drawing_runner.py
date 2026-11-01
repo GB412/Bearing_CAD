@@ -14,6 +14,9 @@ import subprocess
 import tempfile
 
 import ezdxf
+from ezdxf.addons.drawing import Frontend, RenderContext, layout
+from ezdxf.addons.drawing.config import BackgroundPolicy, ColorPolicy, Configuration
+from ezdxf.addons.drawing.svg import SVGBackend
 
 from .drawing_variables import prepare_variables, bridge_values
 from .drawing_legacy_technical import technical_condition_rows, apply_technical_conditions
@@ -45,6 +48,20 @@ def _digest(file: Path) -> str:
     return h.hexdigest()
 
 
+def _render_svg_preview(dxf_path: Path, svg_path: Path) -> None:
+    """Render the exported DXF itself for a browser-only review preview."""
+    document = ezdxf.readfile(str(dxf_path))
+    backend = SVGBackend()
+    config = Configuration(
+        color_policy=ColorPolicy.COLOR,
+        background_policy=BackgroundPolicy.MODELSPACE,
+        lineweight_scaling=0.5,
+    )
+    Frontend(RenderContext(document), backend, config).draw_layout(
+        document.modelspace(), finalize=True)
+    svg_path.write_text(backend.get_string(layout.Page(0, 0)), encoding="utf-8")
+
+
 def verify_drawing_bundle(folder: Path, expected_key: str | None = None) -> dict:
     """Verify a complete previously exported RoBAS four-sheet DXF bundle."""
     folder = Path(folder)
@@ -69,6 +86,15 @@ def verify_drawing_bundle(folder: Path, expected_key: str | None = None) -> dict
             raise DrawingExportError("Missing or modified DXF: " + name)
         if _digest(path) != sheet.get("sha256"):
             raise DrawingExportError("DXF checksum mismatch: " + name)
+        preview_name = sheet.get("preview_file")
+        if preview_name:
+            preview = folder / preview_name
+            if (preview_name != Path(preview_name).name or
+                    preview.suffix.lower() != ".svg" or
+                    not preview.is_file() or
+                    preview.stat().st_size != sheet.get("preview_size_bytes") or
+                    _digest(preview) != sheet.get("preview_sha256")):
+                raise DrawingExportError("Missing or modified SVG preview: " + name)
     return manifest
 
 
@@ -111,6 +137,11 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
     templates = resolve_templates(resources, bearing_type, configuration)
     if os.name != "nt":
         raise DrawingExportError("CADImport bridge requires licensed Windows/.NET runtime")
+    # Fail before reading/calculating the large legacy variable set when the
+    # required executable is absent. This keeps status and CLI errors specific.
+    bridge = Path(bridge).resolve()
+    if not bridge.is_file():
+        raise DrawingExportError("Compiled licensed CADImportBridge.exe not found")
     report = prepare_variables(resources=Path(resources), bearing_type=bearing_type,
                                parameters=parameters, model=model,
                                accuracy_class=accuracy_class,
@@ -146,9 +177,6 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
     # Faithfully reproduce FrmMain.ChangeCADTexts: all DataTable rows participate
     # in the original replacement loop, including blank/DBNull values.
     # The original software does not require the complete database to be filled.
-    bridge = Path(bridge).resolve()
-    if not bridge.is_file():
-        raise DrawingExportError("Compiled licensed CADImportBridge.exe not found")
     if not isinstance(request_hash, str) or len(request_hash) != 64 or any(c not in "0123456789abcdef" for c in request_hash):
         raise DrawingExportError("Expected lowercase SHA256 of the confirmed 3D design request")
     target_root = Path(output_root)
@@ -156,7 +184,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
     identity = sha256(json.dumps({
         "request_hash": request_hash, "db_sha256": report["database_sha256"],
         "templates_sha256": [_digest(template) for template in templates],
-        "variables": bridge_values(report), "engine": "robas.dwg.cadimport.v1",
+        "variables": bridge_values(report), "engine": "robas.dwg.cadimport.v1.svgpreview.v1",
     }, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
     destination = target_root / identity
     if destination.exists():
@@ -169,9 +197,18 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
         sheets = []
         for name, template in zip(SHEETS, templates):
             output = folder / (name + ".dxf")
-            result = subprocess.run(
-                [str(bridge), "batch", str(template.resolve()), str(output), str(mapping)],
-                capture_output=True, text=True, timeout=120, check=True)
+            try:
+                result = subprocess.run(
+                    [str(bridge), "batch", str(template.resolve()), str(output), str(mapping)],
+                    capture_output=True, text=True, encoding="utf-8", errors="replace",
+                    timeout=120, check=True)
+            except subprocess.CalledProcessError as error:
+                detail = (error.stderr or error.stdout or "").strip()
+                if "license is required" in detail.lower() or "license registration failed" in detail.lower():
+                    raise DrawingExportError("CADImport license registration is required") from error
+                raise DrawingExportError(
+                    f"CADImport bridge failed for {name}: {detail or error}"
+                ) from error
             try:
                 response = json.loads(result.stdout)
             except ValueError as error:
@@ -186,9 +223,13 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
             if audit.errors:
                 raise DrawingExportError(
                     f"DXF fatal audit errors in {name}: {len(audit.errors)}")
+            preview = folder / (name + ".svg")
+            _render_svg_preview(output, preview)
             sheets.append({
                 "view": name, "file": output.name, "size_bytes": output.stat().st_size,
                 "sha256": _digest(output), "template_sha256": _digest(template),
+                "preview_file": preview.name, "preview_size_bytes": preview.stat().st_size,
+                "preview_sha256": _digest(preview),
                 "text_replacements": response["exact_match_count"],
                 "dxf_audit_nonfatal_fixes": len(audit.fixes),
                 "non_text_entities": response.get("non_text_entity_count"),

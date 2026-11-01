@@ -5,4 +5,5 @@ dependencies:
   - python=3.11
   - cadquery=2.5.2
   - ezdxf=1.4.2
+  - pillow
   - svgwrite=1.4.3
