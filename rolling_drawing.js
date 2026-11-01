@@ -42,6 +42,7 @@ export function initDrawingWorkbench(getDesign) {
     status.classList.toggle('error', error);
     workspaceStatus.textContent = message;
     workspaceStatus.classList.toggle('is-error', error);
+    workspaceStatus.classList.toggle('is-ready', !error && message.startsWith('已按原版模板生成'));
     button.disabled = !online || !supported() || busy;
     if (online && !supported() && !busy) {
       const hint = '当前 RoBAS 原版模板暂不支持所选轴承构型';
@@ -213,6 +214,7 @@ export function initDrawingWorkbench(getDesign) {
     $('drawingWorkspaceSubtitle').textContent = '已生成四张原版模板图纸。选择上方图纸标签可切换预览。';
     $('drawingWorkspaceStatus').textContent = '已生成 4 张 DXF';
     $('drawingWorkspaceStatus').classList.remove('is-error');
+    $('drawingWorkspaceStatus').classList.add('is-ready');
     activateSheet(sheets[0].key);
   }
 
