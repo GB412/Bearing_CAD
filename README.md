@@ -70,6 +70,8 @@ Windows 部署顺序：
 
 开发者也可使用独立命令行 `python -m bearing_cad.drawing_cli --request design_and_drawing.json --resources ... --bridge ... --out ...` 生成并核验 DXF。
 
+AutoCAD 提示缺少 `HZTXT`、中文字体或网页 SVG 预览显示异常时，参见 [原版字体配置与 SVG 预览说明](docs/drawing-fonts-and-preview.md)。原版 `hztxt.shx` 位于 RoBAS 资源的 `Resource/shx`，不随此仓库分发；网页预览不会改写 DXF 字体引用。
+
 ## 测试与验收
 
 在 CadQuery 环境下运行：
