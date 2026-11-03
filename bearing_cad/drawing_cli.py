@@ -16,7 +16,7 @@ from .contracts import parse_request
 from .drawing_runner import generate_drawing_bundle,verify_drawing_bundle,DrawingExportError
 
 _ALLOWED={"model","accuracy_class","diameter_series","chamfer1_mm",
-          "chamfer2_mm","legacy_values","checked_values"}
+          "chamfer2_mm","radial_clearance_group","legacy_values","checked_values"}
 
 def _read_request(path: Path):
     if path.stat().st_size > 128*1024:
