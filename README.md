@@ -1,6 +1,6 @@
 # BearingCAD Studio — 滑动轴承演示 + 滚动轴承三维参数化 CAD
 
-本仓库的本地部署、目录说明、外部资源边界和给其他 AI 的审查入口见 [`docs/LOCAL_SETUP.md`](docs/LOCAL_SETUP.md)。
+本仓库的本地部署、目录说明、外部资源边界和给其他 AI 的审查入口见 [`docs/LOCAL_SETUP.md`](docs/LOCAL_SETUP.md)。项目文档按 `docs/planning`、`docs/migration`、`docs/v2` 和 `docs/assets` 分类。
 
 在已配置本机资源的 Windows 环境中，可直接运行 `.\scripts\run_bearing_cad_with_robas.ps1` 启动完整二维/三维工作台；GitHub 提交只应包含源码和 `config/robas.local.example.json`，不包含商业 CADImport 或 RoBAS 原始资源。
 
