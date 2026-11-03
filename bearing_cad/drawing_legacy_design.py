@@ -39,7 +39,7 @@ def dgb_radial_clearance_mm(bore_d_mm: float) -> float | None:
         (160, 180, (30, 45)), (180, 200, (36, 53)),
     ):
         if lower <= d < upper:
-            return (raw[0] + raw[1]) / 2000
+            # Original C# uses integer literals: (4+11)/2 truncates to 7,\n            # rather than Python's 7.5. Convert the resulting micrometres to mm.\n            return ((raw[0] + raw[1]) // 2) / 1000
     return None
 
 
