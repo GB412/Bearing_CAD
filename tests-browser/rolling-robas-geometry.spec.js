@@ -22,3 +22,15 @@ test('RoBAS groove dimensions are read-only and recalculate when the ball diamet
   await page.locator('#bearingType').selectOption('rolling.cylindrical_roller');
   await expect(page.locator('#param-inner_groove_radius_mm')).toHaveCount(0);
 });
+
+test('RoBAS ball count is read-only and ACB count tracks cage material', async ({page}) => {
+  await page.goto('/rolling.html');
+  await expect(page.locator('#param-ball_count')).toHaveAttribute('readonly', '');
+  await expect(page.locator('#param-ball_count')).toHaveValue('11');
+  await page.locator('#bearingType').selectOption('rolling.angular_contact_ball');
+  await expect(page.locator('#param-ball_count')).toHaveValue('17');
+  await page.locator('#param-cage_material').selectOption('phenolic');
+  await expect(page.locator('#param-ball_count')).toHaveValue('16');
+  await page.locator('#param-pitch_d_mm').fill('8');
+  await expect(page.locator('#param-ball_count')).toHaveValue('');
+});
