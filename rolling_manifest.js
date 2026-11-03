@@ -32,6 +32,7 @@ export const bearingForms = Object.freeze({
       ['ball_count','钢球数量',11], ['inner_groove_radius_mm','内沟曲率半径',4.3],
       ['outer_groove_radius_mm','外沟曲率半径',4.5],
       ['contact_angle_deg','名义接触角 (°)',25],
+      ['cage_material','球数计算使用的保持架材料','engineering_plastic',['engineering_plastic','phenolic']],
       ['inner_shoulder_left_d_mm','内圈左肩直径',49],
       ['inner_shoulder_right_d_mm','内圈右肩直径',47],
       ['outer_shoulder_left_d_mm','外圈左肩直径',61],
