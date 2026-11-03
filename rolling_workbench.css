@@ -829,3 +829,16 @@ footer a:hover { text-decoration: underline; }
     white-space: normal;
   }
 }
+
+/* RoBAS source-backed derived geometry: visible, but not user-editable. */
+.field input.derived-input[readonly] {
+  color: #315466;
+  background: #edf4f6;
+  border-color: #cddfe6;
+  cursor: default;
+  font-variant-numeric: tabular-nums;
+}
+.field input.derived-input[readonly]:focus {
+  outline: 2px solid #a4c5d4;
+  outline-offset: 1px;
+}
