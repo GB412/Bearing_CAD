@@ -16,7 +16,7 @@ jobs:
           cache-environment: true
       - name: Run domain contracts and real OCCT STEP roundtrip
         shell: micromamba-shell {0}
-        run: python -m unittest discover -s tests_v2 -p 'test_*.py' -v
+        run: python -m pytest tests_v2 -q
       - name: Generate seven-case RoBAS migration geometry evidence
         shell: micromamba-shell {0}
         run: python -m bearing_cad.migration_baseline --output build/migration-07a

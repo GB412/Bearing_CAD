@@ -15,10 +15,10 @@ def test_stamped_shell_from_existing_reference():
     components = {part.component_id: part.shape for part in model.components}
     assert len(model.instances) == 26
     upper, lower = components["cage_upper"], components["cage_lower"]
-    assert upper.val().isValid()
+    assert upper.isValid()
     assert lower.isValid()
-    assert upper.val().Volume() == pytest.approx(lower.Volume(), rel=1e-7)
-    assert upper.val().BoundingBox().zmin == pytest.approx(0, abs=1e-4)
+    assert upper.Volume() == pytest.approx(lower.Volume(), rel=1e-7)
+    assert upper.BoundingBox().zmin == pytest.approx(0, abs=1e-4)
     assert lower.BoundingBox().zmax == pytest.approx(0, abs=1e-4)
     assert interference_volume(upper,lower) < 1e-6
 
@@ -31,5 +31,5 @@ def test_board_thickness_controls_solid_volume():
     larger["cage"]["board_thickness_mm"] = 0.85
     b = build_deep_groove(parse_request(larger))
     def vol(model):
-        return next(part.shape.val().Volume() for part in model.components if part.component_id == "cage_upper")
+        return next(part.shape.Volume() for part in model.components if part.component_id == "cage_upper")
     assert vol(b) > vol(a)

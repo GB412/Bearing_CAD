@@ -31,7 +31,10 @@ def stamped_cage_components(spec: StampedCageSpec, *, pitch_d_mm: float,
     half_height = spec.width_mm / 2
     ball_radius = ball_d_mm / 2
     thickness = spec.board_thickness_mm
-    if half_height <= ball_radius + spec.pocket_clearance_mm + thickness:
+    # Reject shells with near-zero residual web: at least 10% of the
+    # requested board thickness must remain outside the spherical cup.
+    # This is a CAD robustness threshold, not a manufacturing standard.
+    if half_height <= ball_radius + spec.pocket_clearance_mm + thickness * 1.1:
         raise ContractError("PARAMETER_INVALID", "/cage/width_mm", "Insufficient envelope for spherical shell")
     if thickness + head_radius > half_height:
         raise ContractError("PARAMETER_INVALID", "/cage/width_mm", "Rivet head exceeds axial cage envelope")
