@@ -95,3 +95,16 @@ D:\Bearing CAD\RoBAS_Resources\Resource\shx
 - 钢球数量：DGB 186° 经验式；ACB 依据保持架材料的 `CalcuBallNum`。这是几何初值，不代表完整 RoBAS 最优设计。
 - 圆柱滚子：保留原版直圆柱模式；倒角、凸度是可切换的 Bearing_CAD CAD 增强，不冒称来源于原版。
 - 完整 RoBAS Optimizer、承载寿命/刚度、外部 `RoBAS_v2.exe` 和多 Agent 计算接入均留待后续单独迁移。
+
+## 7. 本地回归命令
+
+建议在修改后运行（如当前 conda 环境没有 pytest，按 `environment-v2.yml` 安装该测试依赖）：
+
+```powershell
+python -m pytest tests_v2 -q
+node --test rolling_manifest.test.js rolling_robas_geometry.test.js
+npm run build
+npx playwright test
+```
+
+测试里的 Linux/DXF mock 验证不能代替 CADImport 的授权 Windows 运行；对 NU、NJ、NF、NUP 的最终工程图，必须使用真实 DWG/DXF 加 AutoCAD 检查。
