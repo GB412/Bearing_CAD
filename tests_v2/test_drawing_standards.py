@@ -69,3 +69,83 @@ def test_explict_standard_values_are_not_approved(resources):
     assert report["values"]["Cmax"] == "0.014"
     assert report["values"]["B_Lower"] == "-0.4"
     assert report["values"]["@Dds"] == "0.5"
+
+
+def _blank_report(names):
+    return {
+        "schema_version": "robas.drawing.variables.v1",
+        "variables": [{"name": name, "value": None, "source": "sqlite_default",
+                       "row_index": i} for i, name in enumerate(names)],
+    }
+
+
+def test_standard_lookups_are_applied_to_real_drawing_values(resources):
+    from bearing_cad.drawing_standard_fill import apply_robas_drawing_standards
+    original = _blank_report(["@Dds", "@di", "B_Upper", "B_Lower",
+                              "Cmin", "Cmax", "KEEP_UNSET", "@Dds"])
+    result = apply_robas_drawing_standards(
+        report=original, resources=resources,
+        bearing_type="rolling.deep_groove_ball", bore_d_mm=40,
+        accuracy_class="P5", diameter_series="2",
+        radial_clearance_group="C0")
+    def value(key):
+        return [r["value"] for r in result["variables"] if r["name"] == key]
+    assert value("@Dds") == ["0.5", "0.5"]
+    assert value("@di") == ["0.5"]
+    assert value("B_Upper") == ["0"]
+    assert value("B_Lower") == ["-0.4"]
+    assert value("Cmin") == ["0.008"]
+    assert value("Cmax") == ["0.014"]
+    assert value("KEEP_UNSET") == [None]
+    assert len(result["standard_lookup_evidence"]) == 3
+    assert result["standard_lookup_warnings"] == []
+    assert original["variables"][0]["value"] is None
+
+
+def test_optional_clearance_never_defaults_to_a_guess(resources):
+    from bearing_cad.drawing_standard_fill import apply_robas_drawing_standards
+    result = apply_robas_drawing_standards(
+        report=_blank_report(["Cmin", "Cmax", "B_Lower"]),
+        resources=resources, bearing_type="rolling.deep_groove_ball",
+        bore_d_mm=40, accuracy_class="P5", diameter_series="2")
+    assert [r["value"] for r in result["variables"]] == [None, None, "-0.4"]
+    assert result["radial_clearance_group"] is None
+    assert len(result["standard_lookup_evidence"]) == 2
+
+
+def test_unknown_original_ball_width_series_and_missing_clearance_are_reported(resources):
+    from bearing_cad.drawing_standard_fill import apply_robas_drawing_standards
+    result = apply_robas_drawing_standards(
+        report=_blank_report(["B_Upper", "Cmin"]),
+        resources=resources, bearing_type="rolling.deep_groove_ball",
+        bore_d_mm=40, diameter_series="7",
+        radial_clearance_group="C5")
+    assert [r["value"] for r in result["variables"]] == [None, None]
+    assert any(s.startswith("WIDTH_DEVIATION_UNAVAILABLE")
+               for s in result["standard_lookup_warnings"])
+    assert any(s.startswith("RADIAL_CLEARANCE_UNAVAILABLE")
+               for s in result["standard_lookup_warnings"])
+
+
+def test_original_roller_width_is_independent_of_ball_diameter_series(resources):
+    from bearing_cad.drawing_standard_fill import apply_robas_drawing_standards
+    result = apply_robas_drawing_standards(
+        report=_blank_report(["B_Lower"]),
+        resources=resources, bearing_type="rolling.cylindrical_roller",
+        bore_d_mm=40, diameter_series="7")
+    assert result["variables"][0]["value"] == "-0.3"
+
+
+def test_unsorted_source_table_uses_first_matching_row_not_sorted_minimum(resources):
+    from bearing_cad.drawing_standards import get_width_deviation
+    import sqlite3
+    db = resources / "Data" / "DGBData.db"
+    with sqlite3.connect(db) as con:
+        con.execute('DELETE FROM "轴承宽度公差"')
+        con.executemany('INSERT INTO "轴承宽度公差" VALUES (?,?,?,?,?,?,?)', [
+            (80, "0", "-0.8", "0", "-0.81", "0", "-0.82"),
+            (50, "0", "-0.5", "0", "-0.51", "0", "-0.52"),
+        ])
+    assert get_width_deviation(resources=resources,
+                               bearing_type="rolling.deep_groove_ball",
+                               bore_d_mm=40, size_series="2")["lower_mm"] == "-0.81"
