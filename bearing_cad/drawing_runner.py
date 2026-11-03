@@ -23,6 +23,8 @@ from .drawing_legacy_dimensions import apply_deep_groove_dimensions, apply_angul
 from .drawing_legacy_roller import apply_cylindrical_roller_dimensions
 from .drawing_legacy_ratings import apply_robas_loads
 from .drawing_standard_fill import apply_robas_drawing_standards
+from .drawing_legacy_design import derive_dgb_drawing_values
+from .contracts import CageSpec
 from .drawing_diagnostics import sheet_variable_diagnostics, bundle_variable_diagnostics
 
 SHEETS = ("assembly", "outer_ring", "inner_ring", "cage")
@@ -130,7 +132,8 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
                             radial_clearance_group: str | None = None,
                             chamfer1_mm: float | None = None,
                             chamfer2_mm: float | None = None,
-                            legacy_values: dict | None = None) -> Path:
+                            legacy_values: dict | None = None,
+                            cage: CageSpec | None = None) -> Path:
     """Produce four DXF sheets with RoBAS's original TEXT replacement behavior.
 
     Empty SQLite variables become blank text as in original ChangeCADTexts.
@@ -153,15 +156,26 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
                                parameters=parameters, model=model,
                                accuracy_class=accuracy_class,
                                checked_values=checked_values)
+    if legacy_values is not None and not isinstance(legacy_values, dict):
+        raise DrawingExportError("legacy_values must be an explicit mapping")
+    auto_evidence = None
+    actual_legacy = dict(legacy_values or {})
+    if bearing_type == "rolling.deep_groove_ball":
+        auto_values, auto_evidence = derive_dgb_drawing_values(
+            parameters=parameters, cage=cage, resources=Path(resources),
+            chamfer1_mm=chamfer1_mm,
+            radial_clearance_group=radial_clearance_group)
+        # Any explicitly supplied, checked old-model value takes precedence.
+        actual_legacy = {**auto_values, **actual_legacy}
     if bearing_type == "rolling.deep_groove_ball":
         report = apply_deep_groove_dimensions(
-            report=report, parameters=parameters, legacy_values=legacy_values)
+            report=report, parameters=parameters, legacy_values=actual_legacy)
     if bearing_type == "rolling.angular_contact_ball":
         report = apply_angular_contact_dimensions(
             report=report, parameters=parameters, legacy_values=legacy_values)
     if bearing_type == "rolling.cylindrical_roller":
         report = apply_cylindrical_roller_dimensions(
-            report=report, parameters=parameters, legacy_values=legacy_values,
+            report=report, parameters=parameters, legacy_values=actual_legacy,
             resources=Path(resources))
     report = apply_robas_loads(
         report=report, resources=Path(resources),
@@ -196,7 +210,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
     identity = sha256(json.dumps({
         "request_hash": request_hash, "db_sha256": report["database_sha256"],
         "templates_sha256": [_digest(template) for template in templates],
-        "variables": bridge_values(report), "engine": "robas.dwg.cadimport.v1.svgpreview.v3.variable-diagnostics.v1.standards.v1",
+        "variables": bridge_values(report), "engine": "robas.dwg.cadimport.v1.svgpreview.v3.variable-diagnostics.v1.standards.v1.design-values.v1",
         "radial_clearance_group": radial_clearance_group,
     }, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
     destination = target_root / identity
@@ -261,6 +275,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
             "unfilled_database_variable_count": report["unresolved_count"],
             **drawing_diagnostics,
             "technical_condition_rows": report.get("technical_rows_applied", 0),
+            "legacy_design_evidence": auto_evidence,
             "standard_lookup_evidence": report.get("standard_lookup_evidence", []),
             "standard_lookup_warnings": report.get("standard_lookup_warnings", []),
             "radial_clearance_group": radial_clearance_group,
