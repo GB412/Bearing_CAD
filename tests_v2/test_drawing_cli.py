@@ -53,6 +53,7 @@ def test_nup_manifest_requires_fifth_loose_rib_sheet(tmp_path):
     manifest = json.loads(path.read_text(encoding="utf-8"))
     manifest["bearing_type"] = "rolling.cylindrical_roller"
     manifest["configuration"] = "NUP"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
     with pytest.raises(DrawingExportError, match="order"):
         verify_drawing_bundle(folder)
     additional = b"loose-rib"
