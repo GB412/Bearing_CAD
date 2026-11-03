@@ -44,3 +44,28 @@ def test_cli_requires_real_v1_design_request(tmp_path):
     path.write_text(json.dumps({"request":{},"drawing":{"unrecognized":7}}))
     with pytest.raises(ValueError,match="Unsupported"):
         _read_request(path)
+
+
+def test_nup_manifest_requires_fifth_loose_rib_sheet(tmp_path):
+    folder = tmp_path / ("b" * 64)
+    _bundle(folder)
+    path = folder / "drawing_manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest["bearing_type"] = "rolling.cylindrical_roller"
+    manifest["configuration"] = "NUP"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(DrawingExportError, match="order"):
+        verify_drawing_bundle(folder)
+    additional = b"loose-rib"
+    (folder / "loose_rib.dxf").write_bytes(additional)
+    manifest["sheets"].append({
+        "view": "loose_rib", "file": "loose_rib.dxf",
+        "size_bytes": len(additional),
+        "sha256": hashlib.sha256(additional).hexdigest(),
+    })
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    assert len(verify_drawing_bundle(folder)["sheets"]) == 5
+    manifest["configuration"] = "NF"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(DrawingExportError, match="order"):
+        verify_drawing_bundle(folder)

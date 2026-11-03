@@ -46,8 +46,25 @@ def test_template_selection_uses_real_names(resources,kind):
     assert [p.name for p in paths]==list(TEMPLATES[kind][1])
 
 def test_no_nu_drawings_by_substituting_n_templates(resources):
-    with pytest.raises(DrawingExportError,match="No confirmed"):
+    with pytest.raises(DrawingExportError,match="Missing or unsupported"):
         resolve_templates(resources,"rolling.cylindrical_roller","NU")
+
+@pytest.mark.parametrize("variant,names", [
+    ("NU", ("NU-00.dwg", "NU-01.dwg", "NU-02.dwg", "N-06.dwg")),
+    ("NJ", ("NJ-00.dwg", "NU-01.dwg", "NJ-02.dwg", "N-06.dwg")),
+    ("NF", ("NF-00.dwg", "NF-01.dwg", "N-02.dwg", "N-06.dwg")),
+    ("NUP", ("NUP-00.dwg", "NU-01.dwg", "NUP-02.dwg",
+             "N-06.dwg", "NUP-12.dwg")),
+])
+def test_source_backed_roller_template_compositions(resources, variant, names):
+    base = resources / "Resource" / "哑图" / "单列圆柱DWG"
+    for file in names:
+        if not (base / file).exists():
+            (base / file).write_bytes(b"AC1021" + b"synthetic-fixture-only")
+    selected = resolve_templates(resources, "rolling.cylindrical_roller", variant)
+    assert tuple(path.name for path in selected) == names
+    assert len(selected) == (5 if variant == "NUP" else 4)
+
 
 def test_reject_invalid_header(resources):
     p=resources/"Resource"/"哑图"/"深沟球DWG"/"0_00KS.DWG"

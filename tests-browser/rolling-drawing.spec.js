@@ -101,3 +101,45 @@ test('2D drawing generation opens the large preview workspace and supports sheet
 
   expect(errors).toEqual([]);
 });
+
+
+test('NUP source template composition exposes fifth detachable rib DXF', async ({page}) => {
+  const job='f'.repeat(32), hash='d'.repeat(64);
+  const manifestUrl='/api/v2/cad/drawings/'+job;
+  const views=['assembly','outer_ring','inner_ring','cage','loose_rib'];
+  const sheets=views.map(view=>({view,file:view+'.dxf',preview_file:view+'.svg'}));
+  const urls=Object.fromEntries(views.flatMap(view=>[
+    [view+'.dxf',manifestUrl+'/files/'+view+'.dxf'],
+    [view+'.svg',manifestUrl+'/files/'+view+'.svg'],
+  ]));
+
+  await page.route('**/api/v2/cad/**', async route=>{
+    const path=new URL(route.request().url()).pathname;
+    if(path==='/api/v2/cad/status')return route.fulfill({json:{available:true,
+      supported_bearings:['rolling.cylindrical_roller']}});
+    if(path==='/api/v2/cad/drawings/status')return route.fulfill({json:{
+      available:true,supported_bearings:['rolling.cylindrical_roller:NUP'],failures:[],
+    }});
+    if(path==='/api/v2/cad/drawings' && route.request().method()==='POST'){
+      const req=route.request().postDataJSON();
+      expect(req.design.parameters.configuration).toBe('NUP');
+      return route.fulfill({status:201,json:{manifest_url:manifestUrl,request_hash:hash}});
+    }
+    if(path===manifestUrl)return route.fulfill({json:{manifest:{
+      schema_version:'robas.drawing.bundle.v1',request_hash:hash,
+      bearing_type:'rolling.cylindrical_roller',configuration:'NUP',
+      sheets},file_urls:urls}});
+    if(path.endsWith('.svg'))return route.fulfill({contentType:'image/svg+xml',body:drawingSvg});
+    return route.fulfill({status:404,json:{}});
+  });
+  await page.goto('/rolling.html');
+  await page.locator('#bearingType').selectOption('rolling.cylindrical_roller');
+  await page.locator('#param-configuration').selectOption('NUP');
+  await expect(page.locator('#generate2d')).toBeEnabled();
+  await page.locator('#generate2d').click();
+  await expect(page.locator('#drawingSheetTabs [role="tab"]')).toHaveCount(5);
+  await expect(page.locator('#drawingTabCount')).toHaveText('5 张已生成');
+  await page.locator('#drawingSheetTabs [data-sheet-key="loose_rib"]').click();
+  await expect(page.locator('#drawingSheetTitle')).toHaveText('活动挡圈图');
+  await expect(page.locator('#drawingDownloadCurrent')).toHaveAttribute('download','loose_rib.dxf');
+});

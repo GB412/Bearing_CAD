@@ -26,6 +26,7 @@ from .drawing_legacy_roller import apply_cylindrical_roller_dimensions
 from .drawing_legacy_ratings import apply_robas_loads
 
 SHEETS = ("assembly", "outer_ring", "inner_ring", "cage")
+SHEETS_NUP = (*SHEETS, "loose_rib")
 TEMPLATES = {
     "rolling.deep_groove_ball": ("深沟球DWG",
         ("0_00KS.DWG", "0_01KS.DWG", "0_02.DWG", "0_07.DWG")),
@@ -33,6 +34,17 @@ TEMPLATES = {
         ("6_00_ZDSTW.dwg", "6_01SK.DWG", "6_02SK.DWG", "6_07_ZDST.dwg")),
     "rolling.cylindrical_roller:N": ("单列圆柱DWG",
         ("N-00.dwg", "N-01.dwg", "N-02.dwg", "N-06.dwg")),
+    # These are source-file-backed composition candidates, NOT an original
+    # FrmMain.cs switch (that entry only selects N). A Windows CAD/AutoCAD
+    # review must confirm shared drawings and the NUP loose-rib designation.
+    "rolling.cylindrical_roller:NU": ("单列圆柱DWG",
+        ("NU-00.dwg", "NU-01.dwg", "NU-02.dwg", "N-06.dwg")),
+    "rolling.cylindrical_roller:NJ": ("单列圆柱DWG",
+        ("NJ-00.dwg", "NU-01.dwg", "NJ-02.dwg", "N-06.dwg")),
+    "rolling.cylindrical_roller:NF": ("单列圆柱DWG",
+        ("NF-00.dwg", "NF-01.dwg", "N-02.dwg", "N-06.dwg")),
+    "rolling.cylindrical_roller:NUP": ("单列圆柱DWG",
+        ("NUP-00.dwg", "NU-01.dwg", "NUP-02.dwg", "N-06.dwg", "NUP-12.dwg")),
 }
 
 
@@ -71,14 +83,16 @@ def verify_drawing_bundle(folder: Path, expected_key: str | None = None) -> dict
     if expected_key is not None and manifest.get("bundle_key") != expected_key:
         raise DrawingExportError("RoBAS drawing cache identity mismatch")
     sheets = manifest.get("sheets")
-    if not isinstance(sheets, list) or len(sheets) != 4:
-        raise DrawingExportError("Incomplete RoBAS four-sheet manifest")
-    if [sheet.get("view") for sheet in sheets] != list(SHEETS):
+    if not isinstance(sheets, list) or len(sheets) not in {4, 5}:
+        raise DrawingExportError("Incomplete RoBAS drawing manifest")
+    target_views = (SHEETS_NUP if manifest.get("bearing_type") == "rolling.cylindrical_roller"
+                    and manifest.get("configuration") == "NUP" else SHEETS)
+    if [sheet.get("view") for sheet in sheets] != list(target_views):
         raise DrawingExportError("Unexpected drawing-sheet order")
     for sheet in sheets:
         name = sheet.get("file")
         if not isinstance(name, str) or name != Path(name).name or name not in {
-            "assembly.dxf", "outer_ring.dxf", "inner_ring.dxf", "cage.dxf"
+            "assembly.dxf", "outer_ring.dxf", "inner_ring.dxf", "cage.dxf", "loose_rib.dxf"
         }:
             raise DrawingExportError("Unsafe drawing-sheet filename")
         path = folder / name
@@ -135,6 +149,10 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
     The Windows CADImport real-DWG runtime remains mandatory.
     """
     templates = resolve_templates(resources, bearing_type, configuration)
+    views = (SHEETS_NUP if bearing_type == "rolling.cylindrical_roller"
+             and configuration == "NUP" else SHEETS)
+    if len(templates) != len(views):
+        raise DrawingExportError("Selected template set has an incorrect number of sheets")
     if os.name != "nt":
         raise DrawingExportError("CADImport bridge requires licensed Windows/.NET runtime")
     # Fail before reading/calculating the large legacy variable set when the
@@ -184,7 +202,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
     identity = sha256(json.dumps({
         "request_hash": request_hash, "db_sha256": report["database_sha256"],
         "templates_sha256": [_digest(template) for template in templates],
-        "variables": bridge_values(report), "engine": "robas.dwg.cadimport.v1.svgpreview.v1",
+        "variables": bridge_values(report), "engine": "robas.dwg.cadimport.v1.svgpreview.v2",
     }, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
     destination = target_root / identity
     if destination.exists():
@@ -195,7 +213,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
         mapping = folder / "variables.json"
         mapping.write_text(json.dumps(bridge_values(report), ensure_ascii=False), encoding="utf-8")
         sheets = []
-        for name, template in zip(SHEETS, templates):
+        for name, template in zip(views, templates):
             output = folder / (name + ".dxf")
             try:
                 result = subprocess.run(
@@ -246,6 +264,10 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
             "robas_load_evidence": report.get("legacy_load_evidence"),
             "manufacturing_approved": False,
             "bearing_type": bearing_type,
+            "configuration": configuration,
+            "template_composition_review": (
+                "ORIGINAL_FRMMAIN_N_SET" if bearing_type != "rolling.cylindrical_roller"
+                or configuration == "N" else "INFERRED_SOURCE_FILES_AUTOCAD_REVIEW_REQUIRED"),
             "request_hash": request_hash,
             "database_sha256": report["database_sha256"],
             "bundle_key": identity,
