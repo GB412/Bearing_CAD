@@ -47,6 +47,7 @@ test('2D drawing generation opens the large preview workspace and supports sheet
     if (path === '/api/v2/cad/drawings' && request.method() === 'POST') {
       const body = request.postDataJSON();
       expect(body.drawing.model).toBe('6208');
+      expect(body.drawing.radial_clearance_group).toBe('C0');
       expect(body.design.schema_version).toBe('bearing-cad.request.v1');
       return route.fulfill({status: 201, json: {
         manifest_url: manifestUrl,
@@ -78,6 +79,7 @@ test('2D drawing generation opens the large preview workspace and supports sheet
 
   await page.goto('/rolling.html');
   await expect(page.locator('#generate2d')).toBeEnabled();
+  await page.locator('#drawingClearance').selectOption('C0');
   await page.locator('#generate2d').click();
 
   await expect(page.locator('#drawingWorkspace')).toBeVisible();
