@@ -79,6 +79,23 @@ class ContractTests(unittest.TestCase):
         angle["parameters"]["contact_angle_deg"] = 90
         with self.assertRaises(ContractError): parse_request(angle)
 
+    def test_acb_optional_cage_material_survives_snapshot_and_validation(self):
+        from test_angular_contact import request as angular_request
+        payload = angular_request(25)
+        without = parse_request(copy.deepcopy(payload))
+        self.assertNotIn("cage_material", without.parameters)
+        payload["parameters"]["cage_material"] = "engineering_plastic"
+        parsed = parse_request(payload)
+        self.assertEqual(parsed.parameters["cage_material"], "engineering_plastic")
+        self.assertNotEqual(parsed.request_hash, without.request_hash)
+        again = copy.deepcopy(payload)
+        again["parameters"]["cage_material"] = "phenolic"
+        self.assertEqual(parse_request(again).parameters["cage_material"], "phenolic")
+        for bad in (None, 0, True, "unidentified"):
+            again["parameters"]["cage_material"] = bad
+            with self.assertRaises(ContractError):
+                parse_request(again)
+
     def test_only_functional_detail_level_for_all_bearing_families(self):
         from test_cylindrical_roller import cylindrical_request
         from test_angular_contact import request as angular_request
