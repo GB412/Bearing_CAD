@@ -92,7 +92,7 @@ $env:BEARING_CAD_SVG_FONT = "msyh.ttc"
 powershell -ExecutionPolicy Bypass -File .\scripts\run_bearing_cad_with_robas.ps1
 ```
 
-如果刚安装了新字体，可在激活的 Python 环境运行 `python -m ezdxf fonts` 重新建立字体缓存；若不支持该命令，请参考 ezdxf 的字体缓存说明。无需把字体提交到 GitHub。保存新版本后，**重新点击网页的“生成原版模板二维图纸”**；旧 SVG 缓存不会自动变成新版预览。
+如果刚安装了新字体，可在激活的 Python 环境运行 `python -m ezdxf --fonts` 重新建立字体缓存；若不支持该命令，请参考 ezdxf 的字体缓存说明。无需把字体提交到 GitHub。保存新版本后，**重新点击网页的“生成原版模板二维图纸”**；旧 SVG 缓存不会自动变成新版预览。
 
 修复后的 SVG 在检测到完整闭合图框时按图框自适应，避免远离图纸的实体撑大页面；找不到图框时退回内容边界。网页 SVG 使用的字体可能与 AutoCAD 的 `HZTXT.SHX` 字形、字宽有细微差异，**以 AutoCAD 打开同一份 DXF 的实际效果为最终文字显示检查依据**。
 
