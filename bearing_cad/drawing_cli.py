@@ -44,6 +44,7 @@ def main(argv=None):
         parameters=dict(request.parameters),
         request_hash=request.request_hash,
         configuration=request.parameters.get("configuration"),
+        cage=request.cage,
         **options,
     )
     result=verify_drawing_bundle(folder,folder.name)
