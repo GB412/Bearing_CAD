@@ -57,7 +57,15 @@ test('2D drawing generation opens the large preview workspace and supports sheet
       return route.fulfill({json: {
         manifest: {
           request_hash: 'd'.repeat(64),
-          sheets: sheets.map(([view, file, preview_file]) => ({view, file, preview_file})),
+          unfilled_template_variable_count: 2,
+          unfilled_database_unused_count: 54,
+          sheets: sheets.map(([view, file, preview_file]) => ({
+            view, file, preview_file,
+            variable_diagnostics: {
+              unfilled_variable_count: view === 'assembly' ? 2 : 0,
+              unfilled_variable_names: view === 'assembly' ? ['C_', 'W01'] : [],
+            },
+          })),
         },
         file_urls: fileUrls,
       }});
@@ -77,10 +85,13 @@ test('2D drawing generation opens the large preview workspace and supports sheet
   await expect(page.locator('#drawingPreviewImage')).toBeVisible();
   await expect(page.locator('#drawingSheetTabs [role="tab"]')).toHaveCount(4);
   await expect(page.locator('#drawingSheetTitle')).toHaveText('总装图');
+  await expect(page.locator('#drawingWorkspaceSubtitle')).toContainText('模板实际命中空变量 2 项');
+  await expect(page.locator('#drawingSheetDiagnostics')).toContainText('C_、W01');
   await expect(page.locator('#drawingDownloadCurrent')).toHaveAttribute('download', 'assembly.dxf');
 
   await page.locator('#drawingSheetTabs [data-sheet-key="outer_ring"]').click();
   await expect(page.locator('#drawingSheetTitle')).toHaveText('外圈图');
+  await expect(page.locator('#drawingSheetDiagnostics')).toContainText('均有值');
   await expect(page.locator('#drawingDownloadCurrent')).toHaveAttribute('download', 'outer_ring.dxf');
 
   await page.locator('#drawingZoomIn').click();
@@ -98,6 +109,7 @@ test('2D drawing generation opens the large preview workspace and supports sheet
   await expect(page.locator('#drawingPreviewEmpty')).toBeVisible();
   await expect(page.locator('#drawingDownloadCurrent')).toBeHidden();
   await expect(page.locator('#drawingTabCount')).toHaveText('等待生成');
+  await expect(page.locator('#drawingSheetDiagnostics')).toHaveText('');
 
   expect(errors).toEqual([]);
 });
