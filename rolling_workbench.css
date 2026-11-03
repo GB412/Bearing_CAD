@@ -842,3 +842,22 @@ footer a:hover { text-decoration: underline; }
   outline: 2px solid #a4c5d4;
   outline-offset: 1px;
 }
+
+/* CADImport source-TEXT variable completeness; not a manufacturing verdict. */
+.drawing-sheet-diagnostics {
+  display: block;
+  color: #59756f;
+  background: #edf5f2;
+  border: 1px solid #d9e8e2;
+  border-radius: 5px;
+  padding: 5px 8px;
+  font-size: 10px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.drawing-sheet-diagnostics:empty { display: none; }
+.drawing-sheet-diagnostics.has-missing {
+  color: #866342;
+  background: #fbf5eb;
+  border-color: #efdfc5;
+}
