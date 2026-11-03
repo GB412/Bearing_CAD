@@ -122,6 +122,8 @@ export function initDrawingWorkbench(getDesign) {
     $('drawingWorkspaceSubtitle').textContent = '生成图纸后，在这里查看四张原版模板图纸。';
     $('drawingSheetTitle').textContent = '尚未选择图纸';
     $('drawingSheetFile').textContent = '生成后显示 DXF 文件名';
+    $('drawingSheetDiagnostics').textContent = '';
+    $('drawingSheetDiagnostics').removeAttribute('title');
     downloadCurrent.hidden = true;
     downloadCurrent.removeAttribute('href');
     resetZoom();
@@ -153,6 +155,23 @@ export function initDrawingWorkbench(getDesign) {
     });
     $('drawingSheetTitle').textContent = sheet.title;
     $('drawingSheetFile').textContent = sheet.file;
+    const report = sheet.variableDiagnostics;
+    const notice = $('drawingSheetDiagnostics');
+    if (report && Number.isInteger(report.unfilled_variable_count)) {
+      const names = Array.isArray(report.unfilled_variable_names)
+        ? report.unfilled_variable_names : [];
+      notice.textContent = report.unfilled_variable_count
+        ? '本图实际命中空变量 ' + report.unfilled_variable_count + ' 项：' + names.slice(0, 7).join('、') +
+          (names.length > 7 ? '…' : '')
+        : '本图匹配到的变量均有值（仍需工程校核）';
+      notice.title = '检查的是当前 DWG 模板实际匹配的 TEXT 变量，不包括未使用的数据库空值。完整记录请查看 drawing_manifest.json。' +
+        (names.length ? '\n空值：' + names.join('、') : '');
+      notice.classList.toggle('has-missing', report.unfilled_variable_count > 0);
+    } else {
+      notice.textContent = '此图纸没有逐项变量诊断数据';
+      notice.removeAttribute('title');
+      notice.classList.remove('has-missing');
+    }
     downloadCurrent.href = sheet.downloadUrl;
     downloadCurrent.download = sheet.file;
     downloadCurrent.hidden = false;
@@ -195,6 +214,7 @@ export function initDrawingWorkbench(getDesign) {
         file: sheet.file,
         downloadUrl: localAssetUrl(fileUrls?.[sheet.file], sheet.file),
         previewUrl: localAssetUrl(fileUrls?.[sheet.preview_file], sheet.file + ' SVG 预览'),
+        variableDiagnostics: sheet.variable_diagnostics || null,
       };
     });
 
@@ -216,7 +236,12 @@ export function initDrawingWorkbench(getDesign) {
     }
 
     $('drawingTabCount').textContent = String(sheets.length) + ' 张已生成';
-    $('drawingWorkspaceSubtitle').textContent = '已生成 ' + sheets.length + ' 张原版资源图纸。选择上方图纸标签切换预览。';
+    const templateBlank = manifest.unfilled_template_variable_count;
+    const unusedBlank = manifest.unfilled_database_unused_count;
+    $('drawingWorkspaceSubtitle').textContent = Number.isInteger(templateBlank) && Number.isInteger(unusedBlank)
+      ? '模板实际命中空变量 ' + templateBlank + ' 项 · 数据库未使用空变量 ' + unusedBlank +
+        ' 项。图纸内容仍需人工校核。'
+      : '已生成 ' + sheets.length + ' 张原版资源图纸。选择上方图纸标签切换预览。';
     $('drawingWorkspaceStatus').textContent = '已生成 ' + sheets.length + ' 张 DXF';
     $('drawingWorkspaceStatus').classList.remove('is-error');
     $('drawingWorkspaceStatus').classList.add('is-ready');
