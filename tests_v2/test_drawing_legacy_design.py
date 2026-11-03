@@ -46,6 +46,11 @@ def test_dgb_geometry_follows_original_formula_at_nominal_bore():
     assert "cage_pitch_d_mm" not in values
     assert "STAMPING_CAGE_DIMENSIONS_NOT_AVAILABLE_FOR_SELECTED_CAGE" in evidence["warnings"]
     assert dgb_radial_clearance_mm(40) == pytest.approx(.013)
+    # C# integer division, not mathematical average: (4+11)/2 = 7.
+    assert dgb_radial_clearance_mm(10) == pytest.approx(.007)
+    assert dgb_radial_clearance_mm(18) == pytest.approx(.008)
+    assert dgb_radial_clearance_mm(160) == pytest.approx(.037)
+    assert dgb_radial_clearance_mm(199.9) == pytest.approx(.044)
     assert dgb_radial_clearance_mm(200) is None
 
 
