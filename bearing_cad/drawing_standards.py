@@ -47,13 +47,13 @@ def _positive_diameter(value):
 
 
 def _first_range(resources, bearing_type, table, column, diameter):
-    # Identifiers are hard-coded from an allowlist, not interpolated user input.
+    # Original DataControl.cs uses SELECT * WHERE dimension>=? LIMIT 1,\n    # without sorting. Preserve the first matching database row.\n    # Identifiers are hard-coded from an allowlist, not interpolated user input.
     diameter = _positive_diameter(diameter)
     with _connection(resources, bearing_type) as db:
         try:
             row = db.execute(
                 f'SELECT * FROM "{table}" WHERE CAST("{column}" AS REAL) >= ? '
-                f'ORDER BY CAST("{column}" AS REAL), rowid LIMIT 1',
+                'LIMIT 1',
                 (diameter,)).fetchone()
         except sqlite3.Error as error:
             raise StandardsLookupError("RoBAS standards table missing or corrupt") from error
@@ -94,7 +94,11 @@ def get_roughness(*, resources, bearing_type, bore_d_mm, accuracy_class):
 
 
 def get_width_deviation(*, resources, bearing_type, bore_d_mm, size_series):
-    if size_series not in ("0", "2", "3"):
+    if bearing_type == "rolling.cylindrical_roller":
+        if size_series not in "01234789" or len(size_series) != 1:
+            raise StandardsLookupError("Unsupported size series")
+    elif size_series not in ("0", "2", "3"):
+        # Original DataControl has no defined branch for other ball series.
         raise StandardsLookupError("Unsupported size series")
     row = _first_range(resources, bearing_type, "轴承宽度公差", "d", bore_d_mm)
     if bearing_type == "rolling.cylindrical_roller":
