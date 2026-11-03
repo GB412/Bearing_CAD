@@ -81,6 +81,21 @@ D:\Bearing CAD\RoBAS_Resources\Resource\shx
 
 然后重新打开生成的 DXF。不要把原始 SHX 字体自动替换成不明字体，也不要提交字体文件进 Git。
 
+## 4.1 浏览器 SVG 字体与真实 DXF 的区别
+
+CADImport 导出的原版 DXF 常含 `\\M+5...` 旧版 GBK/MIF 中文文本，以及 `HZ` 文字样式引用的 `HZTXT.SHX` 大字体。网页预览为了让中文可读，会 **仅在内存副本** 解码 MIF 文本，再用系统已安装的中文 TTF/TTC 绘制 SVG。生成的 `assembly.dxf`、`inner_ring.dxf` 等原始交付文件保持字节不变。
+
+Windows 预览默认查找微软雅黑、黑体或宋体等本机字体；未找到中文 TTF/TTC 时会在 `drawing_manifest.json` 的每张 `preview_diagnostics.preview_font_warning` 给出诊断。可以在启动服务之前显式选择已安装且被 ezdxf 字体缓存识别的字体：
+
+```powershell
+$env:BEARING_CAD_SVG_FONT = "msyh.ttc"
+powershell -ExecutionPolicy Bypass -File .\scripts\run_bearing_cad_with_robas.ps1
+```
+
+如果刚安装了新字体，可在激活的 Python 环境运行 `python -m ezdxf fonts` 重新建立字体缓存；若不支持该命令，请参考 ezdxf 的字体缓存说明。无需把字体提交到 GitHub。保存新版本后，**重新点击网页的“生成原版模板二维图纸”**；旧 SVG 缓存不会自动变成新版预览。
+
+修复后的 SVG 在检测到完整闭合图框时按图框自适应，避免远离图纸的实体撑大页面；找不到图框时退回内容边界。网页 SVG 使用的字体可能与 AutoCAD 的 `HZTXT.SHX` 字形、字宽有细微差异，**以 AutoCAD 打开同一份 DXF 的实际效果为最终文字显示检查依据**。
+
 ## 5. 二维图纸的工程验收边界
 
 - 深沟球、角接触球、N 型圆柱滚子的原始模板组合由 `FrmMain.cs` 直接明确使用。

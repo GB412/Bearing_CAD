@@ -14,9 +14,7 @@ import subprocess
 import tempfile
 
 import ezdxf
-from ezdxf.addons.drawing import Frontend, RenderContext, layout
-from ezdxf.addons.drawing.config import BackgroundPolicy, ColorPolicy, Configuration
-from ezdxf.addons.drawing.svg import SVGBackend
+from .drawing_preview import render_svg_preview
 
 from .drawing_variables import prepare_variables, bridge_values
 from .drawing_legacy_technical import technical_condition_rows, apply_technical_conditions
@@ -60,18 +58,6 @@ def _digest(file: Path) -> str:
     return h.hexdigest()
 
 
-def _render_svg_preview(dxf_path: Path, svg_path: Path) -> None:
-    """Render the exported DXF itself for a browser-only review preview."""
-    document = ezdxf.readfile(str(dxf_path))
-    backend = SVGBackend()
-    config = Configuration(
-        color_policy=ColorPolicy.COLOR,
-        background_policy=BackgroundPolicy.MODELSPACE,
-        lineweight_scaling=0.5,
-    )
-    Frontend(RenderContext(document), backend, config).draw_layout(
-        document.modelspace(), finalize=True)
-    svg_path.write_text(backend.get_string(layout.Page(0, 0)), encoding="utf-8")
 
 
 def verify_drawing_bundle(folder: Path, expected_key: str | None = None) -> dict:
@@ -202,7 +188,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
     identity = sha256(json.dumps({
         "request_hash": request_hash, "db_sha256": report["database_sha256"],
         "templates_sha256": [_digest(template) for template in templates],
-        "variables": bridge_values(report), "engine": "robas.dwg.cadimport.v1.svgpreview.v2",
+        "variables": bridge_values(report), "engine": "robas.dwg.cadimport.v1.svgpreview.v3",
     }, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
     destination = target_root / identity
     if destination.exists():
@@ -242,12 +228,13 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
                 raise DrawingExportError(
                     f"DXF fatal audit errors in {name}: {len(audit.errors)}")
             preview = folder / (name + ".svg")
-            _render_svg_preview(output, preview)
+            preview_report = render_svg_preview(output, preview)
             sheets.append({
                 "view": name, "file": output.name, "size_bytes": output.stat().st_size,
                 "sha256": _digest(output), "template_sha256": _digest(template),
                 "preview_file": preview.name, "preview_size_bytes": preview.stat().st_size,
                 "preview_sha256": _digest(preview),
+                "preview_diagnostics": preview_report,
                 "text_replacements": response["exact_match_count"],
                 "dxf_audit_nonfatal_fixes": len(audit.fixes),
                 "non_text_entities": response.get("non_text_entity_count"),
