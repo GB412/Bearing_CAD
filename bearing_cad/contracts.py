@@ -189,6 +189,13 @@ def parse_request(data: Mapping[str, Any]) -> BearingRequest:
             raise ContractError("PARAMETER_INVALID", "/parameters/cage_material",
                                 "Expected engineering_plastic or phenolic")
         raw_input = {key: value for key, value in raw_input.items() if key != "cage_material"}
+    # Optional CAD detail fields: existing v1 explicit cylindrical requests
+    # continue to build plain RoBAS-compatible rollers by default.
+    roller_options = {}
+    if kind == BearingType.CYLINDRICAL and isinstance(raw_input, dict):
+        optional = {"roller_profile", "roller_end_chamfer_mm", "roller_crown_relief_mm"}
+        roller_options = {key: raw_input[key] for key in optional if key in raw_input}
+        raw_input = {key: val for key, val in raw_input.items() if key not in optional}
     raw = _closed_object(raw_input, set(fields), "/parameters")
     params: dict[str, float | int | str] = {}
     if optional_material is not None:
@@ -224,6 +231,20 @@ def parse_request(data: Mapping[str, Any]) -> BearingRequest:
                 raise ContractError("RESOURCE_LIMIT", path,
                                     "CAD service numeric budget exceeded (1000 mm)")
             params[field] = val
+    if roller_options:
+        if "roller_profile" in roller_options:
+            profile = roller_options["roller_profile"]
+            if type(profile) is not str or profile not in {"plain", "chamfered", "crowned"}:
+                raise ContractError("PARAMETER_INVALID", "/parameters/roller_profile",
+                                    "Expected plain, chamfered or crowned roller")
+            params["roller_profile"] = profile
+        for key in ("roller_end_chamfer_mm", "roller_crown_relief_mm"):
+            if key in roller_options:
+                value = roller_options[key]
+                if type(value) not in (int, float) or not math.isfinite(value) or not 0 <= value <= MAX_CAD_DIMENSION_MM:
+                    raise ContractError("PARAMETER_INVALID", "/parameters/" + key,
+                                        "Expected finite nonnegative roller profile dimension")
+                params[key] = float(value)
     if params["bore_d_mm"] >= params["outside_d_mm"]:
         raise ContractError("PARAMETER_INVALID", "/parameters/outside_d_mm", "Outer diameter must exceed bore")
     if not params["bore_d_mm"] < params["pitch_d_mm"] < params["outside_d_mm"]:
