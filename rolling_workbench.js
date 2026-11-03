@@ -3,6 +3,7 @@ import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {STLLoader} from 'three/addons/loaders/STLLoader.js';
 import './rolling_workbench.css';
 import {initDrawingWorkbench} from './rolling_drawing.js';
+import {deriveRoBASGrooves} from './rolling_robas_geometry.js';
 import {bearingForms, cageForms, cageChoices, defaultCageEnabled, buildAssemblyIndex, validateArtifact, requestFromFields, geometryIssues, scaleGeometryFields, describeCadError, ParameterInputError} from './rolling_manifest.js';
 
 const $ = id => document.getElementById(id);
@@ -20,10 +21,29 @@ function renderFields(container, prefix, data) {
    field.type='number';field.step=key.endsWith('_count')?'1':'any';field.value=String(value);
   }
   field.id=prefix+key;field.setAttribute('aria-label',label);
+  if(prefix==='param-' && (key==='inner_groove_radius_mm'||key==='outer_groove_radius_mm')){
+   field.readOnly=true;
+   field.classList.add('derived-input');
+   field.title='由 RoBAS 原版沟曲率系数与钢球直径自动计算，不需要手动输入';
+  }
   field.addEventListener(choices?'change':'input',()=>{
+   if(prefix==='param-' && key==='ball_d_mm')syncDerivedGrooves();
    invalidatePreview();showDraftIssues();
   });
   el.append(field);container.append(el);
+ }
+ if(prefix==='param-')syncDerivedGrooves();
+}
+function syncDerivedGrooves(){
+ const diameter=$('param-ball_d_mm')?.value;
+ if(diameter===undefined)return;
+ let radii;
+ try {radii=deriveRoBASGrooves($('bearingType').value,diameter);}
+ catch {radii=null;}
+ if(!radii)return;
+ for(const [key,value] of Object.entries(radii)){
+  const field=$('param-'+key);
+  if(field)field.value=String(value);
  }
 }
 renderFields($('parameters'),'param-',fields);
@@ -308,6 +328,7 @@ $('scaleApply').addEventListener('click',()=>{
   const problems=geometryIssues(requestFromFields(modified.values,modified.cage,selectedType()));
   if(problems.length){paintIssues(problems);throw new Error(problems[0].message+' 如当前参数已冲突，请先恢复默认值再整体缩放。');}
   for(const [key] of fields)$('param-'+key).value=modified.values[key];
+  syncDerivedGrooves();
   if(modified.cage)for(const [key] of cages)$('cage-'+key).value=modified.cage[key];
   invalidatePreview('已按当前几何整体等比例缩放，请生成三维模型');
   showDraftIssues();

@@ -39,7 +39,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Validate manifest and instance handling
-        run: node --test rolling_manifest.test.js
+        run: node --test rolling_manifest.test.js rolling_robas_geometry.test.js
       - name: Build both workbenches
         run: npm run build
       - name: Ensure V2 HTML is emitted
