@@ -30,7 +30,7 @@ test('editing bore reports related fields; scaling preserves explicit geometry',
  await expect(page.locator('#param-pitch_d_mm')).toHaveValue('67.5');
  await expect(page.locator('#param-inner_shoulder_right_d_mm')).toHaveValue('58.75');
  await expect(page.locator('#param-contact_angle_deg')).toHaveValue('25');
- await expect(page.locator('#param-ball_count')).toHaveValue('11');
+ await expect(page.locator('#param-ball_count')).toHaveValue('18');
  await expect(page.locator('#validation')).toBeHidden();
  expect(errors).toEqual([]);
 });
@@ -66,7 +66,7 @@ test('backend-only rolling collision rejects job with field-specific Chinese err
   return route.fulfill({status:404,json:{}});
  });
  await page.goto('/rolling.html');
- await page.locator('#param-ball_count').fill('40');
+ await expect(page.locator('#param-ball_count')).toHaveAttribute('readonly', '');
  await expect(page.locator('#validation')).toBeHidden();
  await page.locator('#generate').click();
  await expect(page.locator('#status')).toContainText('相邻滚动体发生重叠');
