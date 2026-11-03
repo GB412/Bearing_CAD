@@ -151,7 +151,7 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
                 return self._error(422, "NOT_SUPPORTED", "Only functional CAD detail is implemented", "/detail_level")
             # The API cap is a resource limit, not a mechanical standard.
             dimensions = [float(value) for key, value in request.parameters.items()
-                          if key not in {"ball_count", "roller_count", "configuration"}]
+                          if type(value) in (int, float) and key not in {"ball_count", "roller_count"}]
             if request.cage is not None:
                 from dataclasses import asdict
                 dimensions.extend(float(value) for value in asdict(request.cage).values()
