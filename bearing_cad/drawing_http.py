@@ -145,6 +145,7 @@ def create_drawing(handler,data,root,resources,bridge,build_lock):
             bearing_type=request.bearing_type.value,parameters=dict(request.parameters),
             request_hash=request.request_hash,
             configuration=request.parameters.get("configuration"),
+            cage=request.cage,
             **options)
         manifest=verify_drawing_bundle(output,output.name)
         if manifest["request_hash"] != request.request_hash:
