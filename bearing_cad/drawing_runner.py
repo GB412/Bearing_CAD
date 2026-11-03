@@ -22,6 +22,7 @@ from .drawing_legacy_chamfer import apply_robas_chamfer
 from .drawing_legacy_dimensions import apply_deep_groove_dimensions, apply_angular_contact_dimensions
 from .drawing_legacy_roller import apply_cylindrical_roller_dimensions
 from .drawing_legacy_ratings import apply_robas_loads
+from .drawing_diagnostics import sheet_variable_diagnostics, bundle_variable_diagnostics
 
 SHEETS = ("assembly", "outer_ring", "inner_ring", "cage")
 SHEETS_NUP = (*SHEETS, "loose_rib")
@@ -188,7 +189,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
     identity = sha256(json.dumps({
         "request_hash": request_hash, "db_sha256": report["database_sha256"],
         "templates_sha256": [_digest(template) for template in templates],
-        "variables": bridge_values(report), "engine": "robas.dwg.cadimport.v1.svgpreview.v3",
+        "variables": bridge_values(report), "engine": "robas.dwg.cadimport.v1.svgpreview.v3.variable-diagnostics.v1",
     }, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
     destination = target_root / identity
     if destination.exists():
@@ -219,6 +220,10 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
                 raise DrawingExportError(f"CADImport response is not JSON for {name}") from error
             if response.get("exact_match_count", 0) < 1 or not output.is_file():
                 raise DrawingExportError(f"CADImport did not replace any TEXT in {name}")
+            try:
+                variable_diagnostics = sheet_variable_diagnostics(report, response.get("matched_keys"))
+            except ValueError as error:
+                raise DrawingExportError(f"Invalid CADImport TEXT-key diagnostics in {name}") from error
             # Audit the exported DXF only. Template outline versus the 3D
             # model, and reference DXF geometry comparisons, are NOT required
             # by the original RoBAS TEXT-replacement workflow.
@@ -235,15 +240,18 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
                 "preview_file": preview.name, "preview_size_bytes": preview.stat().st_size,
                 "preview_sha256": _digest(preview),
                 "preview_diagnostics": preview_report,
+                "variable_diagnostics": variable_diagnostics,
                 "text_replacements": response["exact_match_count"],
                 "dxf_audit_nonfatal_fixes": len(audit.fixes),
                 "non_text_entities": response.get("non_text_entity_count"),
             })
+        drawing_diagnostics = bundle_variable_diagnostics(report, sheets)
         manifest = {
             "schema_version": "robas.drawing.bundle.v1",
             "status": "ROBAS_TEMPLATE_TEXT_EXPORTED_UNREVIEWED",
             "unfilled_database_variable_names": report["unresolved_names"],
             "unfilled_database_variable_count": report["unresolved_count"],
+            **drawing_diagnostics,
             "technical_condition_rows": report.get("technical_rows_applied", 0),
             "diameter_series": diameter_series,
             "chamfer_lookup_warning": report.get("chamfer_lookup_warning"),
