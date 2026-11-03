@@ -178,8 +178,21 @@ def parse_request(data: Mapping[str, Any]) -> BearingRequest:
         raise ContractError("NOT_SUPPORTED", "/detail_level", "Only functional CAD detail is implemented")
 
     fields = _TYPES[kind]
-    raw = _closed_object(envelope["parameters"], set(fields), "/parameters")
+    # The ACB ball-count heuristic depends on cage material; keep the selection
+    # with its geometry snapshot without breaking older explicit v1 requests.
+    optional_material = None
+    raw_input = envelope["parameters"]
+    if (kind == BearingType.ANGULAR_CONTACT and isinstance(raw_input, dict)
+            and "cage_material" in raw_input):
+        optional_material = raw_input["cage_material"]
+        if optional_material not in ("engineering_plastic", "phenolic") or not isinstance(optional_material, str):
+            raise ContractError("PARAMETER_INVALID", "/parameters/cage_material",
+                                "Expected engineering_plastic or phenolic")
+        raw_input = {key: value for key, value in raw_input.items() if key != "cage_material"}
+    raw = _closed_object(raw_input, set(fields), "/parameters")
     params: dict[str, float | int | str] = {}
+    if optional_material is not None:
+        params["cage_material"] = optional_material
     for field in fields:
         val = raw[field]
         path = "/parameters/" + field
