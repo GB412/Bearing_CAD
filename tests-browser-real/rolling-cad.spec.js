@@ -88,7 +88,7 @@ test('real OCCT builds a rescaled 50 mm bore angular-contact assembly',async({pa
  await expect(page.locator('#validation')).toBeHidden();
  await page.locator('#generate').click();
  await expect.poll(()=>page.evaluate(()=>window.rollingViewerSnapshot().instances.length),
-  {timeout:160_000}).toBe(19);
+  {timeout:160_000}).toBe(20);
  const stepLink=page.locator('#downloads a').filter({hasText:'bearing_assembly.step'});
  await expect(stepLink).toBeVisible();
  const href=await stepLink.getAttribute('href');
@@ -98,5 +98,5 @@ test('real OCCT builds a rescaled 50 mm bore angular-contact assembly',async({pa
  expect(design.parameters.bore_d_mm).toBe(50);
  expect(design.parameters.outside_d_mm).toBe(85);
  expect(design.parameters.contact_angle_deg).toBe(25);
- expect(meta.manifest.instances).toHaveLength(19);
+ expect(meta.manifest.instances).toHaveLength(20);
 });
