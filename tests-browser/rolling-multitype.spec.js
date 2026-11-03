@@ -57,13 +57,13 @@ test('one workbench drives cylindrical NUP and angular contact without stale res
  await expect.poll(()=>page.evaluate(()=>window.rollingViewerSnapshot().instances.length)).toBe(0);
  await expect(page.locator('#param-contact_angle_deg')).toHaveValue('25');
  await page.locator('#generate').click();
- await expect.poll(()=>page.evaluate(()=>window.rollingViewerSnapshot().instances.length)).toBe(13);
+ await expect.poll(()=>page.evaluate(()=>window.rollingViewerSnapshot().instances.length)).toBe(19);
  expect(requests.at(-1).parameters.contact_angle_deg).toBe(25);
  expect(requests.at(-1).parameters.inner_shoulder_right_d_mm).toBe(47);
  await page.locator('#cageEnabled').check();
  await expect(page.locator('#cageKind')).toHaveValue('straight_pocket');
  await page.locator('#generate').click();
- await expect.poll(()=>page.evaluate(()=>window.rollingViewerSnapshot().instances.length)).toBe(14);
+ await expect.poll(()=>page.evaluate(()=>window.rollingViewerSnapshot().instances.length)).toBe(20);
  expect(requests.at(-1).cage.kind).toBe('straight_pocket');
  await page.locator('#resetParams').click();
  await expect.poll(()=>page.evaluate(()=>window.rollingViewerSnapshot().instances.length)).toBe(0);
