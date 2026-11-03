@@ -15,7 +15,7 @@ function renderFields(container, prefix, data) {
   const el=document.createElement('label');el.className='field';el.textContent=label;
   const field=choices?document.createElement('select'):document.createElement('input');
   if(choices){
-   for(const option of choices){const item=document.createElement('option');item.value=option;item.textContent=key==='cage_material'?({engineering_plastic:'工程塑料',phenolic:'酚醛层压布管'}[option]||option):option;field.append(item);}
+   for(const option of choices){const item=document.createElement('option');item.value=option;item.textContent=({engineering_plastic:'工程塑料',phenolic:'酚醛层压布管',plain:'原版直圆柱',chamfered:'端部倒角',crowned:'凸度修形 + 倒角'}[option]||option);field.append(item);}
    field.value=value;
   }else{
    field.type='number';field.step=key.endsWith('_count')?'1':'any';field.value=String(value);
@@ -30,6 +30,7 @@ function renderFields(container, prefix, data) {
   }
   field.addEventListener(choices?'change':'input',()=>{
    if(prefix==='param-' && ['ball_d_mm','pitch_d_mm','cage_material'].includes(key))syncDerivedGeometry();
+   if(prefix==='param-' && key==='roller_profile')syncRollerProfileInputs();
    invalidatePreview();showDraftIssues();
   });
   el.append(field);container.append(el);
@@ -37,6 +38,7 @@ function renderFields(container, prefix, data) {
  if(prefix==='param-')syncDerivedGeometry();
 }
 function syncDerivedGeometry(){
+ syncRollerProfileInputs();
  syncDerivedGrooves();
  const ball=$('param-ball_d_mm');
  const pitch=$('param-pitch_d_mm');
@@ -49,6 +51,25 @@ function syncDerivedGeometry(){
  }catch{
   countField.value='';
  }
+}
+function syncRollerProfileInputs(){
+ const profile=$('param-roller_profile')?.value;
+ const chamfer=$('param-roller_end_chamfer_mm');
+ const relief=$('param-roller_crown_relief_mm');
+ if(!profile||!chamfer||!relief)return;
+ if(profile==='plain'){
+  chamfer.value='0';relief.value='0';
+ }else if(profile==='chamfered'){
+  if(Number(chamfer.value)===0)chamfer.value='0.2';
+  relief.value='0';
+ }else if(profile==='crowned'){
+  if(Number(chamfer.value)===0)chamfer.value='0.2';
+  if(Number(relief.value)===0)relief.value='0.02';
+ }
+ chamfer.readOnly=profile==='plain';
+ relief.readOnly=profile!=='crowned';
+ chamfer.classList.toggle('derived-input',profile==='plain');
+ relief.classList.toggle('derived-input',profile!=='crowned');
 }
 function syncDerivedGrooves(){
  const diameter=$('param-ball_d_mm')?.value;

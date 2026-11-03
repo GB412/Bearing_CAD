@@ -1,8 +1,8 @@
 """Functional cylindrical roller bearing B-Rep with explicit flange geometry.
 
 Based on the audited RoBAS CRB configuration and roller-array ideas, not
-copied Eyeshot code. Nominal contact/end-face details are not manufacturing
-ready. All distances are mm, the axis is Z, and the midplane is Z=0.
+copied Eyeshot code. The baseline plain roller reproduces RoBAS; optional chamfer/crown are
+Bearing_CAD enhancements, not RoBAS manufacturing design rules. All distances are mm, the axis is Z, and the midplane is Z=0.
 """
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import math
 
 from .contracts import (AssemblyModel, BearingRequest, BearingType,
                         ComponentDefinition, ComponentInstance, ContractError)
-from .geometry import circular_positions, cylindrical_roller, revolve_radial_profile, annulus
+from .geometry import circular_positions, profiled_cylindrical_roller, revolve_radial_profile, annulus
 from .geometry_checks import inspect_solid, interference_volume
 from .cages import cylindrical_window_cage
 
@@ -88,7 +88,16 @@ def build_cylindrical_roller(request: BearingRequest) -> AssemblyModel:
     outer = _ring_profile(is_inner=False, bore=d / 2, outside=D / 2,
                           race=outer_race, tip=outer_tip, low=lower,
                           high=upper, flange_width=rib_width, sides=outer_sides)
-    roller = cylindrical_roller(roller_d, roller_length)
+    try:
+        roller = profiled_cylindrical_roller(
+            roller_d, roller_length,
+            profile=p.get("roller_profile", "plain"),
+            chamfer_mm=p.get("roller_end_chamfer_mm", 0.0),
+            crown_relief_mm=p.get("roller_crown_relief_mm", 0.0),
+        )
+    except (ValueError, RuntimeError) as error:
+        raise ContractError("PARAMETER_INVALID", "/parameters/roller_profile",
+                            str(error)) from error
     components = [ComponentDefinition("inner_ring", "inner_ring", inner),
                   ComponentDefinition("outer_ring", "outer_ring", outer),
                   ComponentDefinition("roller", "rolling_element", roller)]
