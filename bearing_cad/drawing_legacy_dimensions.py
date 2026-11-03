@@ -111,7 +111,7 @@ def apply_deep_groove_dimensions(*,report,parameters,legacy_values=None):
     count=parameters["ball_count"]
     if type(count) is not int or count<1:raise DrawingDataError("Invalid ball count")
     mass=round(math.pi*ball**3*7.8/6_000_000,5)
-    v.update(W04=text(mass),W04Z=text(count*mass),W09="0",W09Z="0")
+    v.update(W04=text(mass),W04Z=text(count*mass))
     for k,key,digits in (("W01","outer_race_weight_kg",3),("W02","inner_race_weight_kg",3),
                          ("W07","half_cage_weight_kg",5)):
         if key in old:v[k]=f"{number(old[key],key):.{digits}f}"

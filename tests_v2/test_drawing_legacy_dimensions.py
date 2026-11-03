@@ -28,7 +28,7 @@ def test_tolerance_source_boundaries():
 def test_dgb_robas_labels_are_formatted_and_preserve_order():
     names=["Ri","Ri_Upper","Re","De","di","a","Dd2","Dd2_Upper",
            "d2","d2_Lower","C_","Dcp","W04","W04Z","W01","W02",
-           "W07","W07Z","W","Cr","Cor","NO_FIELD","Ri"]
+           "W07","W07Z","W09","W09Z","W","Cr","Cor","NO_FIELD","Ri"]
     legacy={"inner_groove_d_mm":53.1,"outer_groove_d_mm":55.2,
             "inner_groove_position_mm":7.2,"cage_pocket_spacing_mm":15.5,
             "cage_pitch_d_mm":54,"cage_pitch_tolerance_mm":.015,
@@ -51,6 +51,8 @@ def test_dgb_robas_labels_are_formatted_and_preserve_order():
     expected=round(math.pi*8**3*7.8/6_000_000,5)
     assert allv("W04")==[format(expected,".15g")]
     assert allv("W07Z")==["0.02000"]
+    assert allv("W09")==[None]
+    assert allv("W09Z")==[None]
     assert allv("W")==[f"{.08+.05+.02+11*expected:.3f}"]
     assert allv("Cr")==["12.46"]
     assert allv("Cor")==["9.87"]
