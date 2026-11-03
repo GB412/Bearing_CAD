@@ -15,6 +15,7 @@ export function initDrawingWorkbench(getDesign) {
     outer_ring: '外圈图',
     inner_ring: '内圈图',
     cage: '保持架图',
+    loose_rib: '活动挡圈图',
   };
 
   let online = false;
@@ -172,8 +173,12 @@ export function initDrawingWorkbench(getDesign) {
   }
 
   function renderSheets(manifest, fileUrls) {
-    if (!Array.isArray(manifest.sheets) || manifest.sheets.length !== 4) {
-      throw new Error('出图结果不完整：预期得到四张 DXF 图纸');
+    if (!Array.isArray(manifest.sheets) || ![4,5].includes(manifest.sheets.length)) {
+      throw new Error('出图结果不完整：预期四张图纸，NUP 为五张');
+    }
+    if (manifest.sheets.length === 5 &&
+        !(manifest.bearing_type === 'rolling.cylindrical_roller' && manifest.configuration === 'NUP')) {
+      throw new Error('只有 NUP 构型允许附加活动挡圈图');
     }
     const seen = new Set();
     sheets = manifest.sheets.map(sheet => {
@@ -210,9 +215,9 @@ export function initDrawingWorkbench(getDesign) {
       tabs.append(tab);
     }
 
-    $('drawingTabCount').textContent = '4 张已生成';
-    $('drawingWorkspaceSubtitle').textContent = '已生成四张原版模板图纸。选择上方图纸标签可切换预览。';
-    $('drawingWorkspaceStatus').textContent = '已生成 4 张 DXF';
+    $('drawingTabCount').textContent = String(sheets.length) + ' 张已生成';
+    $('drawingWorkspaceSubtitle').textContent = '已生成 ' + sheets.length + ' 张原版资源图纸。选择上方图纸标签切换预览。';
+    $('drawingWorkspaceStatus').textContent = '已生成 ' + sheets.length + ' 张 DXF';
     $('drawingWorkspaceStatus').classList.remove('is-error');
     $('drawingWorkspaceStatus').classList.add('is-ready');
     activateSheet(sheets[0].key);
@@ -251,7 +256,7 @@ export function initDrawingWorkbench(getDesign) {
     controller = new AbortController();
     const signal = controller.signal;
     busy = true;
-    update('正在使用原始 DWG 模板生成四张 DXF…');
+    update('正在使用原始 DWG 资源模板生成工程图…');
     clearResults();
     try {
       const drawing = {
@@ -298,7 +303,7 @@ export function initDrawingWorkbench(getDesign) {
       }
       renderSheets(results.manifest, results.file_urls || {});
       setWorkspace('drawing');
-      update('已按原版模板生成四张 DXF（未作制造批准）');
+      update('已按原版模板生成 ' + sheets.length + ' 张 DXF（未作制造批准；非 N 圆柱图组需人工审核）');
     } catch (error) {
       if (sequence === generation && error.name !== 'AbortError') {
         clearResults();

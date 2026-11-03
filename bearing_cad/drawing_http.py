@@ -16,11 +16,11 @@ import subprocess
 from .contracts import ContractError,parse_request
 from .drawing_variables import DrawingDataError
 from .drawing_runner import (
-    DrawingExportError, generate_drawing_bundle, verify_drawing_bundle,
+    DrawingExportError, generate_drawing_bundle, verify_drawing_bundle, resolve_templates,
 )
 
 _DRAW_TOKEN=r"([a-f0-9]{32})"
-SHEET_ROUTE=re.compile(r"^/api/v2/cad/drawings/"+_DRAW_TOKEN+r"/files/(assembly|outer_ring|inner_ring|cage)\.(dxf|svg)$")
+SHEET_ROUTE=re.compile(r"^/api/v2/cad/drawings/"+_DRAW_TOKEN+r"/files/(assembly|outer_ring|inner_ring|cage|loose_rib)\.(dxf|svg)$")
 MANIFEST_ROUTE=re.compile(r"^/api/v2/cad/drawings/"+_DRAW_TOKEN+r"$")
 _OPTIONS={"model","accuracy_class","diameter_series","chamfer1_mm","chamfer2_mm","legacy_values","checked_values"}
 
@@ -101,13 +101,21 @@ def enabled(resources: Path | None,bridge: Path | None) -> bool:
 
 def drawing_status(handler,resources,bridge):
     check = environment_check(resources, bridge)
+    supported = ["rolling.deep_groove_ball", "rolling.angular_contact_ball",
+                 "rolling.cylindrical_roller:N"]
+    if resources is not None:
+        for variant in ("NU", "NJ", "NF", "NUP"):
+            try:
+                resolve_templates(Path(resources), "rolling.cylindrical_roller", variant)
+            except (DrawingExportError, OSError):
+                continue
+            supported.append("rolling.cylindrical_roller:" + variant)
     handler._respond(200,{
         "available": check["available"],
         "failures": check["failures"],
         "doctor": check["doctor"],
         "mode":"original_robas_dwg_text_replacement",
-        "supported_bearings":["rolling.deep_groove_ball","rolling.angular_contact_ball",
-                              "rolling.cylindrical_roller:N"],
+        "supported_bearings":supported,
         "formats":["dxf"],
         "requires":"licensed Windows CADImportBridge.exe and original DWG/SQLite assets",
     })
