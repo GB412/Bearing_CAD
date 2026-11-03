@@ -22,7 +22,7 @@ from .drawing_runner import (
 _DRAW_TOKEN=r"([a-f0-9]{32})"
 SHEET_ROUTE=re.compile(r"^/api/v2/cad/drawings/"+_DRAW_TOKEN+r"/files/(assembly|outer_ring|inner_ring|cage|loose_rib)\.(dxf|svg)$")
 MANIFEST_ROUTE=re.compile(r"^/api/v2/cad/drawings/"+_DRAW_TOKEN+r"$")
-_OPTIONS={"model","accuracy_class","diameter_series","chamfer1_mm","chamfer2_mm","legacy_values","checked_values"}
+_OPTIONS={"model","accuracy_class","diameter_series","chamfer1_mm","chamfer2_mm","radial_clearance_group","legacy_values","checked_values"}
 
 _REQUIRED_TEMPLATES = {
     "深沟球DWG": ("0_00KS.DWG", "0_01KS.DWG", "0_02.DWG", "0_07.DWG"),

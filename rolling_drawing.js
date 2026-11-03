@@ -242,6 +242,10 @@ export function initDrawingWorkbench(getDesign) {
       ? '模板实际命中空变量 ' + templateBlank + ' 项 · 数据库未使用空变量 ' + unusedBlank +
         ' 项。图纸内容仍需人工校核。'
       : '已生成 ' + sheets.length + ' 张原版资源图纸。选择上方图纸标签切换预览。';
+    if (Array.isArray(manifest.standard_lookup_warnings) && manifest.standard_lookup_warnings.length) {
+      $('drawingWorkspaceSubtitle').textContent +=
+        ' · ' + manifest.standard_lookup_warnings.length + ' 项标准表查询未得到有效结果';
+    }
     $('drawingWorkspaceStatus').textContent = '已生成 ' + sheets.length + ' 张 DXF';
     $('drawingWorkspaceStatus').classList.remove('is-error');
     $('drawingWorkspaceStatus').classList.add('is-ready');
@@ -289,6 +293,9 @@ export function initDrawingWorkbench(getDesign) {
         accuracy_class: $('drawingAccuracy').value,
         diameter_series: $('drawingSeries').value,
       };
+      if ($('drawingClearance').value) {
+        drawing.radial_clearance_group = $('drawingClearance').value;
+      }
       if (!drawing.model) throw new Error('请填写轴承型号');
       for (const [id, key] of [['drawingChamfer1', 'chamfer1_mm'],
                                ['drawingChamfer2', 'chamfer2_mm']]) {

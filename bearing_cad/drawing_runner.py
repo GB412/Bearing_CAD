@@ -22,6 +22,7 @@ from .drawing_legacy_chamfer import apply_robas_chamfer
 from .drawing_legacy_dimensions import apply_deep_groove_dimensions, apply_angular_contact_dimensions
 from .drawing_legacy_roller import apply_cylindrical_roller_dimensions
 from .drawing_legacy_ratings import apply_robas_loads
+from .drawing_standard_fill import apply_robas_drawing_standards
 from .drawing_diagnostics import sheet_variable_diagnostics, bundle_variable_diagnostics
 
 SHEETS = ("assembly", "outer_ring", "inner_ring", "cage")
@@ -126,6 +127,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
                             checked_values: dict[str, str] | None = None,
                             configuration: str | None = None,
                             diameter_series: str | None = None,
+                            radial_clearance_group: str | None = None,
                             chamfer1_mm: float | None = None,
                             chamfer2_mm: float | None = None,
                             legacy_values: dict | None = None) -> Path:
@@ -179,6 +181,11 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
             accuracy_class=accuracy_class,
             diameter_series=diameter_series)
         report = apply_technical_conditions(report, lookups)
+    report = apply_robas_drawing_standards(
+        report=report, resources=Path(resources),
+        bearing_type=bearing_type, bore_d_mm=parameters["bore_d_mm"],
+        accuracy_class=accuracy_class, diameter_series=diameter_series,
+        radial_clearance_group=radial_clearance_group)
     # Faithfully reproduce FrmMain.ChangeCADTexts: all DataTable rows participate
     # in the original replacement loop, including blank/DBNull values.
     # The original software does not require the complete database to be filled.
@@ -189,7 +196,8 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
     identity = sha256(json.dumps({
         "request_hash": request_hash, "db_sha256": report["database_sha256"],
         "templates_sha256": [_digest(template) for template in templates],
-        "variables": bridge_values(report), "engine": "robas.dwg.cadimport.v1.svgpreview.v3.variable-diagnostics.v1",
+        "variables": bridge_values(report), "engine": "robas.dwg.cadimport.v1.svgpreview.v3.variable-diagnostics.v1.standards.v1",
+        "radial_clearance_group": radial_clearance_group,
     }, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
     destination = target_root / identity
     if destination.exists():
@@ -253,6 +261,9 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
             "unfilled_database_variable_count": report["unresolved_count"],
             **drawing_diagnostics,
             "technical_condition_rows": report.get("technical_rows_applied", 0),
+            "standard_lookup_evidence": report.get("standard_lookup_evidence", []),
+            "standard_lookup_warnings": report.get("standard_lookup_warnings", []),
+            "radial_clearance_group": radial_clearance_group,
             "diameter_series": diameter_series,
             "chamfer_lookup_warning": report.get("chamfer_lookup_warning"),
             "accuracy_class": accuracy_class,

@@ -87,6 +87,14 @@
                 </select>
               </label>
             </div>
+            <label class="field">径向游隙组（可选 · 原版 RoBAS 数据库）
+              <select id="drawingClearance">
+                <option value="" selected>未指定 — 不填写 Cmin / Cmax</option>
+                <option value="C2">C2</option><option value="C0">C0</option>
+                <option value="C3">C3</option><option value="C4">C4</option>
+                <option value="C5">C5</option>
+              </select>
+            </label>
             <div class="drawing-fields">
               <label class="field">倒角 1（mm）
                 <input id="drawingChamfer1" type="number" min="0" step="any" placeholder="原 RoBAS 倒角值">
