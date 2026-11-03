@@ -567,8 +567,9 @@ footer a:hover { text-decoration: underline; }
 }
 .drawing-preview-stage {
   position: relative;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: clamp(440px, calc(100vh - 390px), 740px);
   min-height: 440px;
   margin: 16px 18px 0;
@@ -585,11 +586,13 @@ footer a:hover { text-decoration: underline; }
 }
 .drawing-preview-stage img {
   display: block;
-  width: 100%;
-  height: 100%;
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 0;
+  width: auto;
+  height: auto;
   max-width: 100%;
   max-height: 100%;
-  object-fit: contain;
   transform-origin: center center;
   user-select: none;
   pointer-events: none;

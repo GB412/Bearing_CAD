@@ -6,14 +6,20 @@ CADImport DXF exports have passed independent DXF verification.
 """
 from __future__ import annotations
 
+from copy import copy
 from hashlib import sha256
 import json
+import logging
 import os
 from pathlib import Path
 import subprocess
 import tempfile
 
 import ezdxf
+from ezdxf.entities import Text
+from ezdxf.fonts import fonts
+from ezdxf.lldxf.encoding import decode_mif_to_unicode, has_mif_encoding
+from ezdxf.math import BoundingBox2d
 from ezdxf.addons.drawing import Frontend, RenderContext, layout
 from ezdxf.addons.drawing.config import BackgroundPolicy, ColorPolicy, Configuration
 from ezdxf.addons.drawing.svg import SVGBackend
@@ -48,8 +54,43 @@ def _digest(file: Path) -> str:
     return h.hexdigest()
 
 
+def _preview_cjk_font():
+    # Use installed fonts only. ezdxf does not combine a SHX font with its bigfont.
+    for name in ("simsun.ttc", "msyh.ttc", "simhei.ttf",
+                 "NotoSansCJK-Regular.ttc", "NotoSerifCJK-Regular.ttc"):
+        if fonts.font_manager.has_font(name):
+            return fonts.font_manager.get_font_face(name)
+    return None
+
+
+class _PreviewFrontend(Frontend):
+    """Interpret CAD MIF text for display without editing the source entities."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cjk_font = _preview_cjk_font()
+        self.warned_missing_cjk = False
+
+    def draw_text_entity(self, entity, properties):
+        if isinstance(entity, Text):
+            text = entity.dxf.text
+            if has_mif_encoding(text):
+                entity = entity.copy()
+                entity.dxf.text = text = decode_mif_to_unicode(text)
+            if any("\u2e80" <= char <= "\u9fff" or "\uf900" <= char <= "\ufaff" for char in text):
+                if self.cjk_font is not None:
+                    properties = copy(properties)
+                    properties.font = self.cjk_font
+                elif not self.warned_missing_cjk:
+                    logging.getLogger(__name__).warning(
+                        "SVG preview: no supported installed CJK font; Chinese glyphs may be missing. "
+                        "DXF text and font references are unchanged.")
+                    self.warned_missing_cjk = True
+        super().draw_text_entity(entity, properties)
+
+
 def _render_svg_preview(dxf_path: Path, svg_path: Path) -> None:
-    """Render the exported DXF itself for a browser-only review preview."""
+    """Render the exported DXF itself with a small, per-sheet viewport margin."""
     document = ezdxf.readfile(str(dxf_path))
     backend = SVGBackend()
     config = Configuration(
@@ -57,9 +98,22 @@ def _render_svg_preview(dxf_path: Path, svg_path: Path) -> None:
         background_policy=BackgroundPolicy.MODELSPACE,
         lineweight_scaling=0.5,
     )
-    Frontend(RenderContext(document), backend, config).draw_layout(
+    _PreviewFrontend(RenderContext(document), backend, config).draw_layout(
         document.modelspace(), finalize=True)
-    svg_path.write_text(backend.get_string(layout.Page(0, 0)), encoding="utf-8")
+    content = backend.player().bbox()
+    if not content.has_data:
+        raise DrawingExportError(f"Cannot create SVG preview for empty DXF: {dxf_path.name}")
+    min_x, min_y = content.extmin
+    max_x, max_y = content.extmax
+    margin = max(content.size.x, content.size.y) * 0.04
+    render_box = BoundingBox2d((
+        (min_x - margin, min_y - margin),
+        (max_x + margin, max_y + margin),
+    ))
+    svg_path.write_text(
+        backend.get_string(layout.Page(0, 0), render_box=render_box),
+        encoding="utf-8",
+    )
 
 
 def verify_drawing_bundle(folder: Path, expected_key: str | None = None) -> dict:
@@ -184,7 +238,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
     identity = sha256(json.dumps({
         "request_hash": request_hash, "db_sha256": report["database_sha256"],
         "templates_sha256": [_digest(template) for template in templates],
-        "variables": bridge_values(report), "engine": "robas.dwg.cadimport.v1.svgpreview.v1",
+        "variables": bridge_values(report), "engine": "robas.dwg.cadimport.v1.svgpreview.v2",
     }, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
     destination = target_root / identity
     if destination.exists():

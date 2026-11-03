@@ -5,10 +5,14 @@ test-results/
 playwright-report/
 coverage/
 __pycache__/
+.pytest_cache/
 *.py[cod]
 *.tmp
 *.log
 .DS_Store
+.venv/
+venv/
+build/
 
 # Local RoBAS reference
 .reference/

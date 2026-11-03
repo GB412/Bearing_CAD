@@ -1,6 +1,6 @@
 # BearingCAD Studio — 滑动轴承演示 + 滚动轴承三维参数化 CAD
 
-本仓库的本地部署、目录说明、外部资源边界和给其他 AI 的审查入口见 [`docs/LOCAL_SETUP.md`](docs/LOCAL_SETUP.md)。
+本仓库的本地部署、目录说明、外部资源边界和给其他 AI 的审查入口见 [`docs/LOCAL_SETUP.md`](docs/LOCAL_SETUP.md)。项目文档按 `docs/planning`、`docs/migration`、`docs/v2` 和 `docs/assets` 分类。
 
 在已配置本机资源的 Windows 环境中，可直接运行 `.\scripts\run_bearing_cad_with_robas.ps1` 启动完整二维/三维工作台；GitHub 提交只应包含源码和 `config/robas.local.example.json`，不包含商业 CADImport 或 RoBAS 原始资源。
 
@@ -69,6 +69,8 @@ Windows 部署顺序：
 未配置上述环境时，工作台二维按钮会显示不可用，已有三维 STEP/STL 建模和下载功能正常。配置完成后二维工作台使用相同的`bearing-cad.request.v1`参数，输入型号、精度和直径系列并调用原版 DWG 模板替换，结果下载总图、外圈、内圈、保持架四张 DXF。原版 RoBAS 特有的沟道、挡边和保持架参数若不在现有 CAD 参数合同中，需要由原版计算逻辑或显式设计上下文提供；不猜测缺失值。圆柱滚子第一版仅启用原版 N 型模板。输出属于原版模板文字替换结果，不代表重新建立的二维参数化几何。
 
 开发者也可使用独立命令行 `python -m bearing_cad.drawing_cli --request design_and_drawing.json --resources ... --bridge ... --out ...` 生成并核验 DXF。
+
+AutoCAD 提示缺少 `HZTXT`、中文字体或网页 SVG 预览显示异常时，参见 [原版字体配置与 SVG 预览说明](docs/drawing-fonts-and-preview.md)。原版 `hztxt.shx` 位于 RoBAS 资源的 `Resource/shx`，不随此仓库分发；网页预览不会改写 DXF 字体引用。
 
 ## 测试与验收
 

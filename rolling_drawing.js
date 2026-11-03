@@ -79,8 +79,8 @@ export function initDrawingWorkbench(getDesign) {
 
   function clampPan() {
     const bounds = previewStage.getBoundingClientRect();
-    const maxX = Math.max(0, bounds.width * (zoom - 1) / 2);
-    const maxY = Math.max(0, bounds.height * (zoom - 1) / 2);
+    const maxX = Math.max(0, (previewImage.clientWidth * zoom - bounds.width) / 2);
+    const maxY = Math.max(0, (previewImage.clientHeight * zoom - bounds.height) / 2);
     panX = Math.max(-maxX, Math.min(maxX, panX));
     panY = Math.max(-maxY, Math.min(maxY, panY));
   }
@@ -345,6 +345,11 @@ export function initDrawingWorkbench(getDesign) {
   previewStage.addEventListener('pointerup', stopDrag);
   previewStage.addEventListener('pointercancel', stopDrag);
   previewStage.addEventListener('lostpointercapture', stopDrag);
+  // Resizing the stage (including the 2D/3D tab switch) changes the fitted image.
+  new ResizeObserver(() => {
+    clampPan();
+    applyTransform();
+  }).observe(previewStage);
 
   $('bearingType').addEventListener('change', () => invalidate('轴承类型已改变，请重新生成二维图纸'));
   for (const id of ['parameters', 'cageParams', 'drawingControls']) {

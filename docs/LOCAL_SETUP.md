@@ -13,17 +13,33 @@
 
 ```text
 Bearing_CAD/
-├─ bearing_cad/                 Python API、参数合同、变量映射和导出流程
-├─ bridge/cadimport/            .NET Framework 4.5.2 CADImport 桥接源码
-├─ config/                      本地配置示例，不含真实路径或授权信息
-├─ scripts/                     预检、桥接编译和启动脚本
-├─ tests_v2/                    Python 单元测试和 RoBAS 测试
-├─ tests-browser/               Playwright 浏览器测试
-├─ rolling.html                 滚动轴承三维和 RoBAS 二维工作台
-├─ index.html                   CAD-01 滑动轴承演示入口
-├─ package.json                 Vite、Three.js、Playwright 依赖
-├─ package-lock.json            固定 Node 依赖版本
-└─ requirements-cad.txt         Python CAD/DXF/SVG 依赖
+├─ bearing_cad/                  滚动轴承 Python API、几何、图纸变量及导出流程
+├─ bridge/cadimport/             CADImport 桥接源码（不含商业 DLL 和编译输出）
+├─ config/                       可提交的本地配置示例；真实配置由 Git 忽略
+├─ docs/
+│  ├─ assets/                    文档配图
+│  ├─ migration/                 三维迁移记录与验收材料
+│  ├─ planning/                  实施计划和任务书
+│  └─ v2/                        CAD V2 设计与验收文档
+├─ outputs/                      固定初始参数的已跟踪 CAD-01 下载示例
+├─ scripts/                      环境预检、桥接构建及启动脚本
+├─ tests/                        CAD-01/CAD-02/CAD-03 Python 测试
+├─ tests_v2/                     滚动轴承、RoBAS 图纸和参数合同测试
+├─ tests-browser/                Playwright 页面及二维预览测试
+├─ tests-browser-real/           调用真实本地 CAD API 的浏览器测试
+├─ index.html, app.js, geometry.js
+│                                 CAD-01 Vite 入口及前端模块
+├─ rolling.html, rolling_*.js, viewer.js, rolling_workbench.css
+│                                 滚动轴承工作台前端模块
+├─ cad02_*.py, cad03*.py/js       CAD-02/CAD-03 演示模块
+├─ package.json / package-lock.json
+│                                 Vite、Three.js、Playwright 与锁定依赖
+└─ environment-v2.yml / requirements-cad.txt
+                                  Python CAD 环境定义
+
+本机生成目录（Git 忽略）：`node_modules/`、`dist/`、`artifacts/`、`build/`、`test-results/` 和 Python 缓存。`outputs/` 是例外：其中固定 STEP 和相关快照由 CAD-01 页面及构建测试使用，保持跟踪；其他 CAD API 生成结果应写入 `artifacts/`。
+
+字体等本机外部资源放在仓库之外。当前可选字体副本位于 `D:\Bearing CAD\fonts\robas`，不可提交到仓库；RoBAS DWG、SQLite、CSV 和 CADImport DLL 也继续使用外部授权资源目录。
 ```
 
 ## 1. 前端和三维演示
