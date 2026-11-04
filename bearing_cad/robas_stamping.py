@@ -32,8 +32,8 @@ def robas_stamping_profile(
 ) -> dict:
     """Map StampingCage's source constructor to an explicit existing CAD cage.
 
-    RoBAS Width is radial annulus HALF-BAND, not the axial total width that
-    bearing-cad.request.v1 uses as cage.width_mm. The latter must be computed
+    RoBAS Width is radial annulus band thickness (diameters Dpw ± Width), not
+    the axial total width bearing-cad.request.v1 uses as cage.width_mm. The latter must be computed
     as 2 * (SphereRadius + BoardThickness) to match Draw3DCage.
     """
     if type(bearing_model) is not str or not re.fullmatch(r"(60|62|63)[0-9]{2,4}[A-Z0-9-]{0,8}", bearing_model):
@@ -143,7 +143,7 @@ def robas_stamping_profile(
             "RoBAS/BearingModel/Cage/StampingCage.cs:501-620",
         ],
         "warnings": [
-            "原版 Width 是径向半环带宽，不是三维 CAD 的 width_mm 轴向总宽度。",
+            "原版 Width 对应径向环带厚度（内外直径为 Dpw±Width），不是 CAD 的轴向总宽度。",
             "CAD 使用当前显式参数双半笼构造器；铆钉孔净距为调用方显式 CAD 余量，不是原版给定值。",
             "原版 Draw3DCage 用 rivetHoleDiameter 作为铆钉圆柱直径；本转换按此处理，不把它当作独立钻孔公差。",
             "保留原版计算公式，但当前 OCCT 球面布尔和铆钉孔处理不等于已验证 Eyeshot 实体逐点等价。",

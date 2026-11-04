@@ -31,11 +31,17 @@ def stamped_cage_components(spec: StampedCageSpec, *, pitch_d_mm: float,
     half_height = spec.width_mm / 2
     ball_radius = ball_d_mm / 2
     thickness = spec.board_thickness_mm
-    # StampingCage.Draw3DCage uses half_height = sphere_radius + board_s.
-    # Its top residual web is exactly one board thickness. The previous
-    # extra 10% CAD-only margin incorrectly rejected this valid source case.
-    # Keep a tiny float tolerance only; do not infer additional board stock.
-    if half_height + 1e-8 < ball_radius + spec.pocket_clearance_mm + thickness:
+    # Preserve the existing 10%-reserve CAD gate for arbitrary explicit
+    # stamping inputs. The *specific* RoBAS constructor sets Rc=.55*Dw and
+    # half_height=Rc+S: the reserve is precisely one board thickness. Admit
+    # that source-equality case without silently weakening other requests.
+    source_cup = abs(spec.pocket_clearance_mm - 0.05 * ball_d_mm) < 1e-8
+    source_height = abs(half_height - (0.55 * ball_d_mm + thickness)) < 1e-8
+    if source_cup and source_height:
+        too_thin = half_height + 1e-8 < ball_radius + spec.pocket_clearance_mm + thickness
+    else:
+        too_thin = half_height <= ball_radius + spec.pocket_clearance_mm + thickness * 1.1
+    if too_thin:
         raise ContractError("PARAMETER_INVALID", "/cage/width_mm", "Insufficient envelope for spherical shell")
     if thickness + head_radius > half_height:
         raise ContractError("PARAMETER_INVALID", "/cage/width_mm", "Rivet head exceeds axial cage envelope")
