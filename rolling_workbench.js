@@ -279,6 +279,7 @@ function getParams(){
 async function applyRoBASGeometry(){
  if(selectedType()!=='rolling.deep_groove_ball'||!robasSizingAvailable)return;
  const button=$('applyRoBASGeometry');button.disabled=true;
+ const requestToken=token;
  try{
   const input={
    bearing_type:selectedType(),
@@ -290,7 +291,7 @@ async function applyRoBASGeometry(){
    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)
   });
   const reply=await response.json();
-  if(selectedType()!=='rolling.deep_groove_ball')return;
+  if(selectedType()!=='rolling.deep_groove_ball'||requestToken!==token)return;
   if(!response.ok)throw Error(reply.error?.message||'RoBAS 初始几何计算失败');
   if(reply.schema_version!=='bearing-cad.robas-dgb-geometry.v1'||reply.candidate_only!==true)
    throw Error('RoBAS sizing response contract is invalid');
