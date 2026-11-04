@@ -77,7 +77,7 @@ def test_dgb_geometry_profile_refuses_robas_zero_clearance_fallback(tmp_path):
 
 def test_dgb_geometry_profile_builds_a_valid_simplified_cage_brep(tmp_path):
     (tmp_path / "BallDB.csv").write_text(
-        "diameter(mm)\\n8\\n8.33438\\n8.5\\n", encoding="utf-8")
+        "diameter(mm)\n8\n8.33438\n8.5\n", encoding="utf-8")
     profile = dgb_geometry_profile(
         bore_d_mm=40, outside_d_mm=68, width_mm=15, tables_dir=tmp_path)
     data = deep_request()
