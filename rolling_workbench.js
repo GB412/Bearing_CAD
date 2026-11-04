@@ -86,7 +86,7 @@ function syncDerivedGrooves(){
 renderFields($('parameters'),'param-',fields);
 renderFields($('cageParams'),'cage-',cages);
 let active=null, token=0, controller=null, available=false;
-let supportedTypes=new Set();
+let supportedTypes=new Set(), robasSizingAvailable=false, appliedSizingEvidence=null;
 const scene=new THREE.Scene();scene.background=null;
 const camera=new THREE.PerspectiveCamera(36,1,.1,5000);
 const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
@@ -238,10 +238,13 @@ function updateAvailability(){
  const enabled=canGenerate();$('generate').disabled=!enabled;
  $('connection').textContent=available?'本地 OCCT 引擎在线':'CAD 引擎不可用';
  $('connection').dataset.state=available?'ready':'offline';
+ $('applyRoBASGeometry').hidden=selectedType()!=='rolling.deep_groove_ball';
+ $('applyRoBASGeometry').disabled=!robasSizingAvailable||selectedType()!=='rolling.deep_groove_ball';
  if(available&&!enabled)status('当前 CAD 服务暂不支持所选轴承类型',true);
 }
 function invalidatePreview(message='输入已改变，请重新生成 CAD'){
  token++;controller?.abort();controller=null;
+ appliedSizingEvidence=null;
  dispose();status(message);
  $('generate').disabled=!canGenerate();
 }
@@ -272,6 +275,51 @@ function configureForm(){
 function getParams(){
  const draft=rawDraft();
  return requestFromFields(draft.values,draft.cage,selectedType());
+}
+async function applyRoBASGeometry(){
+ if(selectedType()!=='rolling.deep_groove_ball'||!robasSizingAvailable)return;
+ const button=$('applyRoBASGeometry');button.disabled=true;
+ try{
+  const input={
+   bearing_type:selectedType(),
+   bore_d_mm:Number($('param-bore_d_mm').value),
+   outside_d_mm:Number($('param-outside_d_mm').value),
+   width_mm:Number($('param-width_mm').value)
+  };
+  const response=await fetch('/api/v2/cad/sizing/dgb-geometry',{
+   method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)
+  });
+  const reply=await response.json();
+  if(!response.ok)throw Error(reply.error?.message||'RoBAS 初始几何计算失败');
+  if(reply.schema_version!=='bearing-cad.robas-dgb-geometry.v1'||reply.candidate_only!==true)
+   throw Error('RoBAS sizing response contract is invalid');
+  const p=reply.parameters;
+  for(const key of ['bore_d_mm','outside_d_mm','width_mm','ball_d_mm','pitch_d_mm',
+                    'ball_count','inner_groove_radius_mm','outer_groove_radius_mm',
+                    'inner_shoulder_d_mm','outer_shoulder_d_mm']){
+   if(!Number.isFinite(p[key]))throw Error('RoBAS sizing response is missing '+key);
+   $('param-'+key).value=String(p[key]);
+  }
+  syncDerivedGeometry();
+  // Keep the backend's source-calculated values as the request snapshot.
+  for(const key of ['ball_count','inner_groove_radius_mm','outer_groove_radius_mm'])
+   $('param-'+key).value=String(p[key]);
+  if($('cageEnabled').checked&&$('cageKind').value==='simplified_annular'){
+   for(const [key,value] of Object.entries(reply.simplified_cage_dimensions||{}))
+    if($('cage-'+key))$('cage-'+key).value=String(value);
+  }
+  $('scaleTarget').value=String(p.bore_d_mm);
+  invalidatePreview('已按 RoBAS DGBGeometry 预填候选参数，请检查后生成模型');
+  appliedSizingEvidence=reply;
+  showDraftIssues();
+  status('RoBAS DGBGeometry 候选已预填：Dw='+p.ball_d_mm+
+         ' mm，Dpw='+p.pitch_d_mm+' mm，Z='+p.ball_count+
+         '。未运行 DGBOptimizer，且不是制造批准。');
+ }catch(error){
+  status('RoBAS 几何预填失败：'+error.message,true);
+ }finally{
+  button.disabled=!robasSizingAvailable||selectedType()!=='rolling.deep_groove_ball';
+ }
 }
 async function loadArtifacts(result, sequence){
  const {manifest,file_urls}=validateArtifact(result);
@@ -307,7 +355,10 @@ async function loadArtifacts(result, sequence){
  for(const geometry of templates.values())geometry.dispose();
  active={manifest,instances};$('emptyStage').hidden=true;$('quality').textContent='CAD 几何已检查';
  $('modelLabel').textContent='零件原型 '+manifest.parts.length+' · 装配实例 '+instances.length+' · 轴向 Z · 单位 mm';
- $('provenance').textContent='完整度：'+manifest.completeness+' · SHA256: '+manifest.request_hash.slice(0,20)+'…  · 非制造批准';
+ const sourceNote=appliedSizingEvidence
+  ?'参数来源（本会话）：RoBAS DGBGeometry 候选 · BallDB SHA256 '+appliedSizingEvidence.source_files['BallDB.csv'].slice(0,12)+'… · 非 Optimizer'
+  :'参数来源：显式输入/几何测试预设';
+ $('provenance').textContent='完整度：'+manifest.completeness+' · SHA256: '+manifest.request_hash.slice(0,20)+'… · '+sourceNote+' · 非制造批准';
  $('downloads').replaceChildren();
  for(const [name,url] of Object.entries(file_urls)){
   const link=document.createElement('a');link.textContent=name;link.href=url;link.download=name;
@@ -349,6 +400,7 @@ async function generate(){
  }finally{if(version===token){controller=null;$('generate').disabled=!canGenerate();}}
 }
 $('generate').addEventListener('click',generate);
+$('applyRoBASGeometry').addEventListener('click',applyRoBASGeometry);
 initDrawingWorkbench(getParams);
 $('resetParams').addEventListener('click',()=>{
  renderFields($('parameters'),'param-',fields);
@@ -390,11 +442,12 @@ $('viewReset').addEventListener('click',()=>{resetCamera();controls.reset();rese
  const data=await response.json();
  available=response.ok&&data.available===true&&Array.isArray(data.supported_bearings);
  supportedTypes=new Set(available?data.supported_bearings:[]);
+ robasSizingAvailable=available&&data.robas_sizing_available===true;
  updateAvailability();
  if(canGenerate())status('请选择轴承类型、输入参数并生成精确 CAD 模型');
  else if(!available)status('CAD 服务不可用；启动 python -m bearing_cad.api --static dist',true);
  }catch{
-  available=false;updateAvailability();status('CAD-V2 服务不可用，请启动本地 API',true);
+  available=false;robasSizingAvailable=false;updateAvailability();status('CAD-V2 服务不可用，请启动本地 API',true);
  }
  $('generate').disabled=!canGenerate();
 })();
