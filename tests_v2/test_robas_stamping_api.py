@@ -1,6 +1,7 @@
 """Local RoBAS StampingCage candidate route: strict, same-origin, no EXE."""
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import pytest
 
 from test_robas_sizing_api import _request, _start, _stop
 
@@ -38,7 +39,7 @@ def test_stamping_source_preset_works_without_robas_csv_or_exe():
             assert profile["cad_cage"]["board_thickness_mm"] == .7
             assert profile["cad_cage"]["rivet_shaft_d_mm"] == 1.0
             assert profile["cad_cage"]["rivet_hole_clearance_mm"] == .05
-            assert profile["source_dimensions"]["width_radial_mm"] == 3.750471
+            assert profile["source_dimensions"]["width_radial_mm"] == pytest.approx(3.750471)
         finally:
             _stop(server, thread)
 

@@ -16,9 +16,9 @@ const status={
  available:true,robas_sizing_available:false,robas_stamping_available:true,
  supported_bearings:['rolling.deep_groove_ball','rolling.cylindrical_roller','rolling.angular_contact_ball']
 };
-function intercept(page, stampHandler){
+async function intercept(page, stampHandler){
  const requests=[];
- page.route('**/api/v2/cad/**',async route=>{
+ await page.route('**/api/v2/cad/**',async route=>{
   const path=new URL(route.request().url()).pathname;
   if(path==='/api/v2/cad/status')return route.fulfill({json:status});
   if(path==='/api/v2/cad/sizing/dgb-stamping'){
@@ -32,7 +32,7 @@ function intercept(page, stampHandler){
 
 test('source RoBAS stamped-cage prefill is opt-in, separate from drawing model',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
- const requests=intercept(page,route=>route.fulfill({json:profile}));
+ const requests=await intercept(page,route=>route.fulfill({json:profile}));
  await page.goto('/rolling.html');
  const button=page.locator('#applyRoBASStamping');
  await expect(page.locator('#robasStampingActions')).toBeHidden();
@@ -69,7 +69,7 @@ test('source RoBAS stamped-cage prefill is opt-in, separate from drawing model',
 test('stale stamped cage result cannot overwrite user changes',async({page})=>{
  let release;
  const pending=new Promise(resolve=>{release=resolve;});
- intercept(page,async route=>{await pending;return route.fulfill({json:profile});});
+ await intercept(page,async route=>{await pending;return route.fulfill({json:profile});});
  await page.goto('/rolling.html');
  await page.locator('#cageKind').selectOption('stamping_double_half');
  const button=page.locator('#applyRoBASStamping');
