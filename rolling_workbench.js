@@ -86,7 +86,7 @@ function syncDerivedGrooves(){
 renderFields($('parameters'),'param-',fields);
 renderFields($('cageParams'),'cage-',cages);
 let active=null, token=0, controller=null, available=false;
-let supportedTypes=new Set(), robasSizingAvailable=false, appliedSizingEvidence=null;
+let supportedTypes=new Set(), robasSizingAvailable=false, appliedSizingEvidence=null, appliedStampingEvidence=null;
 const scene=new THREE.Scene();scene.background=null;
 const camera=new THREE.PerspectiveCamera(36,1,.1,5000);
 const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
@@ -234,7 +234,14 @@ function showDraftIssues(){
  }
 }
 function canGenerate(){return available&&supportedTypes.has(selectedType());}
+function updateStampingActions(){
+ const activeCage=selectedType()==='rolling.deep_groove_ball'&&
+  $('cageEnabled').checked&&$('cageKind').value==='stamping_double_half';
+ $('robasStampingActions').hidden=!activeCage;
+ $('applyRoBASStamping').disabled=!available||!activeCage;
+}
 function updateAvailability(){
+ updateStampingActions();
  const enabled=canGenerate();$('generate').disabled=!enabled;
  $('connection').textContent=available?'本地 OCCT 引擎在线':'CAD 引擎不可用';
  $('connection').dataset.state=available?'ready':'offline';
@@ -244,7 +251,7 @@ function updateAvailability(){
 }
 function invalidatePreview(message='输入已改变，请重新生成 CAD'){
  token++;controller?.abort();controller=null;
- appliedSizingEvidence=null;
+ appliedSizingEvidence=null;appliedStampingEvidence=null;
  dispose();status(message);
  $('generate').disabled=!canGenerate();
 }
@@ -261,6 +268,7 @@ function configureCageKind(reset=false){
  cages=cageForms[picker.value].fields;
  renderFields($('cageParams'),'cage-',cages);
  $('cageOptions').hidden=!$('cageEnabled').checked;
+ updateStampingActions();
 }
 function configureForm(){
  fields=bearingForms[selectedType()].fields;
@@ -323,6 +331,56 @@ async function applyRoBASGeometry(){
   button.disabled=!robasSizingAvailable||selectedType()!=='rolling.deep_groove_ball';
  }
 }
+async function applyRoBASStamping(){
+ if(!available||selectedType()!=='rolling.deep_groove_ball'||
+    !$('cageEnabled').checked||$('cageKind').value!=='stamping_double_half')return;
+ const button=$('applyRoBASStamping');button.disabled=true;
+ const requestToken=token;
+ try{
+  const input={
+   bearing_type:selectedType(),bearing_model:$('robasStampingModel').value.trim(),
+   ball_d_mm:Number($('param-ball_d_mm').value),
+   pitch_d_mm:Number($('param-pitch_d_mm').value),
+   ball_count:Number($('param-ball_count').value),
+   bearing_width_mm:Number($('param-width_mm').value),
+   inner_shoulder_d_mm:Number($('param-inner_shoulder_d_mm').value),
+   outer_shoulder_d_mm:Number($('param-outer_shoulder_d_mm').value),
+   rivet_hole_clearance_mm:Number($('cage-rivet_hole_clearance_mm').value)
+  };
+  const response=await fetch('/api/v2/cad/sizing/dgb-stamping',{
+   method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)
+  });
+  const reply=await response.json();
+  if(token!==requestToken||selectedType()!=='rolling.deep_groove_ball'||
+     !$('cageEnabled').checked||$('cageKind').value!=='stamping_double_half')return;
+  if(!response.ok)throw Error(reply.error?.message||'RoBAS 冲压保持架参数计算失败');
+  if(reply.schema_version!=='bearing-cad.robas-stamping-adapter.v1'||
+     reply.candidate_only!==true||!reply.cad_cage||
+     reply.cad_cage.kind!=='stamping_double_half')
+   throw Error('RoBAS 保持架响应格式不符合约定');
+  const values=reply.cad_cage;
+  const keys=cageForms.stamping_double_half.fields.map(field=>field[0]);
+  for(const key of keys)
+   if(!Number.isFinite(values[key])||values[key]<=0)throw Error('缺失有效保持架参数：'+key);
+  // Validate the complete candidate before writing any input.
+  const draft=rawDraft();
+  const checked=requestFromFields(draft.values,{...values},selectedType());
+  const issues=geometryIssues(checked);
+  if(issues.length)throw Error(issues[0].message);
+  const previousDGB=appliedSizingEvidence;
+  for(const key of keys)$('cage-'+key).value=String(values[key]);
+  invalidatePreview('已按 RoBAS StampingCage 预填保持架候选参数');
+  appliedSizingEvidence=previousDGB;
+  appliedStampingEvidence=reply;
+  showDraftIssues();
+  status('RoBAS 冲压双半笼已预填（型号 '+reply.bearing_model+
+         '）：径向宽度 '+reply.source_dimensions.width_radial_mm+
+         ' mm，轴向总宽 '+values.width_mm+
+         ' mm。尚需确认型号匹配与工艺尺寸，非制造批准。');
+ }catch(error){
+  if(requestToken===token)status('RoBAS 冲压保持架预填失败：'+error.message,true);
+ }finally{updateStampingActions();}
+}
 async function loadArtifacts(result, sequence){
  const {manifest,file_urls}=validateArtifact(result);
  const instances=buildAssemblyIndex(manifest);
@@ -358,8 +416,11 @@ async function loadArtifacts(result, sequence){
  active={manifest,instances};$('emptyStage').hidden=true;$('quality').textContent='CAD 几何已检查';
  $('modelLabel').textContent='零件原型 '+manifest.parts.length+' · 装配实例 '+instances.length+' · 轴向 Z · 单位 mm';
  const sourceHash=appliedSizingEvidence?.source_files?.['BallDB.csv'];
- const sourceNote=sourceHash
-  ?'参数来源（本会话）：RoBAS DGBGeometry 候选 · BallDB SHA256 '+sourceHash.slice(0,12)+'… · 非 Optimizer'
+ const sourceParts=[];
+ if(sourceHash)sourceParts.push('RoBAS DGBGeometry · BallDB SHA256 '+sourceHash.slice(0,12)+'… · 非 Optimizer');
+ if(appliedStampingEvidence)sourceParts.push('RoBAS StampingCage ('+appliedStampingEvidence.bearing_model+') 候选');
+ const sourceNote=sourceParts.length
+  ?'参数来源（本会话）：'+sourceParts.join(' + ')
   :'参数来源：显式输入/几何测试预设';
  $('provenance').textContent='完整度：'+manifest.completeness+' · SHA256: '+manifest.request_hash.slice(0,20)+'… · '+sourceNote+' · 非制造批准';
  $('downloads').replaceChildren();
@@ -404,6 +465,8 @@ async function generate(){
 }
 $('generate').addEventListener('click',generate);
 $('applyRoBASGeometry').addEventListener('click',applyRoBASGeometry);
+$('applyRoBASStamping').addEventListener('click',applyRoBASStamping);
+$('robasStampingModel').addEventListener('input',()=>invalidatePreview('RoBAS 保持架型号已更改，请重新生成 CAD'));
 initDrawingWorkbench(getParams);
 $('resetParams').addEventListener('click',()=>{
  renderFields($('parameters'),'param-',fields);
@@ -428,6 +491,7 @@ $('scaleApply').addEventListener('click',()=>{
 });
 $('cageEnabled').addEventListener('change',()=>{
  $('cageOptions').hidden=!$('cageEnabled').checked;
+ updateStampingActions();
  invalidatePreview('保持架设置已更改，请重新生成 CAD');
  showDraftIssues();
 });

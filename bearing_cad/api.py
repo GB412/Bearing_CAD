@@ -20,6 +20,7 @@ from .artifacts import generate_bundle, verify_bundle
 from .contracts import ContractError, parse_request, MAX_ROLLING_ELEMENTS, MAX_CAD_DIMENSION_MM
 from .drawing_http import drawing_status, create_drawing, serve_drawing
 from .robas_sizing import dgb_geometry_profile
+from .robas_stamping import robas_stamping_profile
 
 _MAX_BODY = 16 * 1024
 _MAX_JOBS = 128
@@ -109,7 +110,7 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
             if not self._host_allowed():
                 return self._error(403, "HOST_FORBIDDEN", "Invalid loopback host")
             route = self._route()
-            if route not in ("/api/v2/cad/jobs", "/api/v2/cad/drawings", "/api/v2/cad/sizing/dgb-geometry"):
+            if route not in ("/api/v2/cad/jobs", "/api/v2/cad/drawings", "/api/v2/cad/sizing/dgb-geometry", "/api/v2/cad/sizing/dgb-stamping"):
                 return self._error(404, "NOT_FOUND", "Unknown route")
             if not self._origin_allowed():
                 return self._error(403, "ORIGIN_FORBIDDEN", "A same-origin browser request is required")
@@ -167,6 +168,31 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
                     )
                 except (ValueError, TypeError, KeyError, OverflowError, OSError, UnicodeError) as error:
                     return self._error(422, "PARAMETER_INVALID", str(error), "/parameters")
+                return self._respond(200, profile)
+            if route == "/api/v2/cad/sizing/dgb-stamping":
+                expected = {"bearing_type", "bearing_model", "ball_d_mm", "pitch_d_mm",
+                            "ball_count", "bearing_width_mm", "inner_shoulder_d_mm",
+                            "outer_shoulder_d_mm", "rivet_hole_clearance_mm"}
+                if not isinstance(data, dict) or set(data) != expected:
+                    return self._error(422, "PARAMETER_INVALID",
+                                       "Invalid RoBAS stamped-cage preset request", "/cage")
+                if data["bearing_type"] != "rolling.deep_groove_ball":
+                    return self._error(422, "NOT_SUPPORTED",
+                                       "RoBAS StampingCage only supports deep-groove ball bearings",
+                                       "/bearing_type")
+                try:
+                    profile = robas_stamping_profile(
+                        bearing_model=data["bearing_model"],
+                        ball_d_mm=data["ball_d_mm"],
+                        pitch_d_mm=data["pitch_d_mm"],
+                        ball_count=data["ball_count"],
+                        bearing_width_mm=data["bearing_width_mm"],
+                        inner_shoulder_d_mm=data["inner_shoulder_d_mm"],
+                        outer_shoulder_d_mm=data["outer_shoulder_d_mm"],
+                        rivet_hole_clearance_mm=data["rivet_hole_clearance_mm"],
+                    )
+                except (ValueError, TypeError, OverflowError) as error:
+                    return self._error(422, "PARAMETER_INVALID", str(error), "/cage")
                 return self._respond(200, profile)
             try:
                 request = parse_request(data)
@@ -257,6 +283,7 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
                                         and not sizing_table.is_symlink())
                 return self._respond(200, {"available": True, "mode": "loopback_synchronous",
                                            "robas_sizing_available": sizing_available,
+                                           "robas_stamping_available": True,
                                            "supported_bearings": ["rolling.deep_groove_ball",
                                                                   "rolling.cylindrical_roller",
                                                                   "rolling.angular_contact_ball"]})
