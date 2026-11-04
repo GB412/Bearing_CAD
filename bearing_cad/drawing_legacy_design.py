@@ -18,31 +18,13 @@ from pathlib import Path
 from .contracts import StampedCageSpec
 from .drawing_legacy_chamfer import _chamfer_source
 from .drawing_variables import DrawingDataError
+from .robas_sizing import dgb_radial_clearance_mm
 
 
 def _number(value, key):
     if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
         raise DrawingDataError("Expected finite positive RoBAS dimension: " + key)
     return float(value)
-
-
-def dgb_radial_clearance_mm(bore_d_mm: float) -> float | None:
-    """Port DGBOptimizer.CalcuRadialClearance (original C0-like empirical ranges).
-
-    Do not turn original zero fallback into a certified zero clearance.
-    """
-    d = _number(bore_d_mm, "bore_d_mm")
-    for lower, upper, raw in (
-        (10, 18, (4, 11)), (18, 30, (5, 12)),
-        (30, 50, (9, 17)), (50, 80, (12, 22)),
-        (80, 120, (18, 30)), (120, 160, (24, 38)),
-        (160, 180, (30, 45)), (180, 200, (36, 53)),
-    ):
-        if lower <= d < upper:
-            # Original C# uses integer literals: (4+11)/2 truncates to 7,
-            # rather than Python's 7.5. Convert the resulting micrometres to mm.
-            return ((raw[0] + raw[1]) // 2) / 1000
-    return None
 
 
 def _cage_diameter_tolerance(d: float) -> float:

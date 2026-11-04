@@ -46,6 +46,12 @@
               <div class="cage-fields" id="cageParams"></div>
             </div>
           </div>
+          <div class="section-heading">RoBAS 初始几何</div>
+          <div class="buttonrow">
+            <button id="applyRoBASGeometry" class="secondary" type="button" disabled
+                    title="需要通过 --robas-resources 指定原版资源目录">RoBAS DGBGeometry 候选预填</button>
+          </div>
+          <p class="hint">只迁移原版 DGBGeometry 初始构造路径，不运行 DGBOptimizer。简化保持架尺寸可预填；冲压半笼板厚、铆钉和球兜间隙仍需显式输入。</p>
           <div class="section-heading">尺寸调整</div>
           <div class="scale-tools">
             <label class="field" for="scaleTarget">目标内径 d（mm）

@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 from .artifacts import generate_bundle, verify_bundle
 from .contracts import ContractError, parse_request, MAX_ROLLING_ELEMENTS, MAX_CAD_DIMENSION_MM
 from .drawing_http import drawing_status, create_drawing, serve_drawing
+from .robas_sizing import dgb_geometry_profile
 
 _MAX_BODY = 16 * 1024
 _MAX_JOBS = 128
@@ -108,7 +109,7 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
             if not self._host_allowed():
                 return self._error(403, "HOST_FORBIDDEN", "Invalid loopback host")
             route = self._route()
-            if route not in ("/api/v2/cad/jobs", "/api/v2/cad/drawings"):
+            if route not in ("/api/v2/cad/jobs", "/api/v2/cad/drawings", "/api/v2/cad/sizing/dgb-geometry"):
                 return self._error(404, "NOT_FOUND", "Unknown route")
             if not self._origin_allowed():
                 return self._error(403, "ORIGIN_FORBIDDEN", "A same-origin browser request is required")
@@ -141,6 +142,32 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
             if route == "/api/v2/cad/drawings":
                 return create_drawing(self, data, root, robas_resources,
                                       cadimport_bridge, build_lock)
+            if route == "/api/v2/cad/sizing/dgb-geometry":
+                expected = {"bearing_type", "bore_d_mm", "outside_d_mm", "width_mm"}
+                if not isinstance(data, dict) or set(data) != expected:
+                    return self._error(422, "PARAMETER_INVALID",
+                                       "Expected bearing_type, bore_d_mm, outside_d_mm and width_mm")
+                if data["bearing_type"] != "rolling.deep_groove_ball":
+                    return self._error(422, "NOT_SUPPORTED",
+                                       "RoBAS DGBGeometry preset only supports deep-groove ball bearings",
+                                       "/bearing_type")
+                if robas_resources is None:
+                    return self._error(503, "ROBAS_RESOURCES_UNAVAILABLE",
+                                       "Configure --robas-resources to enable RoBAS sizing")
+                table = robas_resources / "Resource" / "BallDB.csv"
+                if not table.is_file() or table.is_symlink():
+                    return self._error(503, "ROBAS_RESOURCES_UNAVAILABLE",
+                                       "RoBAS Resource/BallDB.csv is missing or invalid")
+                try:
+                    profile = dgb_geometry_profile(
+                        bore_d_mm=data["bore_d_mm"],
+                        outside_d_mm=data["outside_d_mm"],
+                        width_mm=data["width_mm"],
+                        tables_dir=table.parent,
+                    )
+                except (ValueError, TypeError, KeyError, OverflowError, OSError, UnicodeError) as error:
+                    return self._error(422, "PARAMETER_INVALID", str(error), "/parameters")
+                return self._respond(200, profile)
             try:
                 request = parse_request(data)
             except ContractError as error:
@@ -224,7 +251,12 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
                 return self._serve_static()
             route = self._route()
             if route == "/api/v2/cad/status":
+                sizing_table = (robas_resources / "Resource" / "BallDB.csv"
+                                if robas_resources is not None else None)
+                sizing_available = bool(sizing_table and sizing_table.is_file()
+                                        and not sizing_table.is_symlink())
                 return self._respond(200, {"available": True, "mode": "loopback_synchronous",
+                                           "robas_sizing_available": sizing_available,
                                            "supported_bearings": ["rolling.deep_groove_ball",
                                                                   "rolling.cylindrical_roller",
                                                                   "rolling.angular_contact_ball"]})
