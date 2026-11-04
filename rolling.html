@@ -44,6 +44,16 @@
                 </select>
               </label>
               <div class="cage-fields" id="cageParams"></div>
+              <div id="robasStampingActions" hidden>
+                <div class="section-heading">RoBAS 冲压双半笼参数</div>
+                <label class="field" for="robasStampingModel">RoBAS 保持架计算型号（60 / 62 / 63 系列）
+                  <input id="robasStampingModel" type="text" value="6008" maxlength="18" autocomplete="off">
+                </label>
+                <div class="buttonrow">
+                  <button id="applyRoBASStamping" type="button" class="secondary" disabled>按原版 StampingCage 预填</button>
+                </div>
+                <p class="hint">型号仅选择原版经验计算系列，不自动校验与轴承外形尺寸的型号匹配。球兜半径、板厚、铆钉尺寸来自原版规则；铆钉孔净距沿用当前显式 CAD 输入。</p>
+              </div>
             </div>
           </div>
           <div class="section-heading">RoBAS 初始几何</div>
@@ -51,7 +61,7 @@
             <button id="applyRoBASGeometry" class="secondary" type="button" disabled
                     title="需要通过 --robas-resources 指定原版资源目录">RoBAS DGBGeometry 候选预填</button>
           </div>
-          <p class="hint">只迁移原版 DGBGeometry 初始构造路径，不运行 DGBOptimizer。简化保持架尺寸可预填；冲压半笼板厚、铆钉和球兜间隙仍需显式输入。</p>
+          <p class="hint">只迁移原版 DGBGeometry 初始构造路径，不运行 DGBOptimizer。简化保持架尺寸可预填；冲压双半笼请单独选择原版系列并显式设置 CAD 铆钉孔净距。</p>
           <div class="section-heading">尺寸调整</div>
           <div class="scale-tools">
             <label class="field" for="scaleTarget">目标内径 d（mm）
