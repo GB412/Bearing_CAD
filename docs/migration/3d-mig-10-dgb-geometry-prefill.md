@@ -50,7 +50,7 @@ The UI applies the cage envelope only when simplified_annular is selected. It ne
 
 ## Tests
 
-- Unit tests cover the original formulas, C# integer clearance behavior, nearest-table entry selection, and fail-closed behavior outside the source clearance range.
+- Unit tests cover the original formulas, C# integer clearance behavior, nearest-table entry selection, fail-closed behavior outside the source clearance range, and a real OCCT B-Rep build using the returned DGB profile.
 - HTTP tests cover same-origin enforcement, missing resource handling, request shape validation, and source-backed response values.
 - Playwright tests cover DGB form prefill, unchanged CAD-only pocket clearance, no accidental stamped-cage overwrite, and hiding the preset for other bearing types.
 - Existing CAD/OCCT, drawing, and browser regression workflows remain required.
