@@ -290,6 +290,7 @@ async function applyRoBASGeometry(){
    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)
   });
   const reply=await response.json();
+  if(selectedType()!=='rolling.deep_groove_ball')return;
   if(!response.ok)throw Error(reply.error?.message||'RoBAS 初始几何计算失败');
   if(reply.schema_version!=='bearing-cad.robas-dgb-geometry.v1'||reply.candidate_only!==true)
    throw Error('RoBAS sizing response contract is invalid');
@@ -355,8 +356,9 @@ async function loadArtifacts(result, sequence){
  for(const geometry of templates.values())geometry.dispose();
  active={manifest,instances};$('emptyStage').hidden=true;$('quality').textContent='CAD 几何已检查';
  $('modelLabel').textContent='零件原型 '+manifest.parts.length+' · 装配实例 '+instances.length+' · 轴向 Z · 单位 mm';
- const sourceNote=appliedSizingEvidence
-  ?'参数来源（本会话）：RoBAS DGBGeometry 候选 · BallDB SHA256 '+appliedSizingEvidence.source_files['BallDB.csv'].slice(0,12)+'… · 非 Optimizer'
+ const sourceHash=appliedSizingEvidence?.source_files?.['BallDB.csv'];
+ const sourceNote=sourceHash
+  ?'参数来源（本会话）：RoBAS DGBGeometry 候选 · BallDB SHA256 '+sourceHash.slice(0,12)+'… · 非 Optimizer'
   :'参数来源：显式输入/几何测试预设';
  $('provenance').textContent='完整度：'+manifest.completeness+' · SHA256: '+manifest.request_hash.slice(0,20)+'… · '+sourceNote+' · 非制造批准';
  $('downloads').replaceChildren();

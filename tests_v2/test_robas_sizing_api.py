@@ -41,7 +41,7 @@ def _resources(root):
     folder = root / "Resource"
     folder.mkdir(parents=True)
     (folder / "BallDB.csv").write_text(
-        "diameter(mm)\\n8\\n8.33438\\n8.5\\n", encoding="utf-8")
+        "diameter(mm)\n8\n8.33438\n8.5\n", encoding="utf-8")
     return root
 
 

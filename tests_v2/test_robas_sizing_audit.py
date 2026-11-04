@@ -34,7 +34,7 @@ def test_angular_source_audit_has_expected_nonzero_offset():
 
 def test_dgb_geometry_profile_matches_the_robas_dgbgeometry_constructor(tmp_path):
     (tmp_path / "BallDB.csv").write_text(
-        "diameter(mm)\\n8\\n8.33438\\n8.5\\n", encoding="utf-8")
+        "diameter(mm)\n8\n8.33438\n8.5\n", encoding="utf-8")
     profile = dgb_geometry_profile(
         bore_d_mm=40, outside_d_mm=68, width_mm=15, tables_dir=tmp_path)
     p = profile["parameters"]
@@ -58,14 +58,14 @@ def test_dgb_geometry_profile_matches_the_robas_dgbgeometry_constructor(tmp_path
 def test_dgb_geometry_profile_always_selects_a_real_balldb_entry(tmp_path):
     # BaseOptimizer.DetermineRollerDiameter can return its raw target if the
     # first CSV row is closest. The port deliberately returns a real table row.
-    (tmp_path / "BallDB.csv").write_text("diameter(mm)\\n8.5\\n10\\n", encoding="utf-8")
+    (tmp_path / "BallDB.csv").write_text("diameter(mm)\n8.5\n10\n", encoding="utf-8")
     profile = dgb_geometry_profile(
         bore_d_mm=40, outside_d_mm=68, width_mm=15, tables_dir=tmp_path)
     assert profile["parameters"]["ball_d_mm"] == 8.5
 
 
 def test_dgb_geometry_profile_refuses_robas_zero_clearance_fallback(tmp_path):
-    (tmp_path / "BallDB.csv").write_text("diameter(mm)\\n8.5\\n", encoding="utf-8")
+    (tmp_path / "BallDB.csv").write_text("diameter(mm)\n8.5\n", encoding="utf-8")
     with pytest.raises(ValueError, match="radial-clearance table is undefined"):
         dgb_geometry_profile(
             bore_d_mm=200, outside_d_mm=228, width_mm=15, tables_dir=tmp_path)
