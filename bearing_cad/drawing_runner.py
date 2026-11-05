@@ -16,7 +16,7 @@ import tempfile
 import ezdxf
 from .drawing_preview import render_svg_preview
 
-from .drawing_variables import prepare_variables, bridge_values
+from .drawing_variables import prepare_variables, bridge_values, restore_checked_values
 from .drawing_legacy_technical import technical_condition_rows, apply_technical_conditions
 from .drawing_legacy_chamfer import apply_robas_chamfer
 from .drawing_legacy_dimensions import apply_deep_groove_dimensions, apply_angular_contact_dimensions
@@ -159,6 +159,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
                                parameters=parameters, model=model,
                                accuracy_class=accuracy_class,
                                checked_values=checked_values)
+    validated_input_report = report
     if legacy_values is not None and not isinstance(legacy_values, dict):
         raise DrawingExportError("legacy_values must be an explicit mapping")
     auto_evidence = None
@@ -220,6 +221,9 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
         bearing_type=bearing_type, bore_d_mm=parameters["bore_d_mm"],
         accuracy_class=accuracy_class, diameter_series=diameter_series,
         radial_clearance_group=radial_clearance_group)
+    # Reapply explicitly checked engineering values, validated on input, only
+    # after all automatic source calculations and lookup-table overlays.
+    report = restore_checked_values(report, validated_input_report, checked_values)
     # Faithfully reproduce FrmMain.ChangeCADTexts: all DataTable rows participate
     # in the original replacement loop, including blank/DBNull values.
     # The original software does not require the complete database to be filled.
