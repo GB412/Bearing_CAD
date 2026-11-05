@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {deriveRoBASGrooves, deriveRoBASBallCount, ROBAS_GROOVE_COEFFICIENTS} from './rolling_robas_geometry.js';
+import {deriveRoBASGrooves, deriveRoBASBallCount, ROBAS_GROOVE_COEFFICIENTS} from '../../frontend/rolling/rolling_robas_geometry.js';
 
 test('RoBAS DGBGeometry original 0.51/0.53 groove curvature is automatic', () => {
   assert.deepEqual(deriveRoBASGrooves('rolling.deep_groove_ball', 8), {

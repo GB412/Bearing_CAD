@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {defaults} from './geometry.js';
-import {validateExactRequest as validate} from './cad03_geometry.js';
+import {defaults} from '../../frontend/sliding/geometry.js';
+import {validateExactRequest as validate} from '../../frontend/sliding/cad03_geometry.js';
 const base={...defaults};
 test('supports legacy six input fields',()=>assert.equal(validate(base),null));
 test('supports paired optional oil hole / annular groove',()=>assert.equal(validate({...base,oil_feed_hole_d_mm:5,annular_groove_width_mm:6,annular_groove_depth_mm:1.2}),null));
