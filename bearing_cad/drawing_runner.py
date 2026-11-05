@@ -25,6 +25,7 @@ from .drawing_legacy_ratings import apply_robas_loads
 from .drawing_standard_fill import apply_robas_drawing_standards
 from .drawing_legacy_design import derive_dgb_drawing_values
 from .drawing_legacy_acb_cage import derive_acb_cage_drawing_values
+from .drawing_legacy_acb_race import derive_acb_race_drawing_values
 from .contracts import CageSpec
 from .drawing_diagnostics import sheet_variable_diagnostics, bundle_variable_diagnostics
 
@@ -170,11 +171,19 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
         # Any explicitly supplied, checked old-model value takes precedence.
         actual_legacy = {**auto_values, **actual_legacy}
     if bearing_type == "rolling.angular_contact_ball":
-        acb_auto, auto_evidence = derive_acb_cage_drawing_values(
+        race_auto, race_evidence = derive_acb_race_drawing_values(parameters)
+        cage_auto, cage_evidence = derive_acb_cage_drawing_values(
             parameters=parameters, cage=cage)
-        # Explicitly reviewed legacy dimensions take precedence over the
-        # 3D cage's source-backed proposal, never the other way round.
-        actual_legacy = {**acb_auto, **actual_legacy}
+        # Reviewed legacy values can override the nominal constructor-derived
+        # source labels. Never change the actual OCCT design parameters here.
+        actual_legacy = {**race_auto, **cage_auto, **actual_legacy}
+        auto_evidence = {
+            "source": "RoBAS ACBGeometry and StraightPocketCage",
+            "autofilled_input_keys": sorted(set(race_auto) | set(cage_auto)),
+            "race": race_evidence,
+            "cage": cage_evidence,
+            "warnings": race_evidence["warnings"] + cage_evidence["warnings"],
+        }
     if bearing_type == "rolling.deep_groove_ball":
         report = apply_deep_groove_dimensions(
             report=report, parameters=parameters, legacy_values=actual_legacy)
