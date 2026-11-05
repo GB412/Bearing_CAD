@@ -201,6 +201,9 @@ def derive_dgb_drawing_values(*, parameters: dict,
                     if source_dimensions["pocket_depth_mm"] is not None:
                         updates["cage_pocket_depth_mm"] = source_dimensions[
                             "pocket_depth_mm"]
+                        # RoBAS applies the same DetermineTolerance(Dw) to
+                        # the sphere radius and the pocket-depth upper bound.
+                        updates["cage_pocket_upper_tolerance_mm"] = _pocket_tolerance(Dw)
                     else:
                         warnings.append("ROBAS_STAMPING_SOURCE_POCKET_DEPTH_UNDEFINED")
                     updates["cage_flat_to_sphere_radius_mm"] = source_dimensions[
