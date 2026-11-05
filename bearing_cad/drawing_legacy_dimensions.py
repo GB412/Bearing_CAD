@@ -170,7 +170,7 @@ def apply_angular_contact_dimensions(*,report,parameters,legacy_values=None):
     for label in ("Dc","Dc1","Bca","Bc"):
         if label in v:v[label+"_Upper"]="0"
     if "cage_pocket_d_upper_tolerance_mm" in old:
-        v["Deltac_Upper"]=text(number(old["cage_pocket_d_upper_tolerance_mm"],"pocket tolerance"))
+        v["Deltac_Upper"]="+"+text(number(old["cage_pocket_d_upper_tolerance_mm"],"pocket tolerance"))
         v["Deltac_Lower"]="0"
     for label,key in (("e_Upper","cage_chamfer_upper_text"),("e_Lower","cage_chamfer_lower_text")):
         if key in old and old[key]!="——":
