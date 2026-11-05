@@ -34,7 +34,7 @@ def test_acb_source_race_matches_source_equations_and_signed_labels():
     names={row["name"]:row["value"] for row in output["variables"]}
     assert names["De"] == "62.040±0.015"
     assert names["di"] == "45.980±0.015"
-    assert names["a"] == "7.6±0.03"
+    assert names["a"] == f'{values["inner_groove_position_mm"]:.1f}±0.03'
     assert names["ae"] == str(values["outer_groove_position_mm"])+"±0.03"
     assert names["ai"] == str(values["inner_groove_position_mm"])+"±0.03"
     assert names["t_SK"] == "0.02"
