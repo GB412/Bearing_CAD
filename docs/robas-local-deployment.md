@@ -1,6 +1,6 @@
 # 本地部署结构：Bearing_CAD + 原版 RoBAS（Windows）
 
-本项目源代码在 Git 中；旧版 RoBAS 模板、SQLite、系数 CSV、SHX 字体以及经过授权的 CADImport DLL **必须放在 Git 仓库外**。不要将原版 DWG、数据库、DLL 或 SHX 复制进公开仓库。
+本项目源代码在 Git 中（[项目结构](PROJECT_STRUCTURE.md)）；旧版 RoBAS 模板、SQLite、系数 CSV、SHX 字体以及经过授权的 CADImport DLL **必须放在 Git 仓库外**。不要将原版 DWG、数据库、DLL 或 SHX 复制进公开仓库。
 
 ## 1. 推荐目录
 
@@ -117,7 +117,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_bearing_cad_with_robas.ps
 
 ```powershell
 python -m pytest tests_v2 -q
-node --test rolling_manifest.test.js rolling_robas_geometry.test.js
+npm run test:unit:js:rolling
 npm run build
 npx playwright test
 ```
