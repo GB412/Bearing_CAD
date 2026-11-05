@@ -934,6 +934,9 @@ body[data-cad-view="2d"] #modelGenerationActions,
 body[data-cad-view="2d"] #modelSafetyNote,
 body[data-cad-view="2d"] #status,
 body[data-cad-view="2d"] #parameters [data-parameter-tier="advanced"] { display: none; }
+/* The CRB flange arrangement determines which original DWG template set
+   can be used; keep this selector available in the 2D task panel. */
+body[data-cad-view="2d"] #parameters [data-parameter-tier="drawing"] { display: block; }
 body[data-cad-view="2d"] #modelParametersPanel .panel-body { padding-bottom: 13px; }
 body[data-cad-view="2d"] #modelParametersPanel .section-heading { margin-top: 0; }
 body[data-cad-view="2d"] #parameters { grid-template-columns: repeat(2,minmax(0,1fr)); }

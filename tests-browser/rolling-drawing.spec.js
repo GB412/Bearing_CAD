@@ -258,3 +258,38 @@ test('standalone desktop viewer uses an independent parameter scroller and a non
  await expect(page.locator('#param-bore_d_mm')).toHaveValue('42');
  await expect(page.locator('#drawingSettingsPanel')).toBeHidden();
 });
+
+test('2D exposes cylindrical roller flange configuration needed to choose an available RoBAS template', async ({page}) => {
+  await page.route('**/api/v2/cad/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/v2/cad/status') {
+      return route.fulfill({json:{available:true,supported_bearings:['rolling.cylindrical_roller']}});
+    }
+    if (path === '/api/v2/cad/drawings/status') {
+      return route.fulfill({json:{
+        available:true,
+        supported_bearings:['rolling.cylindrical_roller:N'],
+        failures:[],
+      }});
+    }
+    return route.fulfill({status:404,json:{}});
+  });
+  await page.goto('/rolling.html');
+  await page.locator('#bearingType').selectOption('rolling.cylindrical_roller');
+  await page.locator('#workspace2dTab').click();
+
+  // NU is the 3D default, but this simulated installation only has a
+  // confirmed N drawing template. The user must be able to see/change it.
+  await expect(page.locator('#param-configuration')).toBeVisible();
+  await expect(page.locator('#param-configuration')).toHaveValue('NU');
+  await expect(page.locator('#param-roller_d_mm')).toBeHidden();
+  await expect(page.locator('#generate2d')).toBeDisabled();
+
+  await page.locator('#param-configuration').selectOption('N');
+  await expect(page.locator('#generate2d')).toBeEnabled();
+
+  await page.locator('#workspace3dTab').click();
+  await expect(page.locator('#param-configuration')).toBeVisible();
+  await expect(page.locator('#param-roller_d_mm')).toBeVisible();
+  await expect(page.locator('#param-configuration')).toHaveValue('N');
+});
