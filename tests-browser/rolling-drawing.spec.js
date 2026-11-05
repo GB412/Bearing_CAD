@@ -87,6 +87,8 @@ test('2D drawing generation opens the large preview workspace and supports sheet
   });
 
   await page.goto('/rolling.html');
+  await expect(page.locator('#drawingSettingsPanel')).toBeHidden();
+  await page.locator('#workspace2dTab').click();
   await expect(page.locator('#generate2d')).toBeEnabled();
   await page.locator('#drawingClearance').selectOption('C0');
   await page.locator('#generate2d').click();
@@ -205,6 +207,7 @@ test('NUP source template composition exposes fifth detachable rib DXF', async (
   await page.goto('/rolling.html');
   await page.locator('#bearingType').selectOption('rolling.cylindrical_roller');
   await page.locator('#param-configuration').selectOption('NUP');
+  await page.locator('#workspace2dTab').click();
   await expect(page.locator('#generate2d')).toBeEnabled();
   await page.locator('#generate2d').click();
   await expect(page.locator('#drawingSheetTabs [role="tab"]')).toHaveCount(5);
