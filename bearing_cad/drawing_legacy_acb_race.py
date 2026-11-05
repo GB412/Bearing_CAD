@@ -74,6 +74,30 @@ def derive_acb_race_drawing_values(parameters: dict) -> tuple[dict, dict]:
         "outer_groove_position_mm": outer_pos,
         "inner_race_groove_position_mm": inner_pos,
     }
+    # RoBAS ACBGeometry / SingleRowAngularContactRace set the sidewall
+    # diameters from the *unrounded* groove diameter, then expose the
+    # millimetre getter rounded to 0.01. On the current OCCT assembly the
+    # corresponding geometric boundaries are the high inner-shoulder and
+    # low outer-shoulder diameters; compare before emitting old-DWG labels.
+    de_raw = pw + 2*ro - (2*ro-dw)*math.cos(a)
+    di_raw = pw - 2*ri + (2*ri-dw)*math.cos(a)
+    factor = .35 if d <= 25 else .40
+    source_outer = round(de_raw - factor*dw, 2)
+    source_inner = round(di_raw + factor*dw, 2)
+    for output_name, shoulder_name, source_value in (
+        ("outer_sidewall_d_mm", "outer_shoulder_right_d_mm", source_outer),
+        ("inner_sidewall_d_mm", "inner_shoulder_left_d_mm", source_inner),
+    ):
+        shoulder = _positive(parameters, shoulder_name)
+        # Do not apply original source-only dimensions to arbitrary OCCT
+        # geometry. An unmatched nominal shoulder remains open for expert
+        # review or an explicitly supplied checked legacy field.
+        if math.isclose(source_value, shoulder, rel_tol=0, abs_tol=1e-6):
+            result[output_name] = source_value
+        else:
+            evidence["warnings"].append(
+                "ACB_" + shoulder_name.upper() + "_DIFFERS_FROM_ROBAS_SOURCE")
+
     if lock_height > 0 and math.isfinite(lock_height):
         # The original LockHeight property rounds to 0.01 mm.
         result["lock_height_mm"] = round(lock_height, 2)
