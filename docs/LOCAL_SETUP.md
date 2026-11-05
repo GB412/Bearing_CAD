@@ -14,10 +14,12 @@
 ```text
 Bearing_CAD/
 ├─ bearing_cad/                 Python API、参数合同、变量映射和导出流程
+├─ frontend/                    rolling/ 滚动轴承、sliding/ 滑动轴承前端
 ├─ bridge/cadimport/            .NET Framework 4.5.2 CADImport 桥接源码
 ├─ config/                      本地配置示例，不含真实路径或授权信息
 ├─ scripts/                     预检、桥接编译和启动脚本
 ├─ tests_v2/                    Python 单元测试和 RoBAS 测试
+├─ tests-js/                    rolling/ 和 sliding/ 前端单元测试
 ├─ tests-browser/               Playwright 浏览器测试
 ├─ rolling.html                 滚动轴承三维和 RoBAS 二维工作台
 ├─ index.html                   CAD-01 滑动轴承演示入口
@@ -25,6 +27,8 @@ Bearing_CAD/
 ├─ package-lock.json            固定 Node 依赖版本
 └─ requirements-cad.txt         Python CAD/DXF/SVG 依赖
 ```
+
+完整目录职责与旧路径迁移表见 [项目结构](PROJECT_STRUCTURE.md)，文档导航见 [文档索引](README.md)。
 
 ## 1. 前端和三维演示
 

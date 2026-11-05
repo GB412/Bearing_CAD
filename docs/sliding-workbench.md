@@ -5,7 +5,6 @@
 ## Windows 本地运行
 
 ```powershell
-git switch feature/cad-workbench-sectioned-model
 npm ci
 npm run build
 conda activate bearing-cad02

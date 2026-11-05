@@ -15,8 +15,10 @@ __pycache__/
 reference/
 RoBAS
 
-# Generated CAD artifacts
+# Generated CAD artifacts and temporary test outputs
 artifacts/
+build/
+.pytest_cache/
 
 # Local machine configuration and CADImport build output
 config/robas.local.json

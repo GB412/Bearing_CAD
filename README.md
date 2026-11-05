@@ -1,15 +1,17 @@
-# BearingCAD Studio — 滑动轴承演示 + 滚动轴承三维参数化 CAD
+# BearingCAD Studio — 滑动轴承与滚动轴承 CAD 工作台
 
-本仓库的本地部署、目录说明、外部资源边界和给其他 AI 的审查入口见 [`docs/LOCAL_SETUP.md`](docs/LOCAL_SETUP.md)。
+**先看文档：**[项目结构](docs/PROJECT_STRUCTURE.md) · [文档索引](docs/README.md) · [本地部署](docs/LOCAL_SETUP.md) · [RoBAS 资源与二维出图](docs/robas-local-deployment.md)。
+
+前端代码分别位于 `frontend/rolling/`、`frontend/sliding/`，前端单元测试在 `tests-js/`；两张入口 HTML 保留在仓库根目录，原有浏览器地址不变。Python CAD 引擎仍位于 `bearing_cad/`，Windows CADImport 桥接器仍位于 `bridge/cadimport/`。
 
 在已配置本机资源的 Windows 环境中，可直接运行 `.\scripts\run_bearing_cad_with_robas.ps1` 启动完整二维/三维工作台；GitHub 提交只应包含源码和 `config/robas.local.example.json`，不包含商业 CADImport 或 RoBAS 原始资源。
 
 这个仓库包含**两个不同的工作台**：
 
-- **滚动轴承三维工作台**（`rolling.html`）：深沟球、圆柱滚子 N/NU/NJ/NF/NUP、角接触球三类功能级三维模型；可选对应保持架、独立零件、真实 CadQuery/OCCT B-Rep、STEP/STL、几何质量与参数快照。
+- **滚动轴承 CAD 工作台**（`rolling.html`）：深沟球、圆柱滚子 N/NU/NJ/NF/NUP、角接触球三类功能级三维模型；可选对应保持架、独立零件、真实 CadQuery/OCCT B-Rep、STEP/STL、几何质量与参数快照。
 - **滑动轴承 CAD-01 演示**（`index.html`）：原有径向滑动轴承的示意二维视图和三维演示。该模块与滚动轴承 CAD 后端彼此独立。
 
-**明确范围：截至 3D-MIG-09 为止只交付独立 CAD 工具，不接入多 Agent 轴承设计系统；不扩展滚动轴承正式二维工程图，也不宣称已经通过轴承载荷、寿命或制造审核。**
+**当前范围：**滚动轴承三维 CAD 可独立生成 STEP/STL；原版 RoBAS DWG/SQLite/CADImport 的二维 DXF 导出可在具备授权资源的 Windows 机器上测试。DGBGeometry 和 StampingCage 已提供来源明确的候选参数预填，**不是完整 Optimizer**。二维图纸与三维几何的最终一致性、原版 Eyeshot 实体等价和 Windows/AutoCAD 人工验收仍未完成；多 Agent 与 EXE 专业求解不在本工具当前范围。
 
 ## 滚动轴承：Windows 本地运行
 
@@ -46,8 +48,8 @@ python -m bearing_cad.api --port 8090 --static dist
 桥接验收通过后，在原有命令后增加两个本地参数：
 
 ```powershell
-python -m bearing_cad.api --port 8090 --static dist \
-  --robas-resources "D:\\RoBAS_Resources" \
+python -m bearing_cad.api --port 8090 --static dist `
+  --robas-resources "D:\\RoBAS_Resources" `
   --cadimport-bridge "D:\\Bridge\\CadImportBridge.exe"
 ```
 
@@ -66,7 +68,7 @@ Windows 部署顺序：
 
 预检报告写入 `artifacts/cadimport/environment_report.json`。它会记录资源、SQLite 完整性和变量表结构、DWG 签名与 SHA-256、系数 CSV、SHX/字体文件、CADImport 程序集版本以及具体失败原因。桥接 `doctor` 命令还会检查 CADImport 程序集、CLR 和进程架构。预检通过只表示环境具备尝试出图的条件；必须继续执行真实 DWG `inspect`、单变量替换、DXF `ezdxf` 审计，并由工程人员在 AutoCAD/QCAD/FreeCAD 中打开确认。
 
-未配置上述环境时，工作台二维按钮会显示不可用，已有三维 STEP/STL 建模和下载功能正常。配置完成后二维工作台使用相同的`bearing-cad.request.v1`参数，输入型号、精度和直径系列并调用原版 DWG 模板替换，结果下载总图、外圈、内圈、保持架四张 DXF。原版 RoBAS 特有的沟道、挡边和保持架参数若不在现有 CAD 参数合同中，需要由原版计算逻辑或显式设计上下文提供；不猜测缺失值。圆柱滚子第一版仅启用原版 N 型模板。输出属于原版模板文字替换结果，不代表重新建立的二维参数化几何。
+未配置上述环境时，工作台二维按钮会显示不可用，已有三维 STEP/STL 建模和下载功能正常。配置完成后二维工作台使用相同的`bearing-cad.request.v1`参数，输入型号、精度和直径系列并调用原版 DWG 模板替换，结果下载总图、外圈、内圈、保持架四张 DXF。原版 RoBAS 特有的沟道、挡边和保持架参数若不在现有 CAD 参数合同中，需要由原版计算逻辑或显式设计上下文提供；不猜测缺失值。圆柱滚子 N 型模板是原始代码中明确组合的版本；NU/NJ/NF/NUP 的模板组合属于待 AutoCAD 人工确认的候选（NUP 另含活动挡圈图）。输出属于原版模板文字替换结果，不代表重新建立的二维参数化几何。
 
 开发者也可使用独立命令行 `python -m bearing_cad.drawing_cli --request design_and_drawing.json --resources ... --bridge ... --out ...` 生成并核验 DXF。
 
@@ -77,7 +79,7 @@ Windows 部署顺序：
 ```powershell
 python -m unittest discover -s tests_v2 -p "test_*.py" -v
 python -m bearing_cad.migration_baseline --output build/migration-07a
-node --test rolling_manifest.test.js
+npm run test:unit:js
 ```
 
 **真实网页与 CAD 内核端到端**（需已执行 `npm ci`、`npm run build`，并安装 Playwright Chromium）：
@@ -107,6 +109,6 @@ npm run dev
 - STEP 几何质量/装配变换：3D-MIG-06、08A。
 - RoBAS 源码对照/七组现有模型基线：3D-MIG-07A；缺失原版 Eyeshot 实体的 07B 保持未验证。
 - 真实浏览器-CAD 服务联调与交付候选：3D-MIG-09A～C。
-- **多 Agent 集成（原 PR10）暂停，滚动轴承正式二维工程图暂停。**
+- 多 Agent 集成（原 PR10）暂停；RoBAS 原版二维模板 DXF 导出已有可测试流程，但仍处于工程审图/一致性人工验收阶段。
 
 具体发行验收状态与限制请查阅 [3D-MIG-09 交付说明](docs/migration/3d-mig-09-release.md)。
