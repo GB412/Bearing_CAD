@@ -21,7 +21,7 @@
   </header>
   <main class="workspace">
     <aside class="side" aria-label="轴承设计控制区">
-      <section class="panel" aria-label="结构参数">
+      <section class="panel" id="modelParametersPanel" aria-label="结构参数">
         <div class="panel-header"><h2>模型参数</h2><span>单位 mm</span></div>
         <div class="panel-body">
           <label class="field">轴承类型
@@ -31,8 +31,9 @@
               <option value="rolling.angular_contact_ball">单列角接触球轴承</option>
             </select>
           </label>
-          <div class="section-heading">几何尺寸</div>
+          <div class="section-heading">模型尺寸</div>
           <div class="fields" id="parameters"></div>
+          <div id="modelSpecificControls">
           <div id="cagePanel">
             <div class="section-heading">保持架</div>
             <label class="switch"><input id="cageEnabled" type="checkbox" checked><span>包含保持架</span></label>
@@ -70,9 +71,10 @@
             <button id="scaleApply" type="button" class="secondary">整体等比例缩放</button>
           </div>
           <p class="hint">仅同步缩放长度尺寸和保持架尺寸；数量、接触角及挡边构型保持不变。独立修改时不会自动覆盖其他参数。</p>
+          </div>
           <div id="validation" class="parameter-warning" role="alert" hidden></div>
-          <p class="hint">预设数据用于几何测试，不代表厂家选型或制造公差。</p>
-          <div class="buttonrow">
+          <p class="hint" id="modelSafetyNote">预设数据用于几何测试，不代表厂家选型或制造公差。</p>
+          <div class="buttonrow" id="modelGenerationActions">
             <button id="generate" class="primary">生成三维模型</button>
             <button id="resetParams" class="secondary">恢复默认</button>
           </div>
@@ -80,7 +82,7 @@
         </div>
       </section>
 
-      <section class="panel" aria-label="RoBAS 二维图纸">
+      <section class="panel" id="drawingSettingsPanel" aria-label="RoBAS 二维图纸">
         <div class="panel-header"><h2>二维图纸 · RoBAS 模板</h2><span>SVG 预览 · DXF 输出</span></div>
         <div class="panel-body">
           <p class="hint drawing-intro">沿用原版 DWG 模板和变量替换流程。生成后可在右侧工作区查看 SVG 预览并下载 DXF。</p>

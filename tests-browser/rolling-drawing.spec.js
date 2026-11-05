@@ -92,6 +92,15 @@ test('2D drawing generation opens the large preview workspace and supports sheet
   await page.locator('#generate2d').click();
 
   await expect(page.locator('#drawingWorkspace')).toBeVisible();
+  // 2D is a separate viewing task: expose envelope + drawing options only.
+  await expect(page.locator('#drawingSettingsPanel')).toBeVisible();
+  await expect(page.locator('#modelParametersPanel')).toBeVisible();
+  await expect(page.locator('#param-bore_d_mm')).toBeVisible();
+  await expect(page.locator('#param-outside_d_mm')).toBeVisible();
+  await expect(page.locator('#param-width_mm')).toBeVisible();
+  await expect(page.locator('#param-ball_d_mm')).toBeHidden();
+  await expect(page.locator('#cagePanel')).toBeHidden();
+  await expect(page.locator('#generate')).toBeHidden();
   await expect(page.locator('#workspace2dTab')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('#drawingPreviewImage')).toBeVisible();
   await expect(page.locator('#drawingSheetTabs [role="tab"]')).toHaveCount(4);
@@ -147,6 +156,9 @@ test('2D drawing generation opens the large preview workspace and supports sheet
 
   await page.locator('#workspace3dTab').click();
   await expect(page.locator('#modelWorkspace')).toBeVisible();
+  await expect(page.locator('#drawingSettingsPanel')).toBeHidden();
+  await expect(page.locator('#param-ball_d_mm')).toBeVisible();
+  await expect(page.locator('#generate')).toBeVisible();
   await expect(page.locator('#workspace3dTab')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('#viewport canvas')).toBeVisible();
 
@@ -200,4 +212,37 @@ test('NUP source template composition exposes fifth detachable rib DXF', async (
   await page.locator('#drawingSheetTabs [data-sheet-key="loose_rib"]').click();
   await expect(page.locator('#drawingSheetTitle')).toHaveText('活动挡圈图');
   await expect(page.locator('#drawingDownloadCurrent')).toHaveAttribute('download','loose_rib.dxf');
+});
+
+test('standalone desktop viewer uses an independent parameter scroller and a non-stretched CAD canvas',async({page})=>{
+ await page.setViewportSize({width:1440,height:900});
+ await page.route('**/api/v2/cad/**',async route=>{
+  const path=new URL(route.request().url()).pathname;
+  if(path==='/api/v2/cad/status')return route.fulfill({json:{available:false,supported_bearings:[]}});
+  if(path==='/api/v2/cad/drawings/status')return route.fulfill({json:{available:false,supported_bearings:[],failures:[]}});
+  return route.fulfill({status:404,json:{}});
+ });
+ await page.goto('/rolling.html');
+ await page.locator('#workspace2dTab').click();
+ const metrics=await page.evaluate(()=>{
+  const rect=id=>document.querySelector(id).getBoundingClientRect();
+  const side=document.querySelector('.side'),main=document.querySelector('.mainpanel');
+  return {
+   sideHeight:rect('.side').height,sideScroll:side.scrollHeight,sideOverflow:getComputedStyle(side).overflowY,
+   mainHeight:main.getBoundingClientRect().height,previewHeight:rect('#drawingPreviewStage').height,
+   previewWidth:rect('#drawingPreviewStage').width,
+   sidebarWidth:rect('.side').width,
+  };
+ });
+ expect(metrics.sideOverflow).toBe('auto');
+ expect(metrics.sideHeight).toBeLessThanOrEqual(900);
+ expect(metrics.sideScroll).toBeGreaterThan(metrics.sideHeight);
+ expect(metrics.previewHeight).toBeGreaterThanOrEqual(580);
+ expect(metrics.previewWidth).toBeGreaterThan(metrics.sidebarWidth);
+ expect(metrics.mainHeight).toBeLessThan(metrics.sideScroll);
+ await page.locator('#param-bore_d_mm').fill('42');
+ await expect(page.locator('#param-bore_d_mm')).toHaveValue('42');
+ await page.locator('#workspace3dTab').click();
+ await expect(page.locator('#param-bore_d_mm')).toHaveValue('42');
+ await expect(page.locator('#drawingSettingsPanel')).toBeHidden();
 });
