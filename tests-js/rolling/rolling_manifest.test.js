@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {bearingForms,cageFields,cageForms,cageChoices,defaultCageEnabled,requestFromFields,validateArtifact,buildAssemblyIndex,apiMessage,geometryIssues,scaleGeometryFields,describeCadError} from './rolling_manifest.js';
+import {bearingForms,cageFields,cageForms,cageChoices,defaultCageEnabled,requestFromFields,validateArtifact,buildAssemblyIndex,apiMessage,geometryIssues,scaleGeometryFields,describeCadError} from '../../frontend/rolling/rolling_manifest.js';
 
 const values=kind=>Object.fromEntries(bearingForms[kind].fields.map(([key,,value])=>[key,String(value)]));
 const deep='rolling.deep_groove_ball', cylindrical='rolling.cylindrical_roller', angular='rolling.angular_contact_ball';

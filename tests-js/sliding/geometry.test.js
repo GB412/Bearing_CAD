@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {check,defaults,dimensions,dxf} from './geometry.js';
+import {check,defaults,dimensions,dxf} from '../../frontend/sliding/geometry.js';
 
 test('geometry precision and finite numbers',()=>{
  assert.equal(check({...defaults,radial_clearance_mm:0.00549})!==null,true);

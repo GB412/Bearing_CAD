@@ -11,7 +11,9 @@
     "test": "python -m unittest discover -s tests -v",
     "test:browser": "playwright test",
     "test:all": "npm test && npm run test:browser",
-    "test:unit:js": "node --test geometry.test.js"
+    "test:unit:js": "npm run test:unit:js:rolling && npm run test:unit:js:sliding",
+    "test:unit:js:rolling": "node --test tests-js/rolling/rolling_manifest.test.js tests-js/rolling/rolling_robas_geometry.test.js",
+    "test:unit:js:sliding": "node --test tests-js/sliding/geometry.test.js tests-js/sliding/cad03_geometry.test.js"
   },
   "dependencies": {
     "three": "0.180.0"
