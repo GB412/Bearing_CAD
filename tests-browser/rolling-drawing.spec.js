@@ -223,6 +223,14 @@ test('standalone desktop viewer uses an independent parameter scroller and a non
   return route.fulfill({status:404,json:{}});
  });
  await page.goto('/rolling.html');
+ const threeD=await page.evaluate(()=>{
+  const side=document.querySelector('.side');
+  return {height:side.getBoundingClientRect().height,scrollHeight:side.scrollHeight,
+    overflow:getComputedStyle(side).overflowY};
+ });
+ expect(threeD.overflow).toBe('auto');
+ expect(threeD.height).toBeLessThanOrEqual(900);
+ expect(threeD.scrollHeight).toBeGreaterThan(threeD.height);
  await page.locator('#workspace2dTab').click();
  const metrics=await page.evaluate(()=>{
   const rect=id=>document.querySelector(id).getBoundingClientRect();
@@ -236,10 +244,9 @@ test('standalone desktop viewer uses an independent parameter scroller and a non
  });
  expect(metrics.sideOverflow).toBe('auto');
  expect(metrics.sideHeight).toBeLessThanOrEqual(900);
- expect(metrics.sideScroll).toBeGreaterThan(metrics.sideHeight);
  expect(metrics.previewHeight).toBeGreaterThanOrEqual(580);
  expect(metrics.previewWidth).toBeGreaterThan(metrics.sidebarWidth);
- expect(metrics.mainHeight).toBeLessThan(metrics.sideScroll);
+ expect(metrics.mainHeight).toBeLessThan(1100);
  await page.locator('#param-bore_d_mm').fill('42');
  await expect(page.locator('#param-bore_d_mm')).toHaveValue('42');
  await page.locator('#workspace3dTab').click();
