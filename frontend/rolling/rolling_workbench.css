@@ -964,3 +964,9 @@ body[data-cad-view="2d"] #parameters { grid-template-columns: repeat(2,minmax(0,
   height: auto;
   min-height: 0;
 }
+
+/* The sidebar itself scrolls. Individual panels must not shrink to the
+   viewport height (default flex-shrink:1), which would clip their inputs. */
+@media (min-width: 1101px) {
+  .side > .panel { flex: 0 0 auto; }
+}
