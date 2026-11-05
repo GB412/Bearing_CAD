@@ -10,6 +10,14 @@ const drawingSvg = [
   '</g><text x="600" y="90" fill="#d7e5eb" text-anchor="middle" font-size="28">RoBAS drawing preview</text></svg>',
 ].join('');
 
+const portraitDrawingSvg = [
+  '<svg xmlns="http://www.w3.org/2000/svg" width="287.7mm" height="300mm" viewBox="0 0 959000 1000000">',
+  '<rect x="17000" y="17000" width="925000" height="966000" fill="#151e27" stroke="#ff00ff" stroke-width="6000"/>',
+  '<path d="M100000 80000V900000H850000" fill="none" stroke="#ffff00" stroke-width="6000"/>',
+  '<text x="120000" y="180000" fill="white" font-size="30000">Cage template</text>',
+  '</svg>',
+].join('');
+
 test('2D drawing generation opens the large preview workspace and supports sheet navigation', async ({page}) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -72,7 +80,8 @@ test('2D drawing generation opens the large preview workspace and supports sheet
       }});
     }
     if (path.endsWith('.svg')) {
-      return route.fulfill({status: 200, contentType: 'image/svg+xml', body: drawingSvg});
+      return route.fulfill({status: 200, contentType: 'image/svg+xml',
+        body: path.endsWith('/cage.svg') ? portraitDrawingSvg : drawingSvg});
     }
     return route.fulfill({status: 404, json: {error: {message: 'not found'}}});
   });
@@ -100,6 +109,41 @@ test('2D drawing generation opens the large preview workspace and supports sheet
   await expect(page.locator('#drawingZoomLabel')).toHaveText('120%');
   await page.locator('#drawingFit').click();
   await expect(page.locator('#drawingZoomLabel')).toHaveText('100%');
+
+  // SVG from CADImport/ezdxf has physical millimetre dimensions and can be portrait.
+  // The old CSS Grid let the image exceed the fixed viewport and clipped its bottom.
+  await page.locator('#drawingSheetTabs [data-sheet-key="cage"]').click();
+  await expect.poll(() => page.locator('#drawingPreviewImage').evaluate(image =>
+    image.complete && image.naturalHeight > image.naturalWidth)).toBe(true);
+  const fitted = await page.locator('#drawingPreviewImage').evaluate(image => {
+    const stage = document.getElementById('drawingPreviewStage');
+    const rect = image.getBoundingClientRect();
+    const bounds = stage.getBoundingClientRect();
+    return {
+      width: rect.width, height: rect.height,
+      availableWidth: bounds.width, availableHeight: bounds.height,
+      fit: getComputedStyle(image).objectFit,
+    };
+  });
+  expect(fitted.fit).toBe('contain');
+  expect(fitted.width).toBeLessThanOrEqual(fitted.availableWidth + 1);
+  expect(fitted.height).toBeLessThanOrEqual(fitted.availableHeight + 1);
+
+  // Expanded inspection uses the same sheet, and Escape restores fitted view.
+  const originalHeight = fitted.availableHeight;
+  await page.locator('#drawingExpand').click();
+  await expect(page.locator('#drawingPreviewStage')).toHaveClass(/is-expanded/);
+  await expect(page.locator('#drawingExpandClose')).toBeVisible();
+  const expandedHeight = await page.locator('#drawingPreviewStage').evaluate(el =>
+    el.getBoundingClientRect().height);
+  expect(expandedHeight).toBeGreaterThan(originalHeight);
+  await page.locator('#drawingPreviewStage').hover({position: {x: 100, y: 100}});
+  await page.mouse.wheel(0, -120);
+  await expect(page.locator('#drawingZoomLabel')).toHaveText('112%');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#drawingPreviewStage')).not.toHaveClass(/is-expanded/);
+  await expect(page.locator('#drawingZoomLabel')).toHaveText('100%');
+  await expect(page.locator('#drawingExpandClose')).toBeHidden();
 
   await page.locator('#workspace3dTab').click();
   await expect(page.locator('#modelWorkspace')).toBeVisible();
