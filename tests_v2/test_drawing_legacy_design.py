@@ -115,3 +115,49 @@ def test_invalid_unsupported_dimensions_fail_without_fabricating_values():
         derive_dgb_drawing_values(parameters={**P, "ball_count": 0})
     with pytest.raises(ValueError):
         derive_dgb_drawing_values(parameters={**P, "ball_d_mm": 100})
+
+def test_exact_robas_stamping_adapter_can_fill_pocket_depth_and_flat_radius():
+    from bearing_cad.robas_stamping import robas_stamping_profile
+    model = "6008"
+    source = robas_stamping_profile(
+        bearing_model=model, ball_d_mm=P["ball_d_mm"],
+        pitch_d_mm=P["pitch_d_mm"], ball_count=P["ball_count"],
+        bearing_width_mm=P["width_mm"],
+        inner_shoulder_d_mm=P["inner_shoulder_d_mm"],
+        outer_shoulder_d_mm=P["outer_shoulder_d_mm"],
+        rivet_hole_clearance_mm=.05,
+    )
+    cage_spec = StampedCageSpec(**source["cad_cage"])
+    values, evidence = derive_dgb_drawing_values(
+        parameters=P, cage=cage_spec, bearing_model=model)
+    assert values["cage_pocket_depth_mm"] == pytest.approx(4.04)
+    assert values["cage_flat_to_sphere_radius_mm"] == pytest.approx(
+        source["source_dimensions"]["flat_to_sphere_radius_mm"])
+    checked = apply_deep_groove_dimensions(
+        report=_report(["K_", "K_Upper", "K_Lower", "rrc"]),
+        parameters=P, legacy_values=values)
+    fields = {row["name"]:row["value"] for row in checked["variables"]}
+    assert float(fields["K_"]) == pytest.approx(4.04)
+    assert fields["K_Upper"] == "+0.04"
+    assert fields["K_Lower"] == "0"
+    assert float(fields["rrc"]) > 0
+    assert "RO BAS_STAMPING_NOMINAL_POCKET_PROFILE_REQUIRES_3D_REVIEW".replace(" ", "") in evidence["warnings"]
+
+
+def test_custom_stamped_cage_does_not_claim_robas_source_pocket_geometry():
+    from bearing_cad.robas_stamping import robas_stamping_profile
+    source = robas_stamping_profile(
+        bearing_model="6008", ball_d_mm=P["ball_d_mm"],
+        pitch_d_mm=P["pitch_d_mm"], ball_count=P["ball_count"],
+        bearing_width_mm=P["width_mm"],
+        inner_shoulder_d_mm=P["inner_shoulder_d_mm"],
+        outer_shoulder_d_mm=P["outer_shoulder_d_mm"],
+        rivet_hole_clearance_mm=.05,
+    )
+    original = source["cad_cage"]
+    changed = {**original, "rivet_head_d_mm": original["rivet_head_d_mm"]+.1}
+    values, warnings = derive_dgb_drawing_values(
+        parameters=P, cage=StampedCageSpec(**changed), bearing_model="6008")
+    assert "cage_pocket_depth_mm" not in values
+    assert "cage_flat_to_sphere_radius_mm" not in values
+    assert "STAMPING_CAGE_DIFFERS_FROM_ORIGINAL_SOURCE_PROFILE" in warnings["warnings"]
