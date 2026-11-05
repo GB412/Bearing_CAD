@@ -203,6 +203,8 @@
             <span id="drawingZoomLabel" class="zoom-label">适应窗口</span>
             <button id="drawingZoomIn" type="button" class="icon-button" aria-label="放大预览" title="放大">+</button>
             <button id="drawingFit" type="button" class="fit-button">适应窗口</button>
+            <button id="drawingExpand" type="button" class="fit-button"
+                    aria-controls="drawingPreviewStage" aria-expanded="false" disabled>展开图纸</button>
           </div>
         </div>
 
@@ -213,7 +215,8 @@
             <span id="drawingPreviewEmptyText">请在左侧填写轴承图纸参数，然后生成原版模板二维图纸。</span>
           </div>
           <img id="drawingPreviewImage" alt="原版 DWG 模板 SVG 预览" hidden draggable="false">
-          <div class="drawing-canvas-hint" id="drawingCanvasHint" hidden>滚轮缩放 · 放大后拖动平移</div>
+          <button id="drawingExpandClose" class="drawing-expand-close" type="button" hidden>退出大图 (Esc)</button>
+          <div class="drawing-canvas-hint" id="drawingCanvasHint" hidden>整图适应 · 滚轮缩放 · 放大后拖动平移</div>
         </div>
 
         <div class="drawing-meta-bar">

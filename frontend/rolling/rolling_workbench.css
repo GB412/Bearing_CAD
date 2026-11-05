@@ -567,8 +567,11 @@ footer a:hover { text-decoration: underline; }
 }
 .drawing-preview-stage {
   position: relative;
-  display: grid;
-  place-items: center;
+  /* Grid's intrinsic image min-size can make a portrait SVG taller than the
+     fixed stage, which then cuts off the bottom because overflow is hidden. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: clamp(440px, calc(100vh - 390px), 740px);
   min-height: 440px;
   margin: 16px 18px 0;
@@ -585,6 +588,11 @@ footer a:hover { text-decoration: underline; }
 }
 .drawing-preview-stage img {
   display: block;
+  /* The image box must be the viewport, never a grid/min-content track.
+     object-fit: contain then fits the *entire* SVG inside that box. */
+  flex: 0 0 100%;
+  min-width: 0;
+  min-height: 0;
   width: 100%;
   height: 100%;
   max-width: 100%;
@@ -594,6 +602,37 @@ footer a:hover { text-decoration: underline; }
   user-select: none;
   pointer-events: none;
   will-change: transform;
+}
+/* Expanded 2D inspection uses the same original SVG, not a re-rendered DXF.
+   The small default preview remains within the existing workbench layout. */
+body.drawing-preview-expanded {
+  overflow: hidden;
+}
+.drawing-preview-stage.is-expanded {
+  position: fixed;
+  inset: 12px;
+  z-index: 1100;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  border-radius: 8px;
+}
+.drawing-expand-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 1;
+  padding: 9px 13px;
+  color: #f2f7fa;
+  background: rgba(24, 38, 49, .94);
+  border: 1px solid #658196;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 650;
+}
+.drawing-expand-close:hover {
+  background: #314e60;
 }
 .drawing-preview-stage.is-zoomed {
   cursor: grab;

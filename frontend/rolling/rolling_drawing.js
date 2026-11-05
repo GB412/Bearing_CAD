@@ -9,6 +9,8 @@ export function initDrawingWorkbench(getDesign) {
   const previewImage = $('drawingPreviewImage');
   const previewEmpty = $('drawingPreviewEmpty');
   const downloadCurrent = $('drawingDownloadCurrent');
+  const expandButton = $('drawingExpand');
+  const closeExpandedButton = $('drawingExpandClose');
 
   const sheetTitles = {
     assembly: '总装图',
@@ -54,6 +56,9 @@ export function initDrawingWorkbench(getDesign) {
 
   function setWorkspace(name) {
     const drawing = name === 'drawing';
+    if (!drawing && previewStage.classList.contains('is-expanded')) {
+      setExpanded(false, false);
+    }
     $('modelWorkspace').hidden = drawing;
     $('drawingWorkspace').hidden = !drawing;
     $('workspace3dTab').classList.toggle('is-active', !drawing);
@@ -76,6 +81,20 @@ export function initDrawingWorkbench(getDesign) {
     panX = 0;
     panY = 0;
     applyTransform();
+  }
+
+  function setExpanded(enabled, restoreFocus = true) {
+    const next = Boolean(enabled && activeSheet);
+    const previous = previewStage.classList.contains('is-expanded');
+    previewStage.classList.toggle('is-expanded', next);
+    document.body.classList.toggle('drawing-preview-expanded', next);
+    expandButton.setAttribute('aria-expanded', String(next));
+    expandButton.textContent = next ? '退出大图' : '展开图纸';
+    closeExpandedButton.hidden = !next;
+    if (next !== previous) {
+      resetZoom();
+      if (restoreFocus) (next ? closeExpandedButton : expandButton).focus();
+    }
   }
 
   function clampPan() {
@@ -107,6 +126,8 @@ export function initDrawingWorkbench(getDesign) {
   }
 
   function clearResults() {
+    setExpanded(false, false);
+    expandButton.disabled = true;
     sheets = [];
     activeSheet = null;
     tabs.replaceChildren();
@@ -148,6 +169,7 @@ export function initDrawingWorkbench(getDesign) {
     const sheet = sheets.find(item => item.key === key);
     if (!sheet) return;
     activeSheet = sheet;
+    expandButton.disabled = false;
     tabs.querySelectorAll('[role="tab"]').forEach(tab => {
       const selected = tab.dataset.sheetKey === sheet.key;
       tab.classList.toggle('is-active', selected);
@@ -355,6 +377,15 @@ export function initDrawingWorkbench(getDesign) {
   $('drawingZoomIn').addEventListener('click', () => changeZoom(1.2));
   $('drawingZoomOut').addEventListener('click', () => changeZoom(1 / 1.2));
   $('drawingFit').addEventListener('click', resetZoom);
+  expandButton.addEventListener('click', () =>
+    setExpanded(!previewStage.classList.contains('is-expanded')));
+  closeExpandedButton.addEventListener('click', () => setExpanded(false));
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && previewStage.classList.contains('is-expanded')) {
+      event.preventDefault();
+      setExpanded(false);
+    }
+  });
 
   previewStage.addEventListener('wheel', event => {
     if (!activeSheet) return;
