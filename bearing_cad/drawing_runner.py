@@ -26,6 +26,7 @@ from .drawing_standard_fill import apply_robas_drawing_standards
 from .drawing_legacy_design import derive_dgb_drawing_values
 from .drawing_legacy_acb_cage import derive_acb_cage_drawing_values
 from .drawing_legacy_acb_race import derive_acb_race_drawing_values
+from .drawing_legacy_crb_source import derive_crb_source_drawing_values
 from .contracts import CageSpec
 from .drawing_diagnostics import sheet_variable_diagnostics, bundle_variable_diagnostics
 
@@ -191,6 +192,8 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
         report = apply_angular_contact_dimensions(
             report=report, parameters=parameters, legacy_values=actual_legacy)
     if bearing_type == "rolling.cylindrical_roller":
+        crb_auto, auto_evidence = derive_crb_source_drawing_values(parameters)
+        actual_legacy = {**crb_auto, **actual_legacy}
         report = apply_cylindrical_roller_dimensions(
             report=report, parameters=parameters, legacy_values=actual_legacy,
             resources=Path(resources))
