@@ -13,6 +13,7 @@ function renderFields(container, prefix, data) {
  container.replaceChildren();
  for (const [key,label,value,choices] of data) {
   const el=document.createElement('label');el.className='field';el.textContent=label;
+  if(prefix==='param-')el.dataset.parameterTier=['bore_d_mm','outside_d_mm','width_mm'].includes(key)?'basic':'advanced';
   const field=choices?document.createElement('select'):document.createElement('input');
   if(choices){
    for(const option of choices){const item=document.createElement('option');item.value=option;item.textContent=({engineering_plastic:'工程塑料',phenolic:'酚醛层压布管',plain:'原版直圆柱',chamfered:'端部倒角',crowned:'凸度修形 + 倒角'}[option]||option);field.append(item);}

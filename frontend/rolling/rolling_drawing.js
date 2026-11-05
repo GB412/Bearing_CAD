@@ -56,6 +56,7 @@ export function initDrawingWorkbench(getDesign) {
 
   function setWorkspace(name) {
     const drawing = name === 'drawing';
+    document.body.dataset.cadView = drawing ? '2d' : '3d';
     if (!drawing && previewStage.classList.contains('is-expanded')) {
       setExpanded(false, false);
     }
@@ -424,6 +425,7 @@ export function initDrawingWorkbench(getDesign) {
     $(id).addEventListener('change', () => invalidate());
   }
 
+  document.body.dataset.cadView = '3d';
   clearResults();
   refresh();
 }

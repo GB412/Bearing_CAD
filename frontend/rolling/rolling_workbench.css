@@ -900,3 +900,73 @@ body.drawing-preview-expanded {
   background: #fbf5eb;
   border-color: #efdfc5;
 }
+
+/* Standalone viewer layout: one task-specific setup pane and one large canvas.
+   This intentionally changes only presentation, never CAD parameter contents. */
+@media (min-width: 1101px) {
+  .workspace {
+    max-width: 1920px;
+    grid-template-columns: minmax(320px, 350px) minmax(0, 1fr);
+    align-items: start;
+    padding-top: 14px;
+  }
+  .side {
+    position: sticky;
+    top: 12px;
+    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    padding-right: 4px;
+  }
+  .mainpanel {
+    align-self: start;
+    min-height: 0;
+  }
+}
+/* When showing a 2D drawing, show its own controls and the essential 3D
+   envelope inputs. Keep the remaining inputs mounted: the drawing API still
+   receives the unchanged full design specification. */
+body:not([data-cad-view="2d"]) #drawingSettingsPanel { display: none; }
+body[data-cad-view="2d"] #modelSpecificControls,
+body[data-cad-view="2d"] #modelGenerationActions,
+body[data-cad-view="2d"] #modelSafetyNote,
+body[data-cad-view="2d"] #status,
+body[data-cad-view="2d"] #parameters [data-parameter-tier="advanced"] { display: none; }
+body[data-cad-view="2d"] #modelParametersPanel .panel-body { padding-bottom: 13px; }
+body[data-cad-view="2d"] #modelParametersPanel .section-heading { margin-top: 0; }
+body[data-cad-view="2d"] #parameters { grid-template-columns: repeat(2,minmax(0,1fr)); }
+
+/* The canvas should use the viewport, not the height of a long form. */
+@media (min-width: 761px) {
+  #drawingPreviewStage {
+    height: clamp(480px, calc(100dvh - 285px), 960px);
+  }
+  #viewport {
+    height: clamp(480px, calc(100dvh - 255px), 900px);
+    min-height: 480px;
+  }
+  #viewport canvas { height: 100%; }
+}
+@media (max-width: 1100px) {
+  .workspace { align-items: start; }
+  .mainpanel { min-height: 0; align-self: start; }
+  .side { display: flex; flex-direction: column; }
+}
+@media (max-width: 760px) {
+  .side { overflow: visible; }
+  body[data-cad-view="2d"] #parameters { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+
+/* Expanded inspection must override the normal responsive stage height. */
+#drawingPreviewStage.is-expanded {
+  height: auto;
+  min-height: 0;
+}
+
+/* The sidebar itself scrolls. Individual panels must not shrink to the
+   viewport height (default flex-shrink:1), which would clip their inputs. */
+@media (min-width: 1101px) {
+  .side > .panel { flex: 0 0 auto; }
+}
