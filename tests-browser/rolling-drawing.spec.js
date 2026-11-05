@@ -218,7 +218,7 @@ test('NUP source template composition exposes fifth detachable rib DXF', async (
 });
 
 test('standalone desktop viewer uses an independent parameter scroller and a non-stretched CAD canvas',async({page})=>{
- await page.setViewportSize({width:1440,height:900});
+ await page.setViewportSize({width:1440,height:640});
  await page.route('**/api/v2/cad/**',async route=>{
   const path=new URL(route.request().url()).pathname;
   if(path==='/api/v2/cad/status')return route.fulfill({json:{available:false,supported_bearings:[]}});
@@ -232,8 +232,10 @@ test('standalone desktop viewer uses an independent parameter scroller and a non
     overflow:getComputedStyle(side).overflowY};
  });
  expect(threeD.overflow).toBe('auto');
- expect(threeD.height).toBeLessThanOrEqual(900);
+ expect(threeD.height).toBeLessThanOrEqual(640);
  expect(threeD.scrollHeight).toBeGreaterThan(threeD.height);
+ // Restore a typical desktop viewport for the canvas measurements.
+ await page.setViewportSize({width:1440,height:900});
  await page.locator('#workspace2dTab').click();
  const metrics=await page.evaluate(()=>{
   const rect=id=>document.querySelector(id).getBoundingClientRect();
