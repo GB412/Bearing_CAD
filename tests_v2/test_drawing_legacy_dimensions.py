@@ -101,7 +101,7 @@ def test_acb_lock_height_width_and_non_symmetric_cage():
     assert v["Dc_Lower"]=="-0.2"
     assert v["Bca"]=="5"
     assert v["Bca_Lower"]=="-0.1"
-    assert v["Deltac_Upper"]=="0.05"
+    assert v["Deltac_Upper"]=="+0.05"  # original RoBAS text includes explicit +
     assert v["Cr"]=="12.60" and v["Cor"]=="12.50"
     assert v["e_Upper"] is None and v["UNSET"] is None
 

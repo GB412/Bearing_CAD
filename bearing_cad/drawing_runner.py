@@ -24,6 +24,7 @@ from .drawing_legacy_roller import apply_cylindrical_roller_dimensions
 from .drawing_legacy_ratings import apply_robas_loads
 from .drawing_standard_fill import apply_robas_drawing_standards
 from .drawing_legacy_design import derive_dgb_drawing_values
+from .drawing_legacy_acb_cage import derive_acb_cage_drawing_values
 from .contracts import CageSpec
 from .drawing_diagnostics import sheet_variable_diagnostics, bundle_variable_diagnostics
 
@@ -167,12 +168,18 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
             radial_clearance_group=radial_clearance_group)
         # Any explicitly supplied, checked old-model value takes precedence.
         actual_legacy = {**auto_values, **actual_legacy}
+    if bearing_type == "rolling.angular_contact_ball":
+        acb_auto, auto_evidence = derive_acb_cage_drawing_values(
+            parameters=parameters, cage=cage)
+        # Explicitly reviewed legacy dimensions take precedence over the
+        # 3D cage's source-backed proposal, never the other way round.
+        actual_legacy = {**acb_auto, **actual_legacy}
     if bearing_type == "rolling.deep_groove_ball":
         report = apply_deep_groove_dimensions(
             report=report, parameters=parameters, legacy_values=actual_legacy)
     if bearing_type == "rolling.angular_contact_ball":
         report = apply_angular_contact_dimensions(
-            report=report, parameters=parameters, legacy_values=legacy_values)
+            report=report, parameters=parameters, legacy_values=actual_legacy)
     if bearing_type == "rolling.cylindrical_roller":
         report = apply_cylindrical_roller_dimensions(
             report=report, parameters=parameters, legacy_values=actual_legacy,
