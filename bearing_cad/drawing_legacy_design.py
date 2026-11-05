@@ -188,8 +188,7 @@ def derive_dgb_drawing_values(*, parameters: dict,
                         cage.rivet_hole_clearance_mm, "rivet_hole_clearance_mm"),
                 )
             except (KeyError, ValueError) as error:
-                warnings.append("RO BAS_STAMPING_SOURCE_PROFILE_UNAVAILABLE: "
-                                .replace(" ", "") + str(error))
+                warnings.append("ROBAS_STAMPING_SOURCE_PROFILE_UNAVAILABLE: " + str(error))
             else:
                 matched = all(
                     math.isclose(getattr(cage, key), reference, rel_tol=0,
@@ -203,17 +202,14 @@ def derive_dgb_drawing_values(*, parameters: dict,
                         updates["cage_pocket_depth_mm"] = source_dimensions[
                             "pocket_depth_mm"]
                     else:
-                        warnings.append("RO BAS_STAMPING_SOURCE_POCKET_DEPTH_UNDEFINED"
-                                        .replace(" ", ""))
+                        warnings.append("ROBAS_STAMPING_SOURCE_POCKET_DEPTH_UNDEFINED")
                     updates["cage_flat_to_sphere_radius_mm"] = source_dimensions[
                         "flat_to_sphere_radius_mm"]
                     warnings.append(
-                        "RO BAS_STAMPING_NOMINAL_POCKET_PROFILE_REQUIRES_3D_REVIEW"
-                        .replace(" ", ""))
+                        "ROBAS_STAMPING_NOMINAL_POCKET_PROFILE_REQUIRES_3D_REVIEW")
                 else:
                     warnings.append(
-                        "STAM PING_CAGE_DIFFERS_FROM_ORIGINAL_SOURCE_PROFILE"
-                        .replace(" ", ""))
+                        "STAMPING_CAGE_DIFFERS_FROM_ORIGINAL_SOURCE_PROFILE")
         else:
             warnings.append("STAMPING_SOURCE_MODEL_NOT_SELECTED_FOR_K_RRC")
 

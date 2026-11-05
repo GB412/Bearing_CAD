@@ -141,7 +141,7 @@ def test_exact_robas_stamping_adapter_can_fill_pocket_depth_and_flat_radius():
     assert fields["K_Upper"] == "+0.04"
     assert fields["K_Lower"] == "0"
     assert float(fields["rrc"]) > 0
-    assert "RO BAS_STAMPING_NOMINAL_POCKET_PROFILE_REQUIRES_3D_REVIEW".replace(" ", "") in evidence["warnings"]
+    assert "ROBAS_STAMPING_NOMINAL_POCKET_PROFILE_REQUIRES_3D_REVIEW" in evidence["warnings"]
 
 
 def test_custom_stamped_cage_does_not_claim_robas_source_pocket_geometry():
