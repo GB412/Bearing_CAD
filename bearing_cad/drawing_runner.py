@@ -165,7 +165,8 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
         auto_values, auto_evidence = derive_dgb_drawing_values(
             parameters=parameters, cage=cage, resources=Path(resources),
             chamfer1_mm=chamfer1_mm,
-            radial_clearance_group=radial_clearance_group)
+            radial_clearance_group=radial_clearance_group,
+            bearing_model=model)
         # Any explicitly supplied, checked old-model value takes precedence.
         actual_legacy = {**auto_values, **actual_legacy}
     if bearing_type == "rolling.angular_contact_ball":

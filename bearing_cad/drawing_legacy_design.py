@@ -19,6 +19,7 @@ from .contracts import StampedCageSpec
 from .drawing_legacy_chamfer import _chamfer_source
 from .drawing_variables import DrawingDataError
 from .robas_sizing import dgb_radial_clearance_mm
+from .robas_stamping import robas_stamping_profile
 
 
 def _number(value, key):
@@ -113,6 +114,7 @@ def derive_dgb_drawing_values(*, parameters: dict,
                               resources: Path | None = None,
                               chamfer1_mm: float | None = None,
                               radial_clearance_group: str | None = None,
+                              bearing_model: str | None = None,
                               ) -> tuple[dict, dict]:
     """Return compatible 'legacy_values' for the existing SetCADTextValue port.
 
@@ -169,6 +171,51 @@ def derive_dgb_drawing_values(*, parameters: dict,
                 2 * _number(cage.rivet_hole_clearance_mm, "rivet_hole_clearance_mm")
             ),
         })
+        # K_ and rrc belong to the ORIGINAL StampingCage constructor,
+        # not to an arbitrary OCCT shell with similar outer diameters.
+        # Populate only if the chosen user-visible 3D cage is the exact
+        # source-backed adapter output (all shape-defining inputs match).
+        if bearing_model is not None:
+            try:
+                source_profile = robas_stamping_profile(
+                    bearing_model=bearing_model, ball_d_mm=Dw,
+                    pitch_d_mm=Dpw, ball_count=count, bearing_width_mm=B,
+                    inner_shoulder_d_mm=_number(
+                        p["inner_shoulder_d_mm"], "inner_shoulder_d_mm"),
+                    outer_shoulder_d_mm=_number(
+                        p["outer_shoulder_d_mm"], "outer_shoulder_d_mm"),
+                    rivet_hole_clearance_mm=_number(
+                        cage.rivet_hole_clearance_mm, "rivet_hole_clearance_mm"),
+                )
+            except (KeyError, ValueError) as error:
+                warnings.append("ROBAS_STAMPING_SOURCE_PROFILE_UNAVAILABLE: " + str(error))
+            else:
+                matched = all(
+                    math.isclose(getattr(cage, key), reference, rel_tol=0,
+                                 abs_tol=1e-7)
+                    for key, reference in source_profile["cad_cage"].items()
+                    if key != "kind"
+                )
+                if matched:
+                    source_dimensions = source_profile["source_dimensions"]
+                    if source_dimensions["pocket_depth_mm"] is not None:
+                        updates["cage_pocket_depth_mm"] = source_dimensions[
+                            "pocket_depth_mm"]
+                        # RoBAS applies the same DetermineTolerance(Dw) to
+                        # the sphere radius and the pocket-depth upper bound.
+                        updates["cage_pocket_upper_tolerance_mm"] = _pocket_tolerance(Dw)
+                    else:
+                        warnings.append("ROBAS_STAMPING_SOURCE_POCKET_DEPTH_UNDEFINED")
+                    updates["cage_flat_to_sphere_radius_mm"] = source_dimensions[
+                        "flat_to_sphere_radius_mm"]
+                    warnings.append(
+                        "ROBAS_STAMPING_NOMINAL_POCKET_PROFILE_REQUIRES_3D_REVIEW")
+                else:
+                    warnings.append(
+                        "STAMPING_CAGE_DIFFERS_FROM_ORIGINAL_SOURCE_PROFILE")
+        else:
+            warnings.append("STAMPING_SOURCE_MODEL_NOT_SELECTED_FOR_K_RRC")
+
         rivet_tol = _rivet_tolerances(2 * S)
         if rivet_tol:
             updates["rivet_hole_upper_tolerance_mm"] = rivet_tol[0]
