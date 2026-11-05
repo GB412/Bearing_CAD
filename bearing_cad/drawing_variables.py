@@ -141,6 +141,43 @@ def prepare_variables(*, resources: Path, bearing_type: str,
     }
 
 
+def restore_checked_values(report: dict, validated_input: dict, checked_values: dict | None) -> dict:
+    """Restore validated engineering values after automatic RoBAS overlays.
+
+    prepare_variables already rejects unknown fields, malformed strings and
+    overrides of confirmed geometry. Recover the accepted values from its
+    report, never from unvalidated caller data. Preserve duplicate SQLite rows.
+    """
+    if not checked_values:
+        return report
+    if (report.get("schema_version") != "robas.drawing.variables.v1"
+            or validated_input.get("schema_version") != "robas.drawing.variables.v1"):
+        raise DrawingDataError("Invalid checked drawing variable report")
+    requested = set(checked_values)
+    approved = {
+        row["name"]: row["value"] for row in validated_input["variables"]
+        if row["name"] in requested and row["source"] == "explicit_drawing_context"
+    }
+    if set(approved) != requested:
+        raise DrawingDataError("Checked drawing values were not validated by prepare_variables")
+    rows = [dict(row) for row in report["variables"]]
+    for row in rows:
+        if row["name"] in approved:
+            row["value"] = approved[row["name"]]
+            row["source"] = "explicit_checked_value"
+    result = dict(report)
+    result["variables"] = rows
+    result["unresolved_names"] = sorted({r["name"] for r in rows if not r["value"]})
+    result["unresolved_count"] = len(result["unresolved_names"])
+    result["unresolved_ratings"] = [
+        name for name in ("Cr", "Cor") if name in result["unresolved_names"]
+    ]
+    result["status"] = ("DRAFT_INCOMPLETE" if result["unresolved_count"]
+                        else "VARIABLES_POPULATED_UNREVIEWED")
+    result["checked_value_names"] = sorted(requested)
+    return result
+
+
 def bridge_values(report: dict) -> list[dict[str, str]]:
     """Preserve every RoBAS DataTable row, including DBNull and duplicates.
 

@@ -5,6 +5,7 @@ import pytest
 
 from bearing_cad.drawing_variables import (
     DrawingDataError, read_variable_rows, prepare_variables, bridge_values,
+    restore_checked_values,
 )
 
 FIELDS = {
@@ -100,3 +101,43 @@ def test_robas_null_rows_become_blank_replacements(mock_resources):
         {"name": "Cr", "value": ""}]
     assert [row["value"] for row in rows if row["name"] == "Dw"] == ["8.2", "8.2"]
     assert [row["name"] for row in rows] == FIELDS["rolling.deep_groove_ball"][1]
+
+
+def test_approved_drawing_labels_have_final_precedence(mock_resources):
+    from bearing_cad.drawing_legacy_dimensions import overlay
+    before = prepare_variables(
+        resources=mock_resources, bearing_type="rolling.deep_groove_ball",
+        parameters=PARAMS, checked_values={"Cr": "26.50", "Cor": "24.75"})
+    calculated = overlay(before, {"Cr": "0.00", "Cor": "13.00"}, "robas_loads")
+    final = restore_checked_values(calculated, before, {"Cr": "26.50", "Cor": "24.75"})
+    fields = {r["name"]: r["value"] for r in final["variables"]}
+    assert fields["Cr"] == "26.50"
+    assert fields["Cor"] == "24.75"
+    assert final["checked_value_names"] == ["Cor", "Cr"]
+    assert "Cr" not in final["unresolved_names"]
+    assert all(r["source"] == "explicit_checked_value"
+               for r in final["variables"] if r["name"] in ("Cr", "Cor"))
+    assert bridge_values(final)[-2:] == [
+        {"name": "Cr", "value": "26.50"}, {"name": "Cor", "value": "24.75"}]
+
+
+def test_checked_values_cannot_bypass_original_approval_validation(mock_resources):
+    before = prepare_variables(
+        resources=mock_resources, bearing_type="rolling.deep_groove_ball",
+        parameters=PARAMS)
+    for wrong in ({"d": "999"}, {"Cr": "123"}):
+        with pytest.raises(DrawingDataError, match="not validated"):
+            restore_checked_values(before, before, wrong)
+    assert restore_checked_values(before, before, None) is before
+
+
+def test_duplicate_sqlite_rows_preserved_by_final_overrides(mock_resources):
+    from bearing_cad.drawing_legacy_dimensions import overlay
+    before = prepare_variables(
+        resources=mock_resources, bearing_type="rolling.deep_groove_ball",
+        parameters=PARAMS, checked_values={"Cr": "28.12"})
+    calculated = overlay(before, {"Cr": "0"}, "auto")
+    final = restore_checked_values(calculated, before, {"Cr": "28.12"})
+    assert [r["name"] for r in final["variables"]] == [
+        r["name"] for r in before["variables"]]
+    assert {r["name"]: r["value"] for r in final["variables"]}["Cr"] == "28.12"
