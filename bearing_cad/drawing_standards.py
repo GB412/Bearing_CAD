@@ -46,23 +46,32 @@ def _positive_diameter(value):
     return float(value)
 
 
-def original_bearing_diameter_getter_mm(value: float) -> float:
-    """Match three RoBAS BearingInsideDia/BearingOutsideDia C# public getters.
+def _original_robas_mm_getter(value: float, decimals: int, label: str) -> float:
+    """Reproduce a RoBAS public millimetre getter backed by a metre double.
 
-    The C# setter first stores value / 1000 as double metres. Its getter
-    returns Math.Round(stored_metres * 1000, 2). On the source .NET Framework
-    runtime Math.Round(double, 2) scales by 100, rounds the binary double
-    to an even integer at exact midpoints, then divides by 100. Python's
-    round(value, 2) is NOT equivalent at some 0.005-mm boundaries.
-    This affects source-table lookups only; never change CAD geometry.
+    The original setter stores value / 1000 as double metres. The getter
+    multiplies by 1000 and calls .NET Framework Math.Round(double, decimals).
+    That runtime scales, rounds the binary double to an even integer, then
+    scales back; Python round(value, decimals) differs at some midpoints.
     """
-    diameter_mm = _positive_diameter(value)
-    stored_metres = diameter_mm / 1000.0
+    millimetres = _positive_diameter(value)
+    stored_metres = millimetres / 1000.0
     getter_mm = stored_metres * 1000.0
-    result = round(getter_mm * 100.0) / 100.0
+    scale = 10.0 ** decimals
+    result = round(getter_mm * scale) / scale
     if result <= 0:
-        raise StandardsLookupError("RoBAS rounded bearing diameter is nonpositive")
+        raise StandardsLookupError(f"RoBAS rounded {label} is nonpositive")
     return result
+
+
+def original_bearing_diameter_getter_mm(value: float) -> float:
+    """Match BearingInsideDia/BearingOutsideDia: Math.Round(metres*1000, 2)."""
+    return _original_robas_mm_getter(value, 2, "bearing diameter")
+
+
+def original_ball_diameter_getter_mm(value: float) -> float:
+    """Match BallRoller.BallDiameter: Math.Round(metres*1000, 3)."""
+    return _original_robas_mm_getter(value, 3, "ball diameter")
 
 
 def _first_range(resources, bearing_type, table, column, diameter):

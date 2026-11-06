@@ -114,3 +114,61 @@ def test_acb_lock_height_breakpoints():
     assert acb_width_deviation(10)=="0.2"
     assert acb_width_deviation(40)=="0.3"
     assert acb_width_deviation(100)=="0.5"
+
+
+def test_dgb_geometry_tolerances_use_original_public_getter_precision():
+    # C# passes BearingInsideDia (0.01 mm) and BallRoller.BallDiameter
+    # (0.001 mm) getters to its tolerance functions before formatting.
+    p = {**P, "bore_d_mm": 30.004, "ball_d_mm": 6.0005,
+         "inner_groove_radius_mm": 3.004, "outer_groove_radius_mm": 3.004}
+    old = {
+        "inner_groove_d_mm": 30.004,
+        "outer_groove_d_mm": 30.004,
+        "inner_groove_position_mm": 30.004,
+        "outer_sidewall_d_mm": 30.004,
+        "inner_sidewall_d_mm": 30.004,
+    }
+    result = apply_deep_groove_dimensions(
+        report=report(["Ri", "Ri_Upper", "Re", "De", "di", "a",
+                       "Dd2", "Dd2_Upper", "d2", "d2_Lower"]),
+        parameters=p, legacy_values=old,
+    )
+    values = {row["name"]: row["value"] for row in result["variables"]}
+    assert values["Ri"] == "3.00"
+    assert values["Ri_Upper"] == "+0.03"
+    assert values["Re"] == "3.00"
+    assert values["De"] == "30.000±0.01"
+    assert values["di"] == "30.000±0.01"
+    assert values["a"] == "30.0±0.02"
+    assert values["Dd2"] == "30.0"
+    assert values["Dd2_Upper"] == "+0.21"
+    assert values["d2_Lower"] == "-0.21"
+
+
+def test_acb_width_and_position_tolerances_use_original_diameter_getters():
+    from bearing_cad.drawing_legacy_dimensions import apply_angular_contact_dimensions
+    p = {**P, "bore_d_mm": 10.004, "outside_d_mm": 50.005, "width_mm": 10.004,
+         "contact_angle_deg": 25}
+    old = {
+        "inner_groove_d_mm": 50.005,
+        "outer_groove_d_mm": 50.005,
+        "inner_groove_position_mm": 50.005,
+        "outer_groove_position_mm": 50.005,
+        "inner_race_groove_position_mm": 50.005,
+        "lock_height_mm": 0.104,
+    }
+    result = apply_angular_contact_dimensions(
+        report=report(["De", "di", "a", "ae", "ai", "T_", "T_Lower",
+                       "t_SK", "t_SK_Lower"]),
+        parameters=p, legacy_values=old,
+    )
+    values = {row["name"]: row["value"] for row in result["variables"]}
+    assert values["De"] == "50.000±0.01"
+    assert values["di"] == "50.000±0.01"
+    assert values["a"] == "50.0±0.025"
+    assert values["ae"] == "50±0.025"
+    assert values["ai"] == "50±0.025"
+    assert values["T_"] == "10"
+    assert values["T_Lower"] == "-0.2"
+    assert values["t_SK"] == "0.1"
+    assert values["t_SK_Lower"] == "-0.015"

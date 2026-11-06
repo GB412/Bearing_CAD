@@ -87,7 +87,7 @@ def test_stamped_3d_cage_dimensions_fill_existing_dgb_robas_drawing_fields():
     report = apply_deep_groove_dimensions(
         report=_report(keys), parameters=P, legacy_values=values)
     fields = {row["name"]: row["value"] for row in report["variables"]}
-    assert fields["De"] == "62.013±0.015"
+    assert fields["De"] == "62.010±0.015"  # Geometry.OuterRaceGrooveDiameter getter is 0.01 mm.
     assert fields["di"] == "46.000±0.015"
     assert fields["a"] == "7.5±0.025"
     assert fields["Dcp"] == "54±0.025"

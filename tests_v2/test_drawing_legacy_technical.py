@@ -154,3 +154,22 @@ def test_original_framework_midpoints_choose_separate_inner_outer_rows(
     )
     assert next(row["value"] for row in rows if row["name"] == "Vdp") == "50"
     assert next(row["value"] for row in rows if row["name"] == "VDdp") == "80"
+
+
+@pytest.mark.parametrize("bearing_type", list(DBS))
+@pytest.mark.parametrize("diameter_series, expected_general, expected_component", [
+    ("7", "5", "5"),
+    ("8", "2", "5"),
+])
+def test_original_outer_race_default_series_columns(
+        source_tables, bearing_type, diameter_series, expected_general, expected_component):
+    # DataControl.GetGeneralMapOuterRaceTechnicalCondition uses r[5] for
+    # series outside 8/9, 0/1 and 2/3/4. GetOuterRaceTechnicalCondition
+    # uses r[5] for every series outside 9, 0/1 and 2/3/4 (including 7/8).
+    rows = technical_condition_rows(
+        resources=source_tables, bearing_type=bearing_type,
+        bore_d_mm=40, outside_d_mm=68, accuracy_class="P5",
+        diameter_series=diameter_series,
+    )
+    assert next(row["value"] for row in rows if row["name"] == "ZVDdp") == expected_general
+    assert next(row["value"] for row in rows if row["name"] == "VDdp") == expected_component
