@@ -7,7 +7,7 @@ import pytest
 
 from bearing_cad.drawing_runner import (
     DrawingExportError, generate_drawing_bundle, resolve_templates, SHEETS,
-    _source_audit_cache_marker,
+    _source_audit_cache_marker, _acb_cage_getter_cache_marker,
 )
 
 TEMPLATES = {
@@ -112,3 +112,11 @@ def test_dgb_source_audit_changes_bundle_cache_identity_but_not_other_types():
         "rolling.angular_contact_ball", mismatch) == {}
     assert _source_audit_cache_marker(
         "rolling.cylindrical_roller", matched) == {}
+
+
+def test_acb_cage_rounding_bumps_cache_identity_only_for_angular_contact():
+    assert _acb_cage_getter_cache_marker("rolling.angular_contact_ball") == {
+        "acb_cage_getter_precision": "robas.public-getters.v1",
+    }
+    assert _acb_cage_getter_cache_marker("rolling.deep_groove_ball") == {}
+    assert _acb_cage_getter_cache_marker("rolling.cylindrical_roller") == {}

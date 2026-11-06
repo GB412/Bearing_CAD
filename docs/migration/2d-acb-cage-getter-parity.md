@@ -25,6 +25,14 @@
 - 没有重画 DWG、修改 CADImport、修改 SQLite 或改变 STEP/STL/B-Rep 实体。
 - CADImport/AutoCAD Windows 实机、逐张 DXF 标注核对及制造审核仍需人工验收。
 
+## 缓存身份与新标注
+
+已导出的 DXF/SVG bundle 是不可变缓存。对角接触球增加
+`acb_cage_getter_precision=robas.public-getters.v1` 作为缓存键的一部分；
+即使原版文字刚好相同，新的 `source_getter_precision_decimals`
+来源诊断也不会被旧 `drawing_manifest.json` 隐藏。
+深沟球和圆柱滚子的缓存标识不变，无需删除本地历史成果。
+
 ## 自动测试
 
 `python -m pytest tests_v2/test_drawing_legacy_acb_cage.py tests_v2/test_drawing_legacy_dimensions.py -q`
