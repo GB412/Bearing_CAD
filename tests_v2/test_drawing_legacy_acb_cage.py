@@ -135,3 +135,16 @@ def test_acb_source_tolerance_undefined_even_after_getter_rounding():
     assert values["cage_outer_d_mm"] == 250.01
     assert "cage_outer_d_tolerance_mm" not in values
     assert "ACB_CAGE_OUTER_TOLERANCE_UNDEFINED_IN_ROBAS" in evidence["warnings"]
+
+
+@pytest.mark.parametrize("ball_diameter, expected", [
+    (18.0004, .10), (18.0006, .15),
+])
+def test_acb_cage_pocket_tolerance_uses_robas_three_decimal_ball_getter(
+        ball_diameter, expected):
+    # BallRoller.BallDiameter rounds to 0.001 mm, then
+    # StraightPocketCage.DeterminePocketDiameterUpperDeviation checks <= 18.
+    values, _ = derive_acb_cage_drawing_values(
+        parameters={**PARAMS, "ball_d_mm": ball_diameter},
+        cage=cage())
+    assert values["cage_pocket_d_upper_tolerance_mm"] == expected
