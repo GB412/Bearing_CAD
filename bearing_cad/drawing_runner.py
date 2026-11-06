@@ -28,7 +28,10 @@ from .drawing_legacy_acb_cage import derive_acb_cage_drawing_values
 from .drawing_legacy_acb_race import derive_acb_race_drawing_values
 from .drawing_legacy_crb_source import derive_crb_source_drawing_values
 from .contracts import CageSpec
-from .drawing_diagnostics import sheet_variable_diagnostics, bundle_variable_diagnostics
+from .drawing_diagnostics import (
+    sheet_variable_diagnostics, bundle_variable_diagnostics,
+    suspected_unmapped_dxf_tokens,
+)
 from .drawing_consistency import (
     audit_drawing_design, effective_drawing_model, explicit_legacy_override_audit,
 )
@@ -348,6 +351,8 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
             if audit.errors:
                 raise DrawingExportError(
                     f"DXF fatal audit errors in {name}: {len(audit.errors)}")
+            suspected_unmapped = suspected_unmapped_dxf_tokens(
+                document, (row["name"] for row in report["variables"]))
             preview = folder / (name + ".svg")
             preview_report = render_svg_preview(output, preview)
             sheets.append({
@@ -358,6 +363,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
                 "preview_sha256": _digest(preview),
                 "preview_diagnostics": preview_report,
                 "variable_diagnostics": variable_diagnostics,
+                "suspected_unmapped_text_diagnostics": suspected_unmapped,
                 "text_replacements": response["exact_match_count"],
                 "dxf_audit_nonfatal_fixes": len(audit.fixes),
                 "non_text_entities": response.get("non_text_entity_count"),
