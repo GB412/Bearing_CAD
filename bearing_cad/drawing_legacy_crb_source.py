@@ -49,17 +49,22 @@ def derive_crb_source_drawing_values(parameters: dict) -> tuple[dict,dict]:
         "autofilled_input_keys": [],
         "warnings": [],
         "scope":"SOURCE_PROFILE_MATCH_ONLY_NOT_ANY_CAD_PROFILE",
+        "original_source_rib_tip_mm": {},
+        "original_source_rib_matches_cad": {},
     }
     if not math.isclose(gap,0.0,abs_tol=1e-10) or not math.isclose(
             pitch,(d+D)/2,abs_tol=1e-7):
         evidence["warnings"].append("CRB_CUSTOM_PITCH_OR_RADIAL_GAP_NOT_ORIGINAL_ROBAS")
         return {}, evidence
 
-    inner_groove = round(pitch-dw,2)
-    outer_groove = round(pitch+dw,2)
+    # CRBGeometry calculates rib tips from unrounded groove diameters in
+    # metres and exposes their millimetre getters rounded to 0.01. Rounding
+    # the groove *before* the Kd2 multiplication changes the source tip.
+    inner_raw=pitch-dw
+    outer_raw=pitch+dw
     values = {
-        "inner_groove_d_mm": inner_groove,
-        "outer_groove_d_mm": outer_groove,
+        "inner_groove_d_mm": round(inner_raw,2),
+        "outer_groove_d_mm": round(outer_raw,2),
     }
     ki = _inner_coefficient(d)
     ko = _outer_coefficient(D)
@@ -67,18 +72,28 @@ def derive_crb_source_drawing_values(parameters: dict) -> tuple[dict,dict]:
         if ki is None:
             evidence["warnings"].append("CRB_INNER_RIB_COEFFICIENT_OUTSIDE_SOURCE_RANGE")
         else:
-            source_tip = inner_groove+ki*dw
-            if math.isclose(source_tip,_number(parameters,"inner_rib_tip_d_mm"),abs_tol=1e-7):
-                values["inner_sidewall_d_mm"]=round(source_tip,2)
+            source_tip=inner_raw+ki*dw
+            source_label=round(source_tip,2)
+            matched=math.isclose(source_tip,_number(parameters,"inner_rib_tip_d_mm"),
+                                 rel_tol=0,abs_tol=1e-7)
+            evidence["original_source_rib_tip_mm"]["inner"]=source_label
+            evidence["original_source_rib_matches_cad"]["inner"]=matched
+            if matched:
+                values["inner_sidewall_d_mm"]=source_label
             else:
                 evidence["warnings"].append("CRB_INNER_RIB_DIFFERENT_FROM_ORIGINAL_SOURCE")
     if configuration in {"NU","NJ","NF","NUP"}:
         if ko is None:
             evidence["warnings"].append("CRB_OUTER_RIB_COEFFICIENT_OUTSIDE_SOURCE_RANGE")
         else:
-            source_tip = outer_groove-ko*dw
-            if math.isclose(source_tip,_number(parameters,"outer_rib_tip_d_mm"),abs_tol=1e-7):
-                values["outer_sidewall_d_mm"]=round(source_tip,2)
+            source_tip=outer_raw-ko*dw
+            source_label=round(source_tip,2)
+            matched=math.isclose(source_tip,_number(parameters,"outer_rib_tip_d_mm"),
+                                 rel_tol=0,abs_tol=1e-7)
+            evidence["original_source_rib_tip_mm"]["outer"]=source_label
+            evidence["original_source_rib_matches_cad"]["outer"]=matched
+            if matched:
+                values["outer_sidewall_d_mm"]=source_label
             else:
                 evidence["warnings"].append("CRB_OUTER_RIB_DIFFERENT_FROM_ORIGINAL_SOURCE")
 

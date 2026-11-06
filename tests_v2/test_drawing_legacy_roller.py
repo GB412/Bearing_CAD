@@ -60,3 +60,47 @@ def test_crb_invalid_inputs(resources):
         apply_cylindrical_roller_dimensions(report=report(),parameters=P,legacy_values={"inner_groove_position_mm":float("nan")})
     with pytest.raises(DrawingDataError):
         roller_groove_width_deviation(resources,-1)
+
+
+def test_crb_original_public_getters_round_before_width_labels_and_sql(resources):
+    # CylinderRollerBearing.BearingWidth: 0.01, CylinderRoller.RollerLength:
+    # 0.01, RollerGeometry.InnerRaceGroovePosition: 0.01.
+    # Raw 10.004 would select the 30-mm database band, but its source getter
+    # is 10.00 and must select the 10-mm band instead.
+    params={**P,"width_mm":18.004,"roller_length_mm":10.004}
+    old={"inner_groove_position_mm":5.006}
+    result=apply_cylindrical_roller_dimensions(
+        report=report(),parameters=params,legacy_values=old,resources=resources)
+    values={r["name"]:r["value"] for r in result["variables"]}
+    assert values["E"]=="10"
+    assert values["E_Upper"]=="+0.07"
+    assert values["E_Lower"]=="-0.03"
+    assert values["a"]=="4±0.025"
+    assert values["a2"]=="3.6"
+    # 5.006 -> original 5.01 getter. .5 step truncation -> 4.5.
+    assert values["E1"]=="9"
+    assert values["E2"]=="8.49"
+    assert params["width_mm"]==18.004
+    assert params["roller_length_mm"]==10.004
+
+
+def test_crb_original_width_tolerance_threshold_boundary(resources):
+    low=apply_cylindrical_roller_dimensions(
+        report=report(),parameters={**P,"roller_length_mm":10.004},
+        resources=resources)
+    high=apply_cylindrical_roller_dimensions(
+        report=report(),parameters={**P,"roller_length_mm":10.006},
+        resources=resources)
+    def get(result,name):
+        return next(r["value"] for r in result["variables"] if r["name"]==name)
+    assert get(low,"E_Upper")=="+0.07"
+    assert get(high,"E_Upper")=="+0.09"
+    assert get(low,"E")=="10"
+    assert get(high,"E")=="10.01"
+
+
+def test_crb_original_zero_after_roller_length_getter_is_not_a_valid_dimension(resources):
+    with pytest.raises(DrawingDataError,match="rounded roller length is nonpositive"):
+        apply_cylindrical_roller_dimensions(
+            report=report(),parameters={**P,"roller_length_mm":.004},
+            resources=resources)
