@@ -6,11 +6,13 @@ GetOuterRaceTechnicalCondition. This is drawing data, not geometry redesign.
 """
 from __future__ import annotations
 
-import math
 from pathlib import Path
 import sqlite3
 
 from .drawing_variables import DB_BY_TYPE, DrawingDataError
+from .drawing_standards import (
+    StandardsLookupError, original_bearing_diameter_getter_mm,
+)
 
 _GRADES = {"P0": "B", "P6": "C", "P5": "D", "P4": "E", "P2": "G"}
 _SERIES = set("01234789")
@@ -89,12 +91,12 @@ def _outer(row: tuple, series: str, table: str, roller: bool):
 
 
 def _dimension(value: object, label: str):
-    if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
-        raise DrawingDataError(f"{label} must be finite positive millimetres")
-    rounded = round(float(value), 2)
-    if rounded <= 0:
-        raise DrawingDataError(f"{label} becomes nonpositive at RoBAS getter precision")
-    return rounded
+    # Same public getter as the source standard-table queries. Keep the
+    # technical-condition API's DrawingDataError failure contract.
+    try:
+        return original_bearing_diameter_getter_mm(value)
+    except StandardsLookupError as error:
+        raise DrawingDataError(f"{label}: {error}") from error
 
 
 def technical_condition_rows(*, resources: Path, bearing_type: str,

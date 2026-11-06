@@ -132,3 +132,25 @@ def test_original_bearing_getter_rounds_before_technical_condition_range(
             accuracy_class="P5",diameter_series="2")
         assert next(row["value"] for row in rows if row["name"]=="Vdp") == inner_limit
         assert next(row["value"] for row in rows if row["name"]=="VDdp") == outer_limit
+
+
+@pytest.mark.parametrize("bearing_type", list(DBS))
+def test_original_framework_midpoints_choose_separate_inner_outer_rows(
+        source_tables, bearing_type):
+    dbpath = source_tables / "Data" / DBS[bearing_type]
+    with sqlite3.connect(dbpath) as db:
+        for suffix in ("总图外圈技术条件", "总图内圈技术条件",
+                       "外圈技术条件", "内圈技术条件"):
+            table = "D级" + suffix
+            db.execute(f'DELETE FROM "{table}"')
+            db.executemany(
+                f'INSERT INTO "{table}" VALUES ({",".join("?" for _ in range(22))})',
+                [(limit, *([str(limit)] * 21)) for limit in (50, 80, 100)],
+            )
+    rows = technical_condition_rows(
+        resources=source_tables, bearing_type=bearing_type,
+        bore_d_mm=50.005, outside_d_mm=80.005,
+        accuracy_class="P5", diameter_series="2",
+    )
+    assert next(row["value"] for row in rows if row["name"] == "Vdp") == "50"
+    assert next(row["value"] for row in rows if row["name"] == "VDdp") == "80"

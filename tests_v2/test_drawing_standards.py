@@ -226,3 +226,54 @@ def test_source_getter_diameter_that_rounds_to_zero_is_rejected(resources):
             report=_blank_report(["Cmin"]),resources=resources,
             bearing_type="rolling.deep_groove_ball",bore_d_mm=0.004,
             radial_clearance_group="C0")
+
+
+@pytest.mark.parametrize("diameter_mm, expected_mm", [
+    (30.004, 30.0),
+    (30.006, 30.01),
+    (50.005, 50.0),  # .NET Framework rounds scaled 5000.5 to even 5000.
+    (50.015, 50.02),
+    (2.675, 2.68),   # Python round(2.675, 2) is 2.67 instead.
+    (0.015, 0.02),   # Python round(0.015, 2) is 0.01 instead.
+])
+def test_original_framework_double_getter_midpoints(diameter_mm, expected_mm):
+    from bearing_cad.drawing_standards import original_bearing_diameter_getter_mm
+    assert original_bearing_diameter_getter_mm(diameter_mm) == expected_mm
+
+
+@pytest.mark.parametrize("kind", [
+    "rolling.deep_groove_ball", "rolling.angular_contact_ball",
+    "rolling.cylindrical_roller",
+])
+def test_framework_midpoint_uses_original_50mm_source_rows(resources, kind):
+    from bearing_cad.drawing_standard_fill import apply_robas_drawing_standards
+    report = apply_robas_drawing_standards(
+        report=_blank_report(["Cmin", "Cmax", "B_Lower", "@Dds"]),
+        resources=resources, bearing_type=kind, bore_d_mm=50.005,
+        accuracy_class="P5", diameter_series="2",
+        radial_clearance_group="C0",
+    )
+    by_name = {row["name"]: row["value"] for row in report["variables"]}
+    assert by_name == {
+        "Cmin": "0.008", "Cmax": "0.014",
+        "B_Lower": "-0.4", "@Dds": "0.5",
+    }
+    assert len(report["standard_lookup_evidence"]) == 3
+    assert {row["lookup_diameter_mm"]
+            for row in report["standard_lookup_evidence"]} == {50.0}
+    assert {row["source_range_upper_mm"]
+            for row in report["standard_lookup_evidence"]} == {50.0}
+    assert report["standard_lookup_warnings"] == []
+
+
+def test_framework_midpoint_that_rounds_to_zero_fails_closed(resources):
+    from bearing_cad.drawing_standards import original_bearing_diameter_getter_mm
+    from bearing_cad.drawing_standard_fill import apply_robas_drawing_standards
+    with pytest.raises(StandardsLookupError, match="rounded bearing diameter"):
+        original_bearing_diameter_getter_mm(0.005)
+    with pytest.raises(StandardsLookupError, match="rounded bearing diameter"):
+        apply_robas_drawing_standards(
+            report=_blank_report(["Cmin"]), resources=resources,
+            bearing_type="rolling.deep_groove_ball", bore_d_mm=0.005,
+            radial_clearance_group="C0",
+        )

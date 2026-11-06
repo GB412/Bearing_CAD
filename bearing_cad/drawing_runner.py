@@ -96,7 +96,7 @@ def _robas_standard_getter_cache_marker(bearing_type: str) -> dict:
     This applies to all three original bearing types because their public
     BearingInsideDia and BearingOutsideDia getters share that precision.
     """
-    return ({"robas_standard_lookup_getter": "bearing-diameter.v1"}
+    return ({"robas_standard_lookup_getter": "bearing-diameter.v2"}
             if bearing_type in TEMPLATES or bearing_type == "rolling.cylindrical_roller"
             else {})
 

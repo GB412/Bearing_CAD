@@ -140,6 +140,6 @@ def test_all_three_source_standard_getter_contracts_bump_drawing_cache_keys():
         "rolling.cylindrical_roller",
     ):
         assert _robas_standard_getter_cache_marker(kind)=={
-            "robas_standard_lookup_getter":"bearing-diameter.v1",
+            "robas_standard_lookup_getter":"bearing-diameter.v2",
         }
     assert _robas_standard_getter_cache_marker("unknown") == {}

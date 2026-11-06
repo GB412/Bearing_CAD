@@ -49,11 +49,17 @@ def _positive_diameter(value):
 def original_bearing_diameter_getter_mm(value: float) -> float:
     """Match three RoBAS BearingInsideDia/BearingOutsideDia C# public getters.
 
-    Each getter returns Math.Round(metres * 1000, 2). Python round mirrors
-    C# midpoint-to-even rounding for these finite nominal input magnitudes.
-    DataControl.Get* itself receives the *already rounded* diameter.
+    The C# setter first stores value / 1000 as double metres. Its getter
+    returns Math.Round(stored_metres * 1000, 2). On the source .NET Framework
+    runtime Math.Round(double, 2) scales by 100, rounds the binary double
+    to an even integer at exact midpoints, then divides by 100. Python's
+    round(value, 2) is NOT equivalent at some 0.005-mm boundaries.
+    This affects source-table lookups only; never change CAD geometry.
     """
-    result = round(_positive_diameter(value), 2)
+    diameter_mm = _positive_diameter(value)
+    stored_metres = diameter_mm / 1000.0
+    getter_mm = stored_metres * 1000.0
+    result = round(getter_mm * 100.0) / 100.0
     if result <= 0:
         raise StandardsLookupError("RoBAS rounded bearing diameter is nonpositive")
     return result

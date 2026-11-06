@@ -46,3 +46,37 @@
 - Windows CADImport 生成 DGB/ACB/CRB 四张 DXF，比较 `standard_lookup_evidence` 的来源上界、游隙组、宽度上下偏差和各粗糙度文本；
 - `drawing_runner` 对三类轴承的不可变成果键增加该 getter 来源版本，使旧 manifest 不会遮蔽更正的标准值/来源记录；历史成果无须删除；
 - 不修改原版 DWG、SQLite、CADImport、STEP/STL 和浏览器 UI，不声称已完成后续质量/额定载荷、全部技术条件和制造级 AutoCAD 验收。
+
+
+## 复审增补：.NET Framework 的 0.005 mm 中点与缓存
+
+独立代码审查发现：原版 C# 的 setter 先将用户毫米数值除以
+1000 存储为 `double` 米，public getter 再乘以 1000，调用
+`Math.Round(..., 2)`。原版运行时的 `Math.Round(double,2)` 对小尺寸
+采用先乘 100、在浮点数上使用中点到偶数的整数舍入、再除以 100；
+与 Python `round(value,2)` 在二进制表示下不总是相等。
+
+因此本 PR 的补充修正将三类轴承的标准表/技术条件取值统一到一个
+getters 函数：`(value_mm / 1000.0) * 1000.0`，
+再 `round(getter_mm * 100.0) / 100.0`。仅用于二维查表，不修改
+设计尺寸、三维 B-Rep、原版数据库和 DWG。交叉验证的典型输入：
+
+| 输入 mm | 原版旧 .NET 行为 | Python 直接 round(value,2) |
+|---|---:|---:|
+| 30.004 | 30.00 | 30.00 |
+| 30.006 | 30.01 | 30.01 |
+| 50.005 | 50.00 | 50.01 |
+| 2.675 | 2.68 | 2.67 |
+| 0.015 | 0.02 | 0.01 |
+| 0.005 | 0.00（拒绝无效查表直径） | 0.01 |
+
+针对 50.005，已有三类合成库的游隙、宽度偏差、粗糙度及技术条件
+查询回归；本次同时将不可变出图缓存来源版本从
+`bearing-diameter.v1` 改为 `bearing-diameter.v2`。
+原版实际 SQLite 数据尚需与 Windows CADImport/AutoCAD 生成的
+DXF、manifest 一起审核；不能据此声明制造审核完成。
+
+实现依据：原版三类轴承 public getter（本文件前述 C# 路径），
+以及旧版 .NET Framework `Math.InternalRound(double,int,...)` 先缩放、
+中点到偶数舍入、再缩回的实现。未来如更换原版运行时，请以同版
+真实 C# 执行结果复核这些边界。
