@@ -70,3 +70,50 @@ def test_blank_unused_db_variables_do_not_block_sheet_report():
 def test_invalid_bridge_metadata_is_rejected(bad):
     with pytest.raises(ValueError):
         sheet_variable_diagnostics(report(), bad)
+
+
+def test_per_sheet_provenance_reports_source_row_and_actual_design_parameter():
+    report = {
+        "schema_version": "robas.drawing.variables.v1",
+        "bearing_type": "rolling.deep_groove_ball",
+        "variables": [
+            {"name": "Dd", "value": "68", "source": "confirmed_geometry",
+             "row_index": 0},
+            {"name": "Cr", "value": "11.31", "source": "robas_SetCADTextValue_ratings",
+             "row_index": 1},
+            {"name": "W16", "value": None, "source": "sqlite_default",
+             "row_index": 2},
+            {"name": "X", "value": "source", "source": "sqlite_default",
+             "row_index": 3},
+            {"name": "X", "value": "checked", "source": "explicit_checked_value",
+             "row_index": 4},
+            {"name": "unused", "value": None, "source": "sqlite_default",
+             "row_index": 5},
+        ],
+    }
+    sheet = sheet_variable_diagnostics(
+        report, {"Dd": 3, "Cr": 2, "W16": 2, "X": 1})
+    by_name = {item["name"]: item
+               for item in sheet["matched_variable_provenance"]}
+    assert by_name["Dd"]["confirmed_design_field"] == "outside_d_mm"
+    assert by_name["Dd"]["requested_value"] == "68"
+    assert by_name["Dd"]["row_indices"] == [0]
+    assert by_name["Dd"]["matched_text_entities"] == 3
+    assert by_name["Cr"]["source_tags"] == ["robas_SetCADTextValue_ratings"]
+    assert by_name["W16"]["state"] == "TEMPLATE_USED_MISSING"
+    assert by_name["W16"]["requested_value"] is None
+    assert by_name["X"]["requested_value"] is None
+    assert by_name["X"]["row_indices"] == [3, 4]
+    assert by_name["X"]["review_flags"] == [
+        "CONFLICTING_DUPLICATE_SQLITE_VARIABLE_ROWS"
+    ]
+    total = bundle_variable_diagnostics(report, [
+        {"view": "assembly", "variable_diagnostics": sheet},
+        {"view": "loose_rib", "variable_diagnostics":
+             sheet_variable_diagnostics(report, {"W16": 1})},
+    ])
+    assert total["unfilled_template_variable_names"] == ["W16"]
+    assert total["source_conflict_template_variable_names"] == ["X"]
+    assert total["unfilled_database_unused_names"] == ["unused"]
+    assert total["unfilled_template_variable_count"] == 1
+    assert sheet["matched_text_entities"] == 8
