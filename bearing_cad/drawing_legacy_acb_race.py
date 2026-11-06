@@ -34,6 +34,9 @@ def _source_getter(value, getter, label):
     try:
         return getter(value)
     except StandardsLookupError as error:
+        message = str(error)
+        if "rounded" in message and "nonpositive" in message:
+            raise DrawingDataError(f"RoBAS rounded {label} is nonpositive") from error
         raise DrawingDataError(f"{label}: {error}") from error
 
 
