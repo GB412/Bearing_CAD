@@ -91,7 +91,10 @@ def _outer(row: tuple, series: str, table: str, roller: bool):
 def _dimension(value: object, label: str):
     if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
         raise DrawingDataError(f"{label} must be finite positive millimetres")
-    return float(value)
+    rounded = round(float(value), 2)
+    if rounded <= 0:
+        raise DrawingDataError(f"{label} becomes nonpositive at RoBAS getter precision")
+    return rounded
 
 
 def technical_condition_rows(*, resources: Path, bearing_type: str,

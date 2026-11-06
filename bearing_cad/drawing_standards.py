@@ -46,6 +46,19 @@ def _positive_diameter(value):
     return float(value)
 
 
+def original_bearing_diameter_getter_mm(value: float) -> float:
+    """Match three RoBAS BearingInsideDia/BearingOutsideDia C# public getters.
+
+    Each getter returns Math.Round(metres * 1000, 2). Python round mirrors
+    C# midpoint-to-even rounding for these finite nominal input magnitudes.
+    DataControl.Get* itself receives the *already rounded* diameter.
+    """
+    result = round(_positive_diameter(value), 2)
+    if result <= 0:
+        raise StandardsLookupError("RoBAS rounded bearing diameter is nonpositive")
+    return result
+
+
 def _first_range(resources, bearing_type, table, column, diameter):
     # Original DataControl.cs uses SELECT * WHERE dimension>=? LIMIT 1,\n    # without sorting. Preserve the first matching database row.\n    # Identifiers are hard-coded from an allowlist, not interpolated user input.
     diameter = _positive_diameter(diameter)
@@ -59,6 +72,11 @@ def _first_range(resources, bearing_type, table, column, diameter):
             raise StandardsLookupError("RoBAS standards table missing or corrupt") from error
     if row is None:
         raise StandardsLookupError(f"No matching range in {table}")
+    # Preserve the source's unsorted FIRST matching row; its first column is
+    # the true (inclusive) range ceiling. Fail closed on a malformed ceiling.
+    ceiling = _positive_diameter(row[0])
+    if ceiling < diameter:
+        raise StandardsLookupError(f"Inconsistent source range in {table}")
     return row
 
 
@@ -78,7 +96,9 @@ def get_radial_clearance(*, resources, bearing_type, bore_d_mm, group):
     if low > high:
         raise StandardsLookupError("Inconsistent clearance limits")
     return {"source": "RoBAS 游隙", "status": "LOOKUP_ONLY",
-            "group": group, "minimum_mm": low, "maximum_mm": high}
+            "group": group, "minimum_mm": low, "maximum_mm": high,
+            "lookup_diameter_mm": _positive_diameter(bore_d_mm),
+            "source_range_upper_mm": _positive_diameter(row[0])}
 
 
 def get_roughness(*, resources, bearing_type, bore_d_mm, accuracy_class):
@@ -90,6 +110,8 @@ def get_roughness(*, resources, bearing_type, bore_d_mm, accuracy_class):
     names = _ROLLER_LABELS if is_roller else _BALL_LABELS
     return {"source": table, "status": "LOOKUP_ONLY",
             "accuracy_class": accuracy_class,
+            "lookup_diameter_mm": _positive_diameter(bore_d_mm),
+            "source_range_upper_mm": _positive_diameter(row[0]),
             "values": {name: _known(row[i]) for i, name in enumerate(names, 1)}}
 
 
@@ -107,6 +129,8 @@ def get_width_deviation(*, resources, bearing_type, bore_d_mm, size_series):
         first, second = {"0": (1, 2), "2": (3, 4), "3": (5, 6)}[size_series]
     return {"source": "轴承宽度公差", "status": "LOOKUP_ONLY",
             "size_series": size_series,
+            "lookup_diameter_mm": _positive_diameter(bore_d_mm),
+            "source_range_upper_mm": _positive_diameter(row[0]),
             "upper_mm": _known(row[first]), "lower_mm": _known(row[second])}
 
 
