@@ -155,7 +155,7 @@ def test_original_framework_midpoints_choose_separate_inner_outer_rows(
     assert next(row["value"] for row in rows if row["name"] == "Vdp") == "50"
     assert next(row["value"] for row in rows if row["name"] == "VDdp") == "80"
 
- 
+
 @pytest.mark.parametrize("bearing_type", list(DBS))
 @pytest.mark.parametrize("diameter_series, expected_general, expected_component", [
     ("7", "5", "5"),

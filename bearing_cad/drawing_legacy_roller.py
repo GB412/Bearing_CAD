@@ -43,9 +43,10 @@ def apply_cylindrical_roller_dimensions(*,report,parameters,
         raise DrawingDataError("legacy_values must be a mapping")
     # Original CylinderRollerBearing.BearingWidth and Bore getters round to
     # 0.01 mm; CylinderRoller.RollerLength rounds to 0.01 mm, while
-    # CRBOptimizer.RollerDiameter rounds to 0.0001 mm. SetCADTextValue reads
-    # these public getters before calculating a/a2/E/E1/E2 and the original
-    # SQLite groove-width deviation lookup. Do not mutate the CAD input.
+    # SetCADTextValue reads the public bearing/roller getters before
+    # calculating a/a2/E/E1/E2 and querying the original groove-width table.
+    # RollerLength is rounded to 0.01 mm; CylinderRoller.RollerDiameter is raw.
+    # Do not mutate the CAD input.
     source_parameters = dict(parameters)
     source_parameters["bore_d_mm"] = _source_getter(
         number(parameters["bore_d_mm"], "bore"),

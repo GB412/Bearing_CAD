@@ -105,7 +105,7 @@ def test_crb_original_zero_after_roller_length_getter_is_not_a_valid_dimension(r
             report=report(),parameters={**P,"roller_length_mm":.004},
             resources=resources)
 
- 
+
 def test_crb_roller_diameter_uses_unrounded_cylinderroller_getter(resources):
     # CylinderRoller.RollerDiameter returns the stored mm double without
     # Math.Round. The 4-decimal CRBOptimizer getter is NOT used by SetCADTextValue.

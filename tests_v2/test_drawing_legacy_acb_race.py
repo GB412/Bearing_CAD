@@ -123,7 +123,7 @@ def test_custom_acb_shoulder_not_replaced_even_if_legacy_groove_matches():
     assert "inner_sidewall_d_mm" not in values
     assert any("DIFFERS_FROM_ROBAS_SOURCE" in w for w in evidence["warnings"])
 
- 
+
 def test_acb_lock_height_uses_original_diameter_and_ball_getters():
     params = {
         **P,

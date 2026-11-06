@@ -115,7 +115,7 @@ def test_acb_lock_height_breakpoints():
     assert acb_width_deviation(40)=="0.3"
     assert acb_width_deviation(100)=="0.5"
 
- 
+
 def test_dgb_geometry_tolerances_use_original_public_getter_precision():
     # C# passes BearingInsideDia (0.01 mm) and BallRoller.BallDiameter
     # (0.001 mm) getters to its tolerance functions before formatting.
