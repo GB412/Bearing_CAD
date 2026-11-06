@@ -256,7 +256,10 @@ def test_framework_midpoint_uses_original_50mm_source_rows(resources, kind):
     by_name = {row["name"]: row["value"] for row in report["variables"]}
     assert by_name == {
         "Cmin": "0.008", "Cmax": "0.014",
-        "B_Lower": "-0.4", "@Dds": "0.5",
+        # CRB uses its independent first width-deviation column pair;
+        # ball bearings use diameter-series 2 (fourth/fifth columns).
+        "B_Lower": "-0.3" if kind == "rolling.cylindrical_roller" else "-0.4",
+        "@Dds": "0.5",
     }
     assert len(report["standard_lookup_evidence"]) == 3
     assert {row["lookup_diameter_mm"]
