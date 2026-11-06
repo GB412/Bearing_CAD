@@ -57,6 +57,22 @@ class DrawingExportError(RuntimeError):
     pass
 
 
+def _source_audit_cache_marker(bearing_type: str, evidence: dict | None) -> dict:
+    """Re-export DGB outputs when source/CAD shoulder evidence changes.
+
+    Cached drawing manifests are immutable; adding metadata only to the
+    manifest without changing the key could keep showing an old diagnosis.
+    Other bearing types retain their existing cache identity.
+    """
+    if bearing_type != "rolling.deep_groove_ball":
+        return {}
+    evidence = evidence or {}
+    return {"dgb_shoulder_source_audit": {
+        "source_mm": evidence.get("original_source_shoulder_mm", {}),
+        "matches_cad": evidence.get("original_source_shoulder_matches_cad", {}),
+    }}
+
+
 def _digest(file: Path) -> str:
     h = sha256()
     with file.open("rb") as handle:
@@ -236,6 +252,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
         "templates_sha256": [_digest(template) for template in templates],
         "variables": bridge_values(report), "engine": "robas.dwg.cadimport.v1.svgpreview.v3.variable-diagnostics.v1.standards.v1.design-values.v1",
         "radial_clearance_group": radial_clearance_group,
+        **_source_audit_cache_marker(bearing_type, auto_evidence),
     }, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
     destination = target_root / identity
     if destination.exists():

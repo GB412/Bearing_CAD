@@ -161,3 +161,77 @@ def test_custom_stamped_cage_does_not_claim_robas_source_pocket_geometry():
     assert "cage_pocket_depth_mm" not in values
     assert "cage_flat_to_sphere_radius_mm" not in values
     assert "STAMPING_CAGE_DIFFERS_FROM_ORIGINAL_SOURCE_PROFILE" in warnings["warnings"]
+
+
+
+def test_original_dgb_shoulder_source_reference_and_checked_cad_match():
+    # Source: DGBGeometry.cs lines 68-91, BallGeometry getters use round(..., 2).
+    # The 40-mm bore selects 0.40*Dw. With original C0 clearance,
+    # d2=46+3.2=49.2 and Dd2=round(62.013-3.2, 2)=58.81.
+    original_profile = {
+        **P, "inner_shoulder_d_mm": 49.20, "outer_shoulder_d_mm": 58.81,
+    }
+    values, evidence = derive_dgb_drawing_values(parameters=original_profile)
+    assert values["inner_sidewall_d_mm"] == 49.2
+    assert values["outer_sidewall_d_mm"] == 58.81
+    assert evidence["original_source_shoulder_mm"] == {
+        "d2": 49.2, "Dd2": 58.81,
+    }
+    assert evidence["original_source_shoulder_matches_cad"] == {
+        "d2": True, "Dd2": True,
+    }
+    report = apply_deep_groove_dimensions(
+        report=_report(["Dd2", "Dd2_Upper", "Dd2_Lower",
+                        "d2", "d2_Upper", "d2_Lower"]),
+        parameters=original_profile,
+        legacy_values=values,
+    )
+    labels = {row["name"]: row["value"] for row in report["variables"]}
+    assert labels == {
+        "Dd2": "58.8", "Dd2_Upper": "+0.25", "Dd2_Lower": "0",
+        "d2": "49.2", "d2_Upper": "0", "d2_Lower": "-0.25",
+    }
+
+
+def test_custom_dgb_cad_shoulders_stay_true_to_actual_model_with_source_warning():
+    # The UI demo uses different actual B-Rep shoulders. Do not substitute
+    # RoBAS defaults just to reduce unresolved variable counts.
+    values, evidence = derive_dgb_drawing_values(parameters=P)
+    assert "inner_sidewall_d_mm" not in values
+    assert "outer_sidewall_d_mm" not in values
+    assert evidence["original_source_shoulder_mm"] == {
+        "d2": 49.2, "Dd2": 58.81,
+    }
+    assert evidence["original_source_shoulder_matches_cad"] == {
+        "d2": False, "Dd2": False,
+    }
+    assert "DGB_D2_DIFFERS_FROM_ORIGINAL_ROBAS_SOURCE" in evidence["warnings"]
+    assert "DGB_DD2_DIFFERS_FROM_ORIGINAL_ROBAS_SOURCE" in evidence["warnings"]
+    r = apply_deep_groove_dimensions(
+        report=_report(["Dd2", "d2"]), parameters=P, legacy_values=values)
+    assert [row["value"] for row in r["variables"]] == ["60.8", "47.2"]
+
+
+def test_dgb_original_source_shoulder_035_boundary_and_custom_pitch():
+    # d=25 mm selects 0.35*Dw, while d>25 uses 0.40*Dw.
+    small = {**P, "bore_d_mm": 25.0, "outside_d_mm": 75.0,
+             "pitch_d_mm": 50.0, "ball_d_mm": 8.0}
+    values, e = derive_dgb_drawing_values(parameters=small)
+    assert e["original_source_shoulder_mm"]["d2"] == 44.8
+    assert "inner_sidewall_d_mm" not in values
+
+    custom = {**P, "pitch_d_mm": 55.0}
+    values, e = derive_dgb_drawing_values(parameters=custom)
+    assert e["original_source_shoulder_mm"] == {}
+    assert e["original_source_shoulder_matches_cad"] == {}
+    assert "DGB_CUSTOM_PITCH_NOT_ORIGINAL_ROBAS_GEOMETRY" in e["warnings"]
+    assert "inner_sidewall_d_mm" not in values
+
+
+def test_dgb_non_c0_clearance_does_not_claim_original_outer_shoulder():
+    values, e = derive_dgb_drawing_values(
+        parameters=P, radial_clearance_group="C3")
+    assert "Dd2" not in e["original_source_shoulder_mm"]
+    assert "outer_sidewall_d_mm" not in values
+    assert "d2" in e["original_source_shoulder_mm"]
+    assert "DGB_OUTER_GROOVE_NEEDS_SOURCE_C0_CLEARANCE" in e["warnings"]
