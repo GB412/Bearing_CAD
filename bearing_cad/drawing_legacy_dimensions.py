@@ -6,6 +6,10 @@ This does not redraw DWG geometry or infer absent legacy groove/cage data.
 from __future__ import annotations
 import math
 from .drawing_variables import DrawingDataError
+from .drawing_standards import (
+    StandardsLookupError, original_bearing_diameter_getter_mm,
+    original_ball_diameter_getter_mm,
+)
 
 def number(v, name):
     if type(v) not in (int,float) or not math.isfinite(v):
@@ -57,32 +61,59 @@ def overlay(report, updates, source):
     output["status"]="DRAFT_INCOMPLETE" if output["unresolved_count"] else "VARIABLES_POPULATED_UNREVIEWED"
     return output
 
+def _source_getter(value, getter, label):
+    try:
+        return getter(value)
+    except StandardsLookupError as error:
+        raise DrawingDataError(f"{label}: {error}") from error
+
+
 def common_dimensions(p, legacy, kind):
-    bore=number(p["bore_d_mm"],"bore")
-    element=number(p.get("ball_d_mm",p.get("roller_d_mm")),"rolling diameter")
-    position_d=p["outside_d_mm"] if kind=="rolling.angular_contact_ball" else bore
-    gt=groove_d_tolerance(bore)
-    pt=groove_position_tolerance(position_d,angular=kind=="rolling.angular_contact_ball")
-    rt=groove_radius_tolerance(element)
-    st=sidewall_d_tolerance(bore)
-    values={}
-    if kind!="rolling.cylindrical_roller":
-        for k,src in (("Ri","inner_groove_radius_mm"),("Re","outer_groove_radius_mm")):
-            if src in p:
-                values[k]=f"{number(p[src],src):.2f}"
-                values[k+"_Upper"]="+"+text(rt)
-                values[k+"_Lower"]="0"
-    for k,src in (("De","outer_groove_d_mm"),("di","inner_groove_d_mm")):
-        if src in legacy: values[k]=f"{number(legacy[src],src):.3f}±{text(gt)}"
-    if kind!="rolling.cylindrical_roller" and "inner_groove_position_mm" in legacy:
-        values["a"]=f"{number(legacy['inner_groove_position_mm'],'a'):.1f}±{text(pt)}"
-    for k,key in (("Dd2","outer_shoulder_d_mm"),("d2","inner_shoulder_d_mm")):
-        alias="outer_sidewall_d_mm" if k=="Dd2" else "inner_sidewall_d_mm"
-        v=legacy.get(alias,p.get(key))
-        if v is not None:
-            values[k]=f"{number(v,k):.1f}"
-            values[k+"_Upper"]="+"+text(st) if k=="Dd2" else "0"
-            values[k+"_Lower"]="0" if k=="Dd2" else text(-st)
+    # RoBAS public geometry getters round drawing values without mutating the
+    # actual CAD input/B-Rep. Threshold functions receive these getter values.
+    bore = _source_getter(number(p["bore_d_mm"], "bore"),
+                          original_bearing_diameter_getter_mm, "bore")
+    element = number(p.get("ball_d_mm", p.get("roller_d_mm")), "rolling diameter")
+    if kind != "rolling.cylindrical_roller":
+        element = _source_getter(element, original_ball_diameter_getter_mm,
+                                 "ball diameter")
+    position_d = (bore if kind != "rolling.angular_contact_ball" else
+                  _source_getter(number(p["outside_d_mm"], "outside"),
+                                 original_bearing_diameter_getter_mm, "outside"))
+    gt = groove_d_tolerance(bore)
+    pt = groove_position_tolerance(position_d, angular=kind == "rolling.angular_contact_ball")
+    rt = groove_radius_tolerance(element)
+    st = sidewall_d_tolerance(bore)
+    values = {}
+    if kind != "rolling.cylindrical_roller":
+        for key, source in (("Ri", "inner_groove_radius_mm"),
+                            ("Re", "outer_groove_radius_mm")):
+            if source in p:
+                radius = _source_getter(number(p[source], source),
+                                        original_bearing_diameter_getter_mm, source)
+                values[key] = f"{radius:.2f}"
+                values[key + "_Upper"] = "+" + text(rt)
+                values[key + "_Lower"] = "0"
+    for key, source in (("De", "outer_groove_d_mm"), ("di", "inner_groove_d_mm")):
+        if source in legacy:
+            diameter = _source_getter(number(legacy[source], source),
+                                      original_bearing_diameter_getter_mm, source)
+            values[key] = f"{diameter:.3f}±{text(gt)}"
+    if kind != "rolling.cylindrical_roller" and "inner_groove_position_mm" in legacy:
+        position = _source_getter(
+            number(legacy["inner_groove_position_mm"], "inner groove position"),
+            original_bearing_diameter_getter_mm, "inner groove position")
+        values["a"] = f"{position:.1f}±{text(pt)}"
+    for key, parameter in (("Dd2", "outer_shoulder_d_mm"),
+                           ("d2", "inner_shoulder_d_mm")):
+        alias = "outer_sidewall_d_mm" if key == "Dd2" else "inner_sidewall_d_mm"
+        value = legacy.get(alias, p.get(parameter))
+        if value is not None:
+            diameter = _source_getter(number(value, key),
+                                      original_bearing_diameter_getter_mm, key)
+            values[key] = f"{diameter:.1f}"
+            values[key + "_Upper"] = "+" + text(st) if key == "Dd2" else "0"
+            values[key + "_Lower"] = "0" if key == "Dd2" else text(-st)
     return values
 
 def apply_deep_groove_dimensions(*,report,parameters,legacy_values=None):
@@ -132,8 +163,13 @@ def lock_height_deviation(t):
     return "-"+text(lookup(v,((.07,.01),(.1,.015),(.2,.02),(.29,.03),(.39,.04),(math.inf,.05))))
 
 def acb_width_deviation(bore_mm):
-    """AngularContactBallBearing.DetermineBearingWidthDeviation."""
-    return text(lookup(number(bore_mm,"bore"),((10,.2),(80,.3),(math.inf,.5))))
+    """AngularContactBallBearing.DetermineBearingWidthDeviation.
+
+    SetCADTextValue passes the 0.01-mm BearingInsideDia public getter.
+    """
+    bore = _source_getter(number(bore_mm, "bore"),
+                          original_bearing_diameter_getter_mm, "bore")
+    return text(lookup(bore, ((10, .2), (80, .3), (math.inf, .5))))
 
 def apply_angular_contact_dimensions(*,report,parameters,legacy_values=None):
     """Original ACB variable TEXT, including asymmetric groove and cage.
@@ -144,14 +180,23 @@ def apply_angular_contact_dimensions(*,report,parameters,legacy_values=None):
     old=legacy_values or {}
     if not isinstance(old,dict): raise DrawingDataError("legacy_values must be a mapping")
     v=common_dimensions(parameters,old,"rolling.angular_contact_ball")
-    pt=groove_position_tolerance(parameters["outside_d_mm"],angular=True)
+    outside = _source_getter(number(parameters["outside_d_mm"], "outside"),
+                             original_bearing_diameter_getter_mm, "outside")
+    pt = groove_position_tolerance(outside, angular=True)
     for label,key in (("ae","outer_groove_position_mm"),("ai","inner_race_groove_position_mm")):
-        if key in old:v[label]=text(number(old[key],key))+"±"+text(pt)
+        if key in old:
+            position = _source_getter(number(old[key], key),
+                                      original_bearing_diameter_getter_mm, key)
+            v[label] = text(position) + "±" + text(pt)
     if "lock_height_mm" in old:
-        height=number(old["lock_height_mm"],"lock height")
-        v.update(t_SK=text(height),t_SK_Upper="0",t_SK_Lower=lock_height_deviation(height))
-    v.update(T_=text(number(parameters["width_mm"],"width")),T_Upper="0",
-             T_Lower="-"+acb_width_deviation(parameters["bore_d_mm"]))
+        height = _source_getter(number(old["lock_height_mm"], "lock height"),
+                                original_bearing_diameter_getter_mm, "lock height")
+        v.update(t_SK=text(height), t_SK_Upper="0",
+                 t_SK_Lower=lock_height_deviation(height))
+    width = _source_getter(number(parameters["width_mm"], "width"),
+                           original_bearing_diameter_getter_mm, "width")
+    v.update(T_=text(width), T_Upper="0",
+             T_Lower="-" + acb_width_deviation(parameters["bore_d_mm"]))
     if "cage_pitch_d_mm" in old:
         v["Dcp"]=text(number(old["cage_pitch_d_mm"],"pitch"))+"±0.015"
     if "cage_pocket_spacing_mm" in old:

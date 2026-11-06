@@ -73,7 +73,7 @@ def _inner(row: tuple, series: str, table: str, roller: bool):
 def _outer(row: tuple, series: str, table: str, roller: bool):
     pairs = [
         ("Dd_Upper", None), ("Dd_Lower", 1),
-        ("VDdp", _choose(series, {"9": 2, "01": 3, "234": 4})),
+        ("VDdp", _choose(series, {"9": 2, "01": 3, "234": 4}, 5)),
         ("VDdmp", 5),
     ]
     if roller:

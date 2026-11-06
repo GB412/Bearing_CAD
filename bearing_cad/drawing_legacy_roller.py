@@ -9,7 +9,8 @@ from pathlib import Path
 import sqlite3
 from .drawing_variables import DrawingDataError
 from .drawing_legacy_dimensions import (number,text,overlay,common_dimensions,
-                                        groove_position_tolerance)
+                                        groove_position_tolerance,_source_getter)
+from .drawing_standards import original_bearing_diameter_getter_mm
 
 def roller_groove_width_deviation(resources: Path, roller_length_mm: float) -> dict:
     length=number(roller_length_mm,"roller length")
@@ -45,15 +46,23 @@ def apply_cylindrical_roller_dimensions(*,report,parameters,
     # CRBOptimizer.RollerDiameter rounds to 0.0001 mm. SetCADTextValue reads
     # these public getters before calculating a/a2/E/E1/E2 and the original
     # SQLite groove-width deviation lookup. Do not mutate the CAD input.
-    source_parameters=dict(parameters)
-    source_parameters["bore_d_mm"]=round(number(parameters["bore_d_mm"],"bore"),2)
-    source_parameters["outside_d_mm"]=round(number(parameters["outside_d_mm"],"outside"),2)
-    source_parameters["width_mm"]=round(number(parameters["width_mm"],"width"),2)
-    v=common_dimensions(source_parameters,old,"rolling.cylindrical_roller")
-    bore=source_parameters["bore_d_mm"]
-    width=source_parameters["width_mm"]
-    length=round(number(parameters["roller_length_mm"],"roller length"),2)
-    roller=round(number(parameters["roller_d_mm"],"roller diameter"),4)
+    source_parameters = dict(parameters)
+    source_parameters["bore_d_mm"] = _source_getter(
+        number(parameters["bore_d_mm"], "bore"),
+        original_bearing_diameter_getter_mm, "bore")
+    source_parameters["outside_d_mm"] = _source_getter(
+        number(parameters["outside_d_mm"], "outside"),
+        original_bearing_diameter_getter_mm, "outside")
+    source_parameters["width_mm"] = _source_getter(
+        number(parameters["width_mm"], "width"),
+        original_bearing_diameter_getter_mm, "width")
+    v = common_dimensions(source_parameters, old, "rolling.cylindrical_roller")
+    bore = source_parameters["bore_d_mm"]
+    width = source_parameters["width_mm"]
+    length = _source_getter(number(parameters["roller_length_mm"], "roller length"),
+                            original_bearing_diameter_getter_mm, "roller length")
+    # CylinderRoller.RollerDiameter has no rounding in its public getter.
+    roller = number(parameters["roller_d_mm"], "roller diameter")
     if length<=0:
         raise DrawingDataError("Original RoBAS rounded roller length is nonpositive")
     pt=groove_position_tolerance(bore)
@@ -65,7 +74,9 @@ def apply_cylindrical_roller_dimensions(*,report,parameters,
         # RollerGeometry.InnerRaceGroovePosition is a 0.01-mm getter. E1/E2
         # have no valid inferred position for an arbitrary OCCT assembly;
         # preserve the explicit, reviewed legacy input requirement.
-        position=round(number(old["inner_groove_position_mm"],"inner groove position"),2)
+        position = _source_getter(
+            number(old["inner_groove_position_mm"], "inner groove position"),
+            original_bearing_diameter_getter_mm, "inner groove position")
         # C# explicit int cast truncates toward zero (not Python floor).
         step=math.trunc((position-.05*roller)/.5)*.5
         v["E1"]=text(width-2*step)

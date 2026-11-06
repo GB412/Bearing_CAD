@@ -17,6 +17,10 @@ from __future__ import annotations
 import math
 
 from .drawing_variables import DrawingDataError
+from .drawing_standards import (
+    StandardsLookupError, original_bearing_diameter_getter_mm,
+    original_ball_diameter_getter_mm,
+)
 
 
 def _positive(p, key):
@@ -24,6 +28,13 @@ def _positive(p, key):
     if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
         raise DrawingDataError("Invalid RoBAS ACB source dimension: " + key)
     return float(value)
+
+
+def _source_getter(value, getter, label):
+    try:
+        return getter(value)
+    except StandardsLookupError as error:
+        raise DrawingDataError(f"{label}: {error}") from error
 
 
 def derive_acb_race_drawing_values(parameters: dict) -> tuple[dict, dict]:
@@ -34,10 +45,14 @@ def derive_acb_race_drawing_values(parameters: dict) -> tuple[dict, dict]:
     The original thermal-expansion constant is suspicious but intentionally
     copied *literally* for parity; this is not physical/engineering approval.
     """
+    # Keep raw geometry inputs for the original ACBGeometry formulas. The
+    # C# getter values are applied only at the SetCADTextValue read points.
     dw = _positive(parameters, "ball_d_mm")
+    dw_getter = _source_getter(dw, original_ball_diameter_getter_mm, "ball diameter")
     pw = _positive(parameters, "pitch_d_mm")
     b = _positive(parameters, "width_mm")
     d = _positive(parameters, "bore_d_mm")
+    d_getter = _source_getter(d, original_bearing_diameter_getter_mm, "bore")
     ri = _positive(parameters, "inner_groove_radius_mm")
     ro = _positive(parameters, "outer_groove_radius_mm")
     alpha = _positive(parameters, "contact_angle_deg")
@@ -56,17 +71,27 @@ def derive_acb_race_drawing_values(parameters: dict) -> tuple[dict, dict]:
         return {}, evidence
 
     a = math.radians(alpha)
-    de = round(pw + 2*ro - (2*ro-dw)*math.cos(a), 2)
-    di = round(pw - 2*ri + (2*ri-dw)*math.cos(a), 2)
-    inner_pos = round(b/2 + (ri-dw/2)*math.sin(a), 2)
-    outer_pos = round(b/2 + (ro-dw/2)*math.sin(a), 2)
+    de_raw = pw + 2*ro - (2*ro-dw)*math.cos(a)
+    di_raw = pw - 2*ri + (2*ri-dw)*math.cos(a)
+    inner_pos_raw = b/2 + (ri-dw/2)*math.sin(a)
+    outer_pos_raw = b/2 + (ro-dw/2)*math.sin(a)
+    de = _source_getter(de_raw, original_bearing_diameter_getter_mm, "outer groove diameter")
+    di = _source_getter(di_raw, original_bearing_diameter_getter_mm, "inner groove diameter")
+    inner_pos = _source_getter(inner_pos_raw, original_bearing_diameter_getter_mm,
+                               "inner groove position")
+    outer_pos = _source_getter(outer_pos_raw, original_bearing_diameter_getter_mm,
+                               "outer groove position")
     # Original .NET constant in CalculateLockHeight is 11800000 (literally),
     # NOT a presumed 1.18e-5. Do not "correct" C# without source approval.
-    delta_t = .01 if d <= 30 else (.02 if d <= 80 else .03)
+    delta_t = .01 if d_getter <= 30 else (.02 if d_getter <= 80 else .03)
     kt = (.515+.525-1)*(1-math.cos(a))/(1+11800000*90)
-    lock_height = .00053*de + kt*dw - .5*delta_t
-    if lock_height <= 0:
+    lock_height_raw = .00053*de + kt*dw_getter - .5*delta_t
+    if lock_height_raw <= 0:
         evidence["warnings"].append("ACB_SOURCE_LOCK_HEIGHT_NOT_POSITIVE")
+        lock_height = lock_height_raw
+    else:
+        lock_height = _source_getter(lock_height_raw, original_bearing_diameter_getter_mm,
+                                     "lock height")
     result = {
         "outer_groove_d_mm": de,
         "inner_groove_d_mm": di,
@@ -79,11 +104,13 @@ def derive_acb_race_drawing_values(parameters: dict) -> tuple[dict, dict]:
     # millimetre getter rounded to 0.01. On the current OCCT assembly the
     # corresponding geometric boundaries are the high inner-shoulder and
     # low outer-shoulder diameters; compare before emitting old-DWG labels.
-    de_raw = pw + 2*ro - (2*ro-dw)*math.cos(a)
-    di_raw = pw - 2*ri + (2*ri-dw)*math.cos(a)
     factor = .35 if d <= 25 else .40
-    source_outer = round(de_raw - factor*dw, 2)
-    source_inner = round(di_raw + factor*dw, 2)
+    source_outer = _source_getter(de_raw - factor*dw,
+                                  original_bearing_diameter_getter_mm,
+                                  "outer sidewall diameter")
+    source_inner = _source_getter(di_raw + factor*dw,
+                                  original_bearing_diameter_getter_mm,
+                                  "inner sidewall diameter")
     for output_name, shoulder_name, source_value in (
         ("outer_sidewall_d_mm", "outer_shoulder_right_d_mm", source_outer),
         ("inner_sidewall_d_mm", "inner_shoulder_left_d_mm", source_inner),
@@ -99,8 +126,8 @@ def derive_acb_race_drawing_values(parameters: dict) -> tuple[dict, dict]:
                 "ACB_" + shoulder_name.upper() + "_DIFFERS_FROM_ROBAS_SOURCE")
 
     if lock_height > 0 and math.isfinite(lock_height):
-        # The original LockHeight property rounds to 0.01 mm.
-        result["lock_height_mm"] = round(lock_height, 2)
+        # LockHeight is a public 0.01-mm getter; lock_height is already that value.
+        result["lock_height_mm"] = lock_height
         evidence["warnings"].append("ACB_SOURCE_LOCK_HEIGHT_LITERAL_THERMAL_CONSTANT_UNREVIEWED")
     evidence["autofilled_input_keys"] = sorted(result)
     evidence["warnings"].append("ACB_GROOVE_SOURCE_GEOMETRY_NOT_EYESHOT_ENTITY_EQUIVALENCE")
