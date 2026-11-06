@@ -7,6 +7,7 @@ import pytest
 
 from bearing_cad.drawing_runner import (
     DrawingExportError, generate_drawing_bundle, resolve_templates, SHEETS,
+    _source_audit_cache_marker,
 )
 
 TEMPLATES = {
@@ -86,3 +87,28 @@ def test_original_blank_variables_are_not_a_new_export_gate(resources,tmp_path):
     assert ("licensed Windows/.NET runtime" in str(error.value)
             or "CADImportBridge.exe" in str(error.value))
     assert not target.exists() or not list(target.iterdir())
+
+
+def test_dgb_source_audit_changes_bundle_cache_identity_but_not_other_types():
+    # Cache identity is derived from JSON variables plus this source audit.
+    # A change in matched CAD geometry is not allowed to reuse a manifest
+    # containing an earlier diagnosis of source-vs-3D disagreement.
+    mismatch = {
+        "original_source_shoulder_mm": {"d2": 49.2, "Dd2": 58.81},
+        "original_source_shoulder_matches_cad": {"d2": False, "Dd2": False},
+    }
+    matched = {
+        **mismatch,
+        "original_source_shoulder_matches_cad": {"d2": True, "Dd2": True},
+    }
+    kind = "rolling.deep_groove_ball"
+    assert _source_audit_cache_marker(kind, mismatch) != (
+        _source_audit_cache_marker(kind, matched))
+    assert _source_audit_cache_marker(kind, mismatch)["dgb_shoulder_source_audit"] == {
+        "source_mm": {"d2": 49.2, "Dd2": 58.81},
+        "matches_cad": {"d2": False, "Dd2": False},
+    }
+    assert _source_audit_cache_marker(
+        "rolling.angular_contact_ball", mismatch) == {}
+    assert _source_audit_cache_marker(
+        "rolling.cylindrical_roller", matched) == {}

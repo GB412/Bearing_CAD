@@ -71,6 +71,15 @@
 - Windows 授权 CADImport、AutoCAD 实际显示、公差/工艺审核仍由用户实机验收。
 - `manufacturing_approved: false` 不变。
 
+## 输出缓存与新诊断
+
+`drawing_runner` 的 bundle 标识现在仅对深沟球额外包含
+`dgb_shoulder_source_audit`（参考值与是否匹配）。
+已有的深沟球旧缓存即使 TEXT 内容完全相同，也会重新生成一套成果，
+保证 `legacy_design_evidence` 不被旧 manifest 隐藏。
+其他两类轴承的缓存标识计算保持不变。
+已有缓存不删除；不要直接清空 `artifacts`。
+
 ## 验收
 
 1. `python -m pytest tests_v2/test_drawing_legacy_design.py tests_v2/test_drawing_legacy_dimensions.py -q`
