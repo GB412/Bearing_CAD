@@ -190,6 +190,14 @@ export function initDrawingWorkbench(getDesign) {
       notice.title = '检查的是当前 DWG 模板实际匹配的 TEXT 变量，不包括未使用的数据库空值。完整记录请查看 drawing_manifest.json。' +
         (names.length ? '\n空值：' + names.join('、') : '');
       notice.classList.toggle('has-missing', report.unfilled_variable_count > 0);
+      if (sheet.suspectedUnmappedText.length) {
+        const leftovers = sheet.suspectedUnmappedText.map(item => item.text);
+        notice.textContent += ' · 疑似残留占位文字 ' + leftovers.length +
+          ' 项：' + leftovers.slice(0, 4).join('、');
+        notice.title += '\n疑似残留：' + leftovers.join('、') +
+          '。可能是原版 DWG 保留文字或变量名大小写差异，需 AutoCAD 核实。';
+        notice.classList.add('has-missing');
+      }
     } else {
       notice.textContent = '此图纸没有逐项变量诊断数据';
       notice.removeAttribute('title');
@@ -238,6 +246,7 @@ export function initDrawingWorkbench(getDesign) {
         downloadUrl: localAssetUrl(fileUrls?.[sheet.file], sheet.file),
         previewUrl: localAssetUrl(fileUrls?.[sheet.preview_file], sheet.file + ' SVG 预览'),
         variableDiagnostics: sheet.variable_diagnostics || null,
+        suspectedUnmappedText: sheet.suspected_unmapped_text_diagnostics || [],
       };
     });
 
@@ -268,6 +277,27 @@ export function initDrawingWorkbench(getDesign) {
     if (Array.isArray(manifest.standard_lookup_warnings) && manifest.standard_lookup_warnings.length) {
       $('drawingWorkspaceSubtitle').textContent +=
         ' · ' + manifest.standard_lookup_warnings.length + ' 项标准表查询未得到有效结果';
+    }
+    if (manifest.drawing_model_consistency?.warnings?.length) {
+      $('drawingWorkspaceSubtitle').textContent +=
+        ' · 型号/尺寸来源尚未完整核实，须审图';
+    }
+    const sourceWarnings = manifest.legacy_design_evidence?.warnings;
+    if (Array.isArray(sourceWarnings) && sourceWarnings.length) {
+      $('drawingWorkspaceSubtitle').textContent +=
+        ' · 原版设计来源诊断 ' + sourceWarnings.length + ' 项';
+    }
+    if (manifest.legacy_input_override_evidence?.source_value_disagreement_keys?.length) {
+      $('drawingWorkspaceSubtitle').textContent +=
+        ' · 人工提供值与自动源值有差异，须复核';
+    }
+    if (manifest.source_conflict_template_variable_count > 0) {
+      $('drawingWorkspaceSubtitle').textContent +=
+        ' · 重复变量来源冲突 ' + manifest.source_conflict_template_variable_count + ' 项';
+    }
+    if (manifest.suspected_unmapped_template_text_occurrences > 0) {
+      $('drawingWorkspaceSubtitle').textContent +=
+        ' · 疑似残留占位文字 ' + manifest.suspected_unmapped_template_text_occurrences + ' 处';
     }
     $('drawingWorkspaceStatus').textContent = '已生成 ' + sheets.length + ' 张 DXF';
     $('drawingWorkspaceStatus').classList.remove('is-error');
