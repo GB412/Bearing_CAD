@@ -9,6 +9,7 @@ from bearing_cad.drawing_runner import (
     DrawingExportError, generate_drawing_bundle, resolve_templates, SHEETS,
     _source_audit_cache_marker, _acb_cage_getter_cache_marker,
     _crb_drawing_getter_cache_marker,
+    _robas_standard_getter_cache_marker,
 )
 
 TEMPLATES = {
@@ -129,3 +130,16 @@ def test_crb_original_getter_source_parity_cache_version_is_bearing_scoped():
     }
     assert _crb_drawing_getter_cache_marker("rolling.angular_contact_ball")=={}
     assert _crb_drawing_getter_cache_marker("rolling.deep_groove_ball")=={}
+
+
+
+def test_all_three_source_standard_getter_contracts_bump_drawing_cache_keys():
+    for kind in (
+        "rolling.deep_groove_ball",
+        "rolling.angular_contact_ball",
+        "rolling.cylindrical_roller",
+    ):
+        assert _robas_standard_getter_cache_marker(kind)=={
+            "robas_standard_lookup_getter":"bearing-diameter.v2",
+        }
+    assert _robas_standard_getter_cache_marker("unknown") == {}

@@ -90,6 +90,17 @@ def _crb_drawing_getter_cache_marker(bearing_type: str) -> dict:
             if bearing_type == "rolling.cylindrical_roller" else {})
 
 
+def _robas_standard_getter_cache_marker(bearing_type: str) -> dict:
+    """Bump immutable drawing bundles for the 0.01-mm source lookup contract.
+
+    This applies to all three original bearing types because their public
+    BearingInsideDia and BearingOutsideDia getters share that precision.
+    """
+    return ({"robas_standard_lookup_getter": "bearing-diameter.v2"}
+            if bearing_type in TEMPLATES or bearing_type == "rolling.cylindrical_roller"
+            else {})
+
+
 def _digest(file: Path) -> str:
     h = sha256()
     with file.open("rb") as handle:
@@ -272,6 +283,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
         **_source_audit_cache_marker(bearing_type, auto_evidence),
         **_acb_cage_getter_cache_marker(bearing_type),
         **_crb_drawing_getter_cache_marker(bearing_type),
+        **_robas_standard_getter_cache_marker(bearing_type),
     }, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
     destination = target_root / identity
     if destination.exists():
