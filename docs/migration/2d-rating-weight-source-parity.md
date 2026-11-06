@@ -26,6 +26,7 @@
 
 - 内/外圈 `CalculateWeight` 使用圈尺寸、沟道、圆角半径等公开 getter（长度 0.01 mm），仍使用原版 `7.8 g/cm³` 假设；必须有经过核实的倒角和沟道数据才填圈重和总重。
 - `StampingCage.CalculateWeight` 中 `Dcp,Dc,dc,S` 为 **0.1 mm** getter，`Rc` 为 **0.01 mm** getter，材料和几何同原版经验公式；只适用于明确选用冲压保持架的路径。
+- `StampingCage` 出图 `Dcp/Dc/Dc1/S_` 先按 0.1 mm getter 输出；`C_/C1_/rrc/Rc/K_` 先按 0.01 mm getter 输出，铆钉孔 `tc` 保留未舍入 getter。节圆/内外径公差、铆钉孔偏差分段必须按相同 getter 后数值选段。球兜半径上偏差所引用的 `BallGeometry.BallDiameter` 为未舍入 getter，不能误用 `BallRoller.BallDiameter` 的 0.001 mm getter。
 - 单球 `W04` 在球径 0.001 mm getter 后进行 `Math.Round(mass,5)`；`W04Z` 为滚珠数量乘已经舍入的单球重量。
 - 原版 DGB 的 `W09/W09Z` 在 `SetCADTextValue` 中被注释，且三类服务未自动赋值 `W16/W46`；这些字段维持未填状态，不伪造材质或重量数据。
 - ACB / CRB 原版出图没有与 DGB 同等的全部 `W` 分支，不将 DGB 重量算法直接复用过去。

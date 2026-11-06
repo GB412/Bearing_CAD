@@ -252,3 +252,32 @@ def test_cage_weight_uses_original_stamping_property_getters():
         54.1 + .36388 * P["ball_count"] * (4.16 + .5 * .7)
     ) * (60.1 - 48.1) * .7 / 1_000_000
     assert values["half_cage_weight_kg"] == pytest.approx(expected)
+
+
+def test_stamping_tolerance_table_uses_original_cage_public_getters():
+    # PitchDiameter 80.04 -> 80.0 mm and BoardThickness 1.24 -> 1.2;
+    # the original Dcp and rivet-hole thresholds use these public getters.
+    c = StampedCageSpec(
+        kind="stamping_double_half", inner_d_mm=60.04,
+        outside_d_mm=100, width_mm=11.5, pocket_clearance_mm=.15,
+        board_thickness_mm=1.24, rivet_shaft_d_mm=1,
+        rivet_head_d_mm=1.6, rivet_hole_clearance_mm=.05,
+    )
+    values, _ = derive_dgb_drawing_values(
+        parameters={**P, "pitch_d_mm": 80.04}, cage=c)
+    assert values["cage_pitch_tolerance_mm"] == .025
+    assert values["rivet_hole_upper_tolerance_mm"] == .15
+    assert values["rivet_hole_lower_tolerance_mm"] == .08
+
+    # Original OutsideDiameter/InsideDiameter getters round to 0.1 mm
+    # before DetermineDiameterTolerance chooses a threshold.
+    narrower = StampedCageSpec(
+        kind="stamping_double_half", inner_d_mm=50.04,
+        outside_d_mm=80.04, width_mm=11.5, pocket_clearance_mm=.15,
+        board_thickness_mm=.7, rivet_shaft_d_mm=1,
+        rivet_head_d_mm=1.6, rivet_hole_clearance_mm=.05,
+    )
+    narrow_values, _ = derive_dgb_drawing_values(
+        parameters={**P, "pitch_d_mm": 70.04}, cage=narrower)
+    assert narrow_values["cage_outer_tolerance_mm"] == .09
+    assert narrow_values["cage_inner_tolerance_mm"] == .08
