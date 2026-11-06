@@ -117,3 +117,47 @@ def test_per_sheet_provenance_reports_source_row_and_actual_design_parameter():
     assert total["unfilled_database_unused_names"] == ["unused"]
     assert total["unfilled_template_variable_count"] == 1
     assert sheet["matched_text_entities"] == 8
+
+
+def test_unmapped_cadimport_dxf_text_is_flagged_without_altering_the_file():
+    import ezdxf
+    from bearing_cad.drawing_diagnostics import suspected_unmapped_dxf_tokens
+
+    drawing = ezdxf.new("R2000")
+    modelspace = drawing.modelspace()
+    modelspace.add_text("@DdS")
+    modelspace.add_text("@DdS")
+    modelspace.add_text("@Dds")  # exact original DB key: not an unmapped token
+    modelspace.add_text("Dw_Inch")
+    modelspace.add_text("Company")
+    modelspace.add_mtext("***")
+    modelspace.add_text("正常标注")
+    result = suspected_unmapped_dxf_tokens(drawing, {"@Dds"})
+    by_text = {item["text"]: item for item in result}
+
+    assert set(by_text) == {"@DdS", "Dw_Inch", "Company", "***"}
+    assert by_text["@DdS"]["occurrences"] == 2
+    assert by_text["@DdS"]["reason"] == "POSSIBLE_CASE_MISMATCH_WITH_SOURCE_VARIABLE"
+    assert by_text["@DdS"]["source_variable_case_candidates"] == ["@Dds"]
+    assert by_text["Company"]["reason"] == "ORIGINAL_LITERAL_PLACEHOLDER_REQUIRES_REVIEW"
+    assert by_text["Dw_Inch"]["occurrences"] == 1
+
+    # Diagnosing an exported DXF must not modify its literal TEXT contents.
+    assert [entity.dxf.text for entity in modelspace.query("TEXT")][:3] == [
+        "@DdS", "@DdS", "@Dds",
+    ]
+    bundle = bundle_variable_diagnostics(
+        {"schema_version": "robas.drawing.variables.v1",
+         "variables": [{"name": "@Dds", "value": "", "source": "sqlite_default"}]},
+        [{"view": "outer_ring",
+          "variable_diagnostics": {
+              "matched_variable_names": [],
+              "unfilled_variable_names": [],
+              "matched_variable_provenance": [],
+          },
+          "suspected_unmapped_text_diagnostics": result}]
+    )
+    assert bundle["suspected_unmapped_template_text_occurrences"] == 5
+    assert {row["view"] for row in bundle["suspected_unmapped_template_texts"]} == {
+        "outer_ring",
+    }

@@ -82,3 +82,32 @@ N/NU/NJ/NF/NUP 在用户型号前缀可识别时，必须与实际模板构型�
 
 本 PR 不修改原版 DWG、SQLite、CSV、CADImport、三维 OCC/STEP/STL。
 自动 CI 通过 ≠ Windows 实际 CADImport/AutoCAD 通过 ≠ 制造批准。
+
+
+## 补充：真实 DXF 中的未映射占位符
+
+上面基于 SQLite `matched_keys` 的统计只能看到原版变量表实际命中的
+TEXT；不能看到 **DWG 本身存在、但不在变量表中的文字**。对本次
+开发前用户提供的 DXF 样例进行只读核查，发现：
+
+| 历史 DXF | 残留文本 | 次数 | 性质 |
+|---|---|---:|---|
+| `assembly.dxf` | `Dw_Inch` | 1 | 无精确匹配的旧模板文字，需人工确认适用性 |
+| `outer_ring.dxf` | `@DdS` | 2 | 与源变量名 `@Dds` 仅大小写不同，CADImport 精确匹配不会替换 |
+| `outer_ring.dxf` | `Company` | 1 | 疑似原版图签保留文本 |
+| `outer_ring.dxf` | `***` | 2 | 疑似模板占位文本 |
+
+这是**历史用户样例**的结果，不宣称新 PR 已通过 Windows
+实际出图。新功能只扫描导出的 DXF 模型空间 TEXT/MTEXT，将
+`@...` 未列入数据库的精确 token、大小写不一致项以及有限的
+已知原版字面量记录至每张图纸的
+`suspected_unmapped_text_diagnostics`，并在 Manifest 汇总
+`suspected_unmapped_template_texts`。它们是**待核查提示而非自动
+替换规则**；不能无源依据改 `@DdS`、填 `Dw_Inch`、删除
+`Company` 或 `***`。
+
+前端仅增加现有状态栏和当前图纸诊断行的简要警告，避免在完整
+Manifest 之外静默向用户交付未核实的标签。默认演示设计为原本
+40/68/15 mm 深沟球，故前端初始型号由错误的
+`6208` 调整为有源证据的 `6008`，初始直径系列由 2 调整为 0。
+用户切换轴承类型或设计参数后仍须自行明确相应型号；不自动推断。
