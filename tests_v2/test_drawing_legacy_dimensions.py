@@ -172,3 +172,16 @@ def test_acb_width_and_position_tolerances_use_original_diameter_getters():
     assert values["T_Lower"] == "-0.2"
     assert values["t_SK"] == "0.1"
     assert values["t_SK_Lower"] == "-0.015"
+
+
+def test_ball_mass_rounds_ball_diameter_public_getter_before_formula():
+    # BallRoller.BallDiameter getter: 2.0465 mm -> 2.046 mm.
+    # The unrounded source value would produce W04 4e-05, not 3e-05.
+    params = {**P, "ball_d_mm": 2.0465, "ball_count": 2}
+    r = apply_deep_groove_dimensions(
+        report=report(["W04", "W04Z", "W09", "W09Z", "W16", "W46"]),
+        parameters=params)
+    values = {row["name"]: row["value"] for row in r["variables"]}
+    assert values["W04"] == "3e-05"
+    assert values["W04Z"] == "6e-05"
+    assert all(values[name] is None for name in ("W09", "W09Z", "W16", "W46"))

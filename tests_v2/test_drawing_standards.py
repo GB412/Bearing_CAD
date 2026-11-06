@@ -280,3 +280,14 @@ def test_framework_midpoint_that_rounds_to_zero_fails_closed(resources):
             bearing_type="rolling.deep_groove_ball", bore_d_mm=0.005,
             radial_clearance_group="C0",
         )
+
+
+def test_original_dotnet_round_midpoints_and_invalid_values():
+    import pytest
+    from bearing_cad.drawing_standards import (
+        original_dotnet_math_round, StandardsLookupError,
+    )
+    assert original_dotnet_math_round(.205, 2) == .2
+    assert original_dotnet_math_round(.215, 2) == .22
+    with pytest.raises(StandardsLookupError):
+        original_dotnet_math_round(float("nan"), 2)
