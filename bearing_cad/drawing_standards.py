@@ -46,7 +46,23 @@ def _positive_diameter(value):
     return float(value)
 
 
-def _original_robas_mm_getter(value: float, decimals: int, label: str) -> float:
+def original_dotnet_math_round(value: float, decimals: int) -> float:
+    """Source .NET Framework Math.Round(value, decimals), midpoint-to-even.
+
+    Python round(value, 2) and .NET's scale-then-round logic can disagree
+    near binary midpoint boundaries. Used for legacy label calculations only.
+    """
+    if (type(value) not in (int, float) or not math.isfinite(value)
+            or type(decimals) is not int or not 0 <= decimals <= 15):
+        raise StandardsLookupError("Invalid RoBAS Math.Round arguments")
+    scale = 10.0 ** decimals
+    scaled = float(value) * scale
+    if not math.isfinite(scaled):
+        raise StandardsLookupError("Nonfinite RoBAS Math.Round intermediate")
+    return round(scaled) / scale
+
+
+def original_robas_mm_getter(value: float, decimals: int, label: str) -> float:
     """Reproduce a RoBAS public millimetre getter backed by a metre double.
 
     The original setter stores value / 1000 as double metres. The getter
@@ -57,8 +73,7 @@ def _original_robas_mm_getter(value: float, decimals: int, label: str) -> float:
     millimetres = _positive_diameter(value)
     stored_metres = millimetres / 1000.0
     getter_mm = stored_metres * 1000.0
-    scale = 10.0 ** decimals
-    result = round(getter_mm * scale) / scale
+    result = original_dotnet_math_round(getter_mm, decimals)
     if result <= 0:
         raise StandardsLookupError(f"RoBAS rounded {label} is nonpositive")
     return result
@@ -66,12 +81,12 @@ def _original_robas_mm_getter(value: float, decimals: int, label: str) -> float:
 
 def original_bearing_diameter_getter_mm(value: float) -> float:
     """Match BearingInsideDia/BearingOutsideDia: Math.Round(metres*1000, 2)."""
-    return _original_robas_mm_getter(value, 2, "bearing diameter")
+    return original_robas_mm_getter(value, 2, "bearing diameter")
 
 
 def original_ball_diameter_getter_mm(value: float) -> float:
     """Match BallRoller.BallDiameter: Math.Round(metres*1000, 3)."""
-    return _original_robas_mm_getter(value, 3, "ball diameter")
+    return original_robas_mm_getter(value, 3, "ball diameter")
 
 
 def _first_range(resources, bearing_type, table, column, diameter):

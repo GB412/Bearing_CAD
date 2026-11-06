@@ -8,7 +8,7 @@ import math
 from .drawing_variables import DrawingDataError
 from .drawing_standards import (
     StandardsLookupError, original_bearing_diameter_getter_mm,
-    original_ball_diameter_getter_mm,
+    original_ball_diameter_getter_mm, original_dotnet_math_round,
 )
 
 def number(v, name):
@@ -141,10 +141,15 @@ def apply_deep_groove_dimensions(*,report,parameters,legacy_values=None):
         if key in old:v[k]="+"+text(number(old[key],key))
     if "cage_sphere_upper_tolerance_mm" in old:v["Rc_Lower"]="0"
     if "cage_pocket_upper_tolerance_mm" in old:v["K_Lower"]="0"
-    ball=number(parameters["ball_d_mm"],"ball diameter")
-    count=parameters["ball_count"]
-    if type(count) is not int or count<1:raise DrawingDataError("Invalid ball count")
-    mass=round(math.pi*ball**3*7.8/6_000_000,5)
+    ball = _source_getter(number(parameters["ball_d_mm"], "ball diameter"),
+                          original_ball_diameter_getter_mm, "ball diameter")
+    count = parameters["ball_count"]
+    if type(count) is not int or count < 1:
+        raise DrawingDataError("Invalid ball count")
+    # DGB SetCADTextValue uses BallRoller.BallDiameter's 0.001-mm getter
+    # and Math.Round((1.0/6)*pi*Dw^3*7.8/1e6, 5).
+    mass = original_dotnet_math_round(
+        (1.0 / 6) * math.pi * ball**3 * 7.8 / 1_000_000, 5)
     v.update(W04=text(mass),W04Z=text(count*mass))
     for k,key,digits in (("W01","outer_race_weight_kg",3),("W02","inner_race_weight_kg",3),
                          ("W07","half_cage_weight_kg",5)):

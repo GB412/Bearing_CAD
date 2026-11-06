@@ -18,6 +18,7 @@ from pathlib import Path
 from .contracts import StampedCageSpec
 from .drawing_legacy_chamfer import _chamfer_source
 from .drawing_variables import DrawingDataError
+from .drawing_standards import StandardsLookupError, original_robas_mm_getter
 from .robas_sizing import dgb_radial_clearance_mm
 from .robas_stamping import robas_stamping_profile
 
@@ -26,6 +27,15 @@ def _number(value, key):
     if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
         raise DrawingDataError("Expected finite positive RoBAS dimension: " + key)
     return float(value)
+
+
+def _source_mm(value, decimals, label):
+    # The original bearing/race/cage public property first stores metres,
+    # then returns Math.Round(metres * 1000, decimals).
+    try:
+        return original_robas_mm_getter(value, decimals, label)
+    except StandardsLookupError as error:
+        raise DrawingDataError(f"RoBAS {label}: {error}") from error
 
 
 def _cage_diameter_tolerance(d: float) -> float:
@@ -88,12 +98,16 @@ def _race_weights(p: dict, *, di: float, de: float, chamfer: list[str]) -> dict:
     )
     if any(key not in p for key in need):
         return {}
-    d, D, B = (_number(p[k], k) for k in
+    # SetCADTextValue passes ring and bearing public getters (0.01 mm)
+    # to the unchanged historical CalculateWeight equations.
+    d, D, B = (_source_mm(_number(p[k], k), 2, k) for k in
                ("bore_d_mm", "outside_d_mm", "width_mm"))
-    d2, D2 = (_number(p[k], k) for k in
+    d2, D2 = (_source_mm(_number(p[k], k), 2, k) for k in
               ("inner_shoulder_d_mm", "outer_shoulder_d_mm"))
-    ri, re_ = (_number(p[k], k) for k in
+    ri, re_ = (_source_mm(_number(p[k], k), 2, k) for k in
                ("inner_groove_radius_mm", "outer_groove_radius_mm"))
+    di = _source_mm(_number(di, "inner groove diameter"), 2, "inner groove diameter")
+    de = _source_mm(_number(de, "outer groove diameter"), 2, "outer groove diameter")
     outer = 7.8 * (
         .785 * (D**2 - D2**2) * B -
         1.349 * D * r**2 - 2.245 * r8**2 * D2 -
@@ -261,8 +275,16 @@ def derive_dgb_drawing_values(*, parameters: dict,
         else:
             warnings.append("RIVET_HOLE_TOLERANCE_NOT_DEFINED_AT_BOARD_THICKNESS")
         # Original StampingCage.CalculateWeight nominal/empirical equation.
-        cage_mass = (10.35 * (Dpw + .36388 * count * (Rc + .5 * S)) *
-                     (Dc - dc) * S / 1_000_000)
+        # Source StampingCage getters: Dcp, Dc, dc, S to 0.1 mm;
+        # SphereRadius to 0.01 mm. Do not round the 3D cage geometry.
+        dcp_mass = _source_mm(Dpw, 1, "cage pitch diameter")
+        dc_mass = _source_mm(Dc, 1, "cage outside diameter")
+        di_mass = _source_mm(dc, 1, "cage inside diameter")
+        rc_mass = _source_mm(Rc, 2, "cage sphere radius")
+        s_mass = _source_mm(S, 1, "cage board thickness")
+        cage_mass = (10.35 * (dcp_mass + .36388 * count *
+                              (rc_mass + .5 * s_mass)) *
+                     (dc_mass - di_mass) * s_mass / 1_000_000)
         if cage_mass > 0 and math.isfinite(cage_mass):
             updates["half_cage_weight_kg"] = cage_mass
     else:
