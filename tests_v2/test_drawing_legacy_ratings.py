@@ -152,7 +152,7 @@ def test_near_coefficient_row_is_not_exact_source_match(resources):
 @pytest.mark.parametrize("kind, expected_cor", [
     ("rolling.deep_groove_ball", None),
     ("rolling.angular_contact_ball", None),
-    ("rolling.cylindrical_roller", "3.11"),
+    ("rolling.cylindrical_roller", "31.10"),
 ])
 def test_missing_coefficient_never_fabricates_valid_cr(resources, kind, expected_cor):
     p = _p(kind, diameter=10, pitch=70)
