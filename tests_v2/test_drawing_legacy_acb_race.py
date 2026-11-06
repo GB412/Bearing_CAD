@@ -122,3 +122,16 @@ def test_custom_acb_shoulder_not_replaced_even_if_legacy_groove_matches():
     assert "outer_sidewall_d_mm" not in values
     assert "inner_sidewall_d_mm" not in values
     assert any("DIFFERS_FROM_ROBAS_SOURCE" in w for w in evidence["warnings"])
+
+ 
+def test_acb_lock_height_uses_original_diameter_and_ball_getters():
+    params = {
+        **P,
+        "bore_d_mm": 30.004,
+        "ball_d_mm": 8.0005,
+        "inner_groove_radius_mm": .515 * 8.0005,
+        "outer_groove_radius_mm": .525 * 8.0005,
+    }
+    values, evidence = derive_acb_race_drawing_values(params)
+    assert values["lock_height_mm"] == 0.03
+    assert "ACB_SOURCE_LOCK_HEIGHT_LITERAL_THERMAL_CONSTANT_UNREVIEWED" in evidence["warnings"]

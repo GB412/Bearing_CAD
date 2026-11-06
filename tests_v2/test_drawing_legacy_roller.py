@@ -104,3 +104,17 @@ def test_crb_original_zero_after_roller_length_getter_is_not_a_valid_dimension(r
         apply_cylindrical_roller_dimensions(
             report=report(),parameters={**P,"roller_length_mm":.004},
             resources=resources)
+
+ 
+def test_crb_roller_diameter_uses_unrounded_cylinderroller_getter(resources):
+    # CylinderRoller.RollerDiameter returns the stored mm double without
+    # Math.Round. The 4-decimal CRBOptimizer getter is NOT used by SetCADTextValue.
+    params = {**P, "roller_d_mm": 8.00004}
+    old = {"inner_groove_position_mm": 5.4}
+    result = apply_cylindrical_roller_dimensions(
+        report=report(), parameters=params, legacy_values=old, resources=resources)
+    values = {row["name"]: row["value"] for row in result["variables"]}
+    raw_step = int((5.4 - 0.05 * 8.00004) / 0.5) * 0.5
+    assert raw_step == 4.5
+    assert values["E1"] == "9"
+    assert values["E2"] == "8.1"
