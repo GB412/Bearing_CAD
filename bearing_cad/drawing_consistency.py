@@ -113,6 +113,10 @@ def audit_drawing_design(*, resources: Path, bearing_type: str,
                 raise DrawingDataError(
                     f"Drawing model grade {grade} contradicts selected {accuracy_class}")
             model = model[:suffix.start()]
+            if _GRADE_SUFFIX.search(model):
+                raise DrawingDataError(
+                    "Drawing model label has a repeated accuracy suffix; "
+                    "provide the base model and select accuracy separately")
         result["catalog_model"] = model
 
     if bearing_type == "rolling.deep_groove_ball":

@@ -174,3 +174,10 @@ def test_checked_legacy_overrides_are_reported_not_automatically_certified():
     assert result["review_status"] == (
         "CALLER_INPUT_NOT_AUTOMATICALLY_ENGINEERING_APPROVED"
     )
+
+
+def test_duplicate_accuracy_suffix_is_rejected_in_final_title(original_catalog):
+    # The API already appends /P5 to the drawing model option, so callers
+    # must not provide the suffix twice.
+    with pytest.raises(DrawingDataError, match="repeated accuracy suffix"):
+        audit(original_catalog, model="6008/P5/P5")
