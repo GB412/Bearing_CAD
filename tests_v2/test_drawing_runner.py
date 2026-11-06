@@ -8,6 +8,7 @@ import pytest
 from bearing_cad.drawing_runner import (
     DrawingExportError, generate_drawing_bundle, resolve_templates, SHEETS,
     _source_audit_cache_marker, _acb_cage_getter_cache_marker,
+    _crb_drawing_getter_cache_marker,
 )
 
 TEMPLATES = {
@@ -120,3 +121,11 @@ def test_acb_cage_rounding_bumps_cache_identity_only_for_angular_contact():
     }
     assert _acb_cage_getter_cache_marker("rolling.deep_groove_ball") == {}
     assert _acb_cage_getter_cache_marker("rolling.cylindrical_roller") == {}
+
+
+def test_crb_original_getter_source_parity_cache_version_is_bearing_scoped():
+    assert _crb_drawing_getter_cache_marker("rolling.cylindrical_roller")=={
+        "crb_drawing_getter_parity":"robas.crb-public-getters.v1",
+    }
+    assert _crb_drawing_getter_cache_marker("rolling.angular_contact_ball")=={}
+    assert _crb_drawing_getter_cache_marker("rolling.deep_groove_ball")=={}

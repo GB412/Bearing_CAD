@@ -40,18 +40,32 @@ def apply_cylindrical_roller_dimensions(*,report,parameters,
     old=legacy_values or {}
     if not isinstance(old,dict):
         raise DrawingDataError("legacy_values must be a mapping")
-    v=common_dimensions(parameters,old,"rolling.cylindrical_roller")
-    bore=number(parameters["bore_d_mm"],"bore")
-    width=number(parameters["width_mm"],"width")
-    length=number(parameters["roller_length_mm"],"roller length")
-    roller=number(parameters["roller_d_mm"],"roller diameter")
+    # Original CylinderRollerBearing.BearingWidth and Bore getters round to
+    # 0.01 mm; CylinderRoller.RollerLength rounds to 0.01 mm, while
+    # CRBOptimizer.RollerDiameter rounds to 0.0001 mm. SetCADTextValue reads
+    # these public getters before calculating a/a2/E/E1/E2 and the original
+    # SQLite groove-width deviation lookup. Do not mutate the CAD input.
+    source_parameters=dict(parameters)
+    source_parameters["bore_d_mm"]=round(number(parameters["bore_d_mm"],"bore"),2)
+    source_parameters["outside_d_mm"]=round(number(parameters["outside_d_mm"],"outside"),2)
+    source_parameters["width_mm"]=round(number(parameters["width_mm"],"width"),2)
+    v=common_dimensions(source_parameters,old,"rolling.cylindrical_roller")
+    bore=source_parameters["bore_d_mm"]
+    width=source_parameters["width_mm"]
+    length=round(number(parameters["roller_length_mm"],"roller length"),2)
+    roller=round(number(parameters["roller_d_mm"],"roller diameter"),4)
+    if length<=0:
+        raise DrawingDataError("Original RoBAS rounded roller length is nonpositive")
     pt=groove_position_tolerance(bore)
     half=(width-length)/2
     v["a"]=text(half)+"±"+text(pt)
     v["a2"]=text(half-.05*roller)
     v["E"]=text(length)
     if "inner_groove_position_mm" in old:
-        position=number(old["inner_groove_position_mm"],"inner groove position")
+        # RollerGeometry.InnerRaceGroovePosition is a 0.01-mm getter. E1/E2
+        # have no valid inferred position for an arbitrary OCCT assembly;
+        # preserve the explicit, reviewed legacy input requirement.
+        position=round(number(old["inner_groove_position_mm"],"inner groove position"),2)
         # C# explicit int cast truncates toward zero (not Python floor).
         step=math.trunc((position-.05*roller)/.5)*.5
         v["E1"]=text(width-2*step)

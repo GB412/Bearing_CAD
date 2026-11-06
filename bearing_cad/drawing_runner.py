@@ -84,6 +84,12 @@ def _acb_cage_getter_cache_marker(bearing_type: str) -> dict:
             if bearing_type == "rolling.angular_contact_ball" else {})
 
 
+def _crb_drawing_getter_cache_marker(bearing_type: str) -> dict:
+    """Version original CRB getter-parity output without invalidating others."""
+    return ({"crb_drawing_getter_parity": "robas.crb-public-getters.v1"}
+            if bearing_type == "rolling.cylindrical_roller" else {})
+
+
 def _digest(file: Path) -> str:
     h = sha256()
     with file.open("rb") as handle:
@@ -265,6 +271,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
         "radial_clearance_group": radial_clearance_group,
         **_source_audit_cache_marker(bearing_type, auto_evidence),
         **_acb_cage_getter_cache_marker(bearing_type),
+        **_crb_drawing_getter_cache_marker(bearing_type),
     }, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
     destination = target_root / identity
     if destination.exists():
