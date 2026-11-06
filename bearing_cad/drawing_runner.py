@@ -29,6 +29,9 @@ from .drawing_legacy_acb_race import derive_acb_race_drawing_values
 from .drawing_legacy_crb_source import derive_crb_source_drawing_values
 from .contracts import CageSpec
 from .drawing_diagnostics import sheet_variable_diagnostics, bundle_variable_diagnostics
+from .drawing_consistency import (
+    audit_drawing_design, effective_drawing_model, explicit_legacy_override_audit,
+)
 
 SHEETS = ("assembly", "outer_ring", "inner_ring", "cage")
 SHEETS_NUP = (*SHEETS, "loose_rib")
@@ -207,6 +210,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
     if legacy_values is not None and not isinstance(legacy_values, dict):
         raise DrawingExportError("legacy_values must be an explicit mapping")
     auto_evidence = None
+    automatically_derived_legacy = {}
     actual_legacy = dict(legacy_values or {})
     if bearing_type == "rolling.deep_groove_ball":
         auto_values, auto_evidence = derive_dgb_drawing_values(
@@ -214,15 +218,18 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
             chamfer1_mm=chamfer1_mm,
             radial_clearance_group=radial_clearance_group,
             bearing_model=model)
-        # Any explicitly supplied, checked old-model value takes precedence.
+        # Caller-supplied legacy inputs take precedence; their disagreement
+        # with the source is reported, not silently treated as approved.
+        automatically_derived_legacy = auto_values
         actual_legacy = {**auto_values, **actual_legacy}
     if bearing_type == "rolling.angular_contact_ball":
         race_auto, race_evidence = derive_acb_race_drawing_values(parameters)
         cage_auto, cage_evidence = derive_acb_cage_drawing_values(
             parameters=parameters, cage=cage)
-        # Reviewed legacy values can override the nominal constructor-derived
-        # source labels. Never change the actual OCCT design parameters here.
-        actual_legacy = {**race_auto, **cage_auto, **actual_legacy}
+        # Caller legacy values can override the nominal source labels; do not
+        # silently imply that such an input was engineering-reviewed.
+        automatically_derived_legacy = {**race_auto, **cage_auto}
+        actual_legacy = {**automatically_derived_legacy, **actual_legacy}
         auto_evidence = {
             "source": "RoBAS ACBGeometry and StraightPocketCage",
             "autofilled_input_keys": sorted(set(race_auto) | set(cage_auto)),
@@ -238,6 +245,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
             report=report, parameters=parameters, legacy_values=actual_legacy)
     if bearing_type == "rolling.cylindrical_roller":
         crb_auto, auto_evidence = derive_crb_source_drawing_values(parameters)
+        automatically_derived_legacy = crb_auto
         actual_legacy = {**crb_auto, **actual_legacy}
         report = apply_cylindrical_roller_dimensions(
             report=report, parameters=parameters, legacy_values=actual_legacy,
@@ -268,6 +276,17 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
     # Reapply explicitly checked engineering values, validated on input, only
     # after all automatic source calculations and lookup-table overlays.
     report = restore_checked_values(report, validated_input_report, checked_values)
+    # Verify the effective model TEXT after all checked-value overlays.
+    # This covers a model supplied through checked_values, not just through
+    # the separate model option. Source-catalog conflicts fail before export.
+    model_consistency = audit_drawing_design(
+        resources=Path(resources), bearing_type=bearing_type,
+        parameters=parameters,
+        model_label=effective_drawing_model(report),
+        configuration=configuration, accuracy_class=accuracy_class,
+        diameter_series=diameter_series)
+    legacy_override_evidence = explicit_legacy_override_audit(
+        automatically_derived_legacy, legacy_values)
     # Faithfully reproduce FrmMain.ChangeCADTexts: all DataTable rows participate
     # in the original replacement loop, including blank/DBNull values.
     # The original software does not require the complete database to be filled.
@@ -279,6 +298,9 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
         "request_hash": request_hash, "db_sha256": report["database_sha256"],
         "templates_sha256": [_digest(template) for template in templates],
         "variables": bridge_values(report), "engine": "robas.dwg.cadimport.v1.svgpreview.v3.variable-diagnostics.v1.standards.v1.design-values.v1",
+        "drawing_audit_version": "template-provenance-and-model-consistency.v1",
+        "model_consistency": model_consistency,
+        "legacy_override_evidence": legacy_override_evidence,
         "radial_clearance_group": radial_clearance_group,
         **_source_audit_cache_marker(bearing_type, auto_evidence),
         **_acb_cage_getter_cache_marker(bearing_type),
@@ -331,6 +353,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
             sheets.append({
                 "view": name, "file": output.name, "size_bytes": output.stat().st_size,
                 "sha256": _digest(output), "template_sha256": _digest(template),
+                "template_file": template.name,
                 "preview_file": preview.name, "preview_size_bytes": preview.stat().st_size,
                 "preview_sha256": _digest(preview),
                 "preview_diagnostics": preview_report,
@@ -348,6 +371,8 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
             **drawing_diagnostics,
             "technical_condition_rows": report.get("technical_rows_applied", 0),
             "legacy_design_evidence": auto_evidence,
+            "drawing_model_consistency": model_consistency,
+            "legacy_input_override_evidence": legacy_override_evidence,
             "standard_lookup_evidence": report.get("standard_lookup_evidence", []),
             "standard_lookup_warnings": report.get("standard_lookup_warnings", []),
             "radial_clearance_group": radial_clearance_group,
