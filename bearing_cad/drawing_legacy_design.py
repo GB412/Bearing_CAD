@@ -145,6 +145,42 @@ def derive_dgb_drawing_values(*, parameters: dict,
     else:
         updates["outer_groove_d_mm"] = Dpw + Dw + radial
 
+    # RoBAS/Core/BallBearing/DeepGroveBallBearing/DGBGeometry.cs:53-91
+    # uses Dpw=(D+d)/2, then d2=di+(0.35 or 0.40)*Dw and
+    # Dd2=De-(0.35 or 0.40)*Dw. BallGeometry publishes mm getters rounded
+    # to 0.01. These SOURCE values must never silently overwrite a different
+    # user-selected OCCT shoulder: the actual 3D shoulder is authoritative.
+    source_shoulder_reference = {}
+    source_shoulder_match = {}
+    D = _number(p["outside_d_mm"], "outside_d_mm")
+    if math.isclose(Dpw, (D+d)/2, rel_tol=0, abs_tol=1e-7):
+        factor = .35 if d <= 25 else .40
+        candidates = {
+            "d2": ("inner_shoulder_d_mm", round(updates["inner_groove_d_mm"]+factor*Dw, 2)),
+        }
+        if "outer_groove_d_mm" in updates:
+            candidates["Dd2"] = (
+                "outer_shoulder_d_mm",
+                round(updates["outer_groove_d_mm"]-factor*Dw, 2),
+            )
+        for label, (param_key, reference) in candidates.items():
+            source_shoulder_reference[label] = reference
+            actual = p.get(param_key)
+            matched = (type(actual) in (int, float) and math.isfinite(actual) and
+                       math.isclose(float(actual), reference, rel_tol=0, abs_tol=1e-6))
+            source_shoulder_match[label] = matched
+            if matched:
+                # Existing SetCADTextValue label formatter consumes the alias.
+                # It produces the same label as the actual explicit 3D input.
+                legacy_key = ("inner_sidewall_d_mm" if label == "d2"
+                              else "outer_sidewall_d_mm")
+                updates[legacy_key] = reference
+            else:
+                warnings.append("DGB_" + label.upper() +
+                                "_DIFFERS_FROM_ORIGINAL_ROBAS_SOURCE")
+    else:
+        warnings.append("DGB_CUSTOM_PITCH_NOT_ORIGINAL_ROBAS_GEOMETRY")
+
     if isinstance(cage, StampedCageSpec):
         S = _number(cage.board_thickness_mm, "board_thickness_mm")
         Rc = Dw / 2 + _number(cage.pocket_clearance_mm, "pocket_clearance_mm")
@@ -249,6 +285,8 @@ def derive_dgb_drawing_values(*, parameters: dict,
         "source": "RoBAS DGBGeometry/DGBOptimizer/StampingCage/SetCADTextValue",
         "autofilled_input_keys": sorted(updates),
         "warnings": warnings,
+        "original_source_shoulder_mm": source_shoulder_reference,
+        "original_source_shoulder_matches_cad": source_shoulder_match,
         "mass_basis": (
             "RoBAS empirical nominal formula, not OCCT volume-derived mass"
             if any(key.endswith("_weight_kg") for key in updates) else None
