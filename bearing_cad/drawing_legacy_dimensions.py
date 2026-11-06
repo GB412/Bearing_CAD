@@ -8,7 +8,8 @@ import math
 from .drawing_variables import DrawingDataError
 from .drawing_standards import (
     StandardsLookupError, original_bearing_diameter_getter_mm,
-    original_ball_diameter_getter_mm,
+    original_ball_diameter_getter_mm, original_dotnet_math_round,
+    original_robas_mm_getter,
 )
 
 def number(v, name):
@@ -119,21 +120,39 @@ def common_dimensions(p, legacy, kind):
             values[key + "_Lower"] = "0" if key == "Dd2" else text(-st)
     return values
 
+def _cage_label_mm(value, decimals, label):
+    return _source_getter(
+        number(value, label),
+        lambda raw: original_robas_mm_getter(raw, decimals, label),
+        label,
+    )
+
+
 def apply_deep_groove_dimensions(*,report,parameters,legacy_values=None):
     old=legacy_values or {}
     if not isinstance(old,dict): raise DrawingDataError("legacy_values must be a mapping")
     v=common_dimensions(parameters,old,"rolling.deep_groove_ball")
-    for k,key in (("C_","cage_pocket_spacing_mm"),("C1_","cage_pocket_rivet_spacing_mm")):
-        if key in old:v[k]=text(number(old[key],key))+"±0.025"
-    for k,key in (("S_","cage_board_thickness_mm"),("rrc","cage_flat_to_sphere_radius_mm"),
-                  ("Rc","cage_sphere_radius_mm"),("K_","cage_pocket_depth_mm"),
-                  ("tc","cage_rivet_hole_d_mm")):
-        if key in old:v[k]=text(number(old[key],key))
+    # Original StampingCage getters: spacing/flat/sphere/pocket to 0.01 mm,
+    # board thickness and pitch/inside/outside diameters to 0.1 mm. The
+    # rivet-hole diameter getter is unrounded.
+    for k,key in (("C_","cage_pocket_spacing_mm"),
+                  ("C1_","cage_pocket_rivet_spacing_mm")):
+        if key in old:
+            v[k] = text(_cage_label_mm(old[key], 2, key)) + "±0.025"
+    for k,key,decimals in (("S_","cage_board_thickness_mm",1),
+                           ("rrc","cage_flat_to_sphere_radius_mm",2),
+                           ("Rc","cage_sphere_radius_mm",2),
+                           ("K_","cage_pocket_depth_mm",2),
+                           ("tc","cage_rivet_hole_d_mm",None)):
+        if key in old:
+            value = (number(old[key], key) if decimals is None
+                     else _cage_label_mm(old[key], decimals, key))
+            v[k] = text(value)
     for k,key,tol in (("Dcp","cage_pitch_d_mm","cage_pitch_tolerance_mm"),
                       ("Dc","cage_outer_d_mm","cage_outer_tolerance_mm"),
                       ("Dc1","cage_inner_d_mm","cage_inner_tolerance_mm")):
         if key in old and tol in old:
-            v[k]=text(number(old[key],key))+"±"+text(number(old[tol],tol))
+            v[k] = text(_cage_label_mm(old[key], 1, key)) + "±" + text(number(old[tol], tol))
     for k,key in (("Rc_Upper","cage_sphere_upper_tolerance_mm"),
                   ("K_Upper","cage_pocket_upper_tolerance_mm"),
                   ("tc_Upper","rivet_hole_upper_tolerance_mm"),
@@ -141,10 +160,15 @@ def apply_deep_groove_dimensions(*,report,parameters,legacy_values=None):
         if key in old:v[k]="+"+text(number(old[key],key))
     if "cage_sphere_upper_tolerance_mm" in old:v["Rc_Lower"]="0"
     if "cage_pocket_upper_tolerance_mm" in old:v["K_Lower"]="0"
-    ball=number(parameters["ball_d_mm"],"ball diameter")
-    count=parameters["ball_count"]
-    if type(count) is not int or count<1:raise DrawingDataError("Invalid ball count")
-    mass=round(math.pi*ball**3*7.8/6_000_000,5)
+    ball = _source_getter(number(parameters["ball_d_mm"], "ball diameter"),
+                          original_ball_diameter_getter_mm, "ball diameter")
+    count = parameters["ball_count"]
+    if type(count) is not int or count < 1:
+        raise DrawingDataError("Invalid ball count")
+    # DGB SetCADTextValue uses BallRoller.BallDiameter's 0.001-mm getter
+    # and Math.Round((1.0/6)*pi*Dw^3*7.8/1e6, 5).
+    mass = original_dotnet_math_round(
+        (1.0 / 6) * math.pi * ball**3 * 7.8 / 1_000_000, 5)
     v.update(W04=text(mass),W04Z=text(count*mass))
     for k,key,digits in (("W01","outer_race_weight_kg",3),("W02","inner_race_weight_kg",3),
                          ("W07","half_cage_weight_kg",5)):

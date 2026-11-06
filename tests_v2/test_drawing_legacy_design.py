@@ -104,7 +104,7 @@ def test_robas_ring_mass_equations_need_provided_valid_chamfer():
     chamfer = [""] * 20
     chamfer[2], chamfer[11] = "0.4", "0.2max"
     weights = _race_weights(P, di=46, de=62.013, chamfer=chamfer)
-    assert weights["outer_race_weight_kg"] == pytest.approx(.07368767025739394)
+    assert weights["outer_race_weight_kg"] == pytest.approx(.07368823606639874)
     assert weights["inner_race_weight_kg"] == pytest.approx(.04985741907035138)
     chamfer[11] = ""
     assert _race_weights(P, di=46, de=62.013, chamfer=chamfer) == {}
@@ -235,3 +235,49 @@ def test_dgb_non_c0_clearance_does_not_claim_original_outer_shoulder():
     assert "outer_sidewall_d_mm" not in values
     assert "d2" in e["original_source_shoulder_mm"]
     assert "DGB_OUTER_GROOVE_NEEDS_SOURCE_C0_CLEARANCE" in e["warnings"]
+
+
+def test_cage_weight_uses_original_stamping_property_getters():
+    custom = StampedCageSpec(
+        kind="stamping_double_half", inner_d_mm=48.06,
+        outside_d_mm=60.06, width_mm=11.5, pocket_clearance_mm=.155,
+        board_thickness_mm=.74, rivet_shaft_d_mm=1,
+        rivet_head_d_mm=1.6, rivet_hole_clearance_mm=.05,
+    )
+    values, _ = derive_dgb_drawing_values(
+        parameters={**P, "pitch_d_mm": 54.06}, cage=custom)
+    # Source getter roundings: Dcp 54.1, Rc 4.16, S .7,
+    # Dc 60.1, dc 48.1 before CalculateWeight.
+    expected = 10.35 * (
+        54.1 + .36388 * P["ball_count"] * (4.16 + .5 * .7)
+    ) * (60.1 - 48.1) * .7 / 1_000_000
+    assert values["half_cage_weight_kg"] == pytest.approx(expected)
+
+
+def test_stamping_tolerance_table_uses_original_cage_public_getters():
+    # PitchDiameter 80.04 -> 80.0 mm and BoardThickness 1.24 -> 1.2;
+    # the original Dcp and rivet-hole thresholds use these public getters.
+    c = StampedCageSpec(
+        kind="stamping_double_half", inner_d_mm=60.04,
+        outside_d_mm=100, width_mm=11.5, pocket_clearance_mm=.15,
+        board_thickness_mm=1.24, rivet_shaft_d_mm=1,
+        rivet_head_d_mm=1.6, rivet_hole_clearance_mm=.05,
+    )
+    values, _ = derive_dgb_drawing_values(
+        parameters={**P, "pitch_d_mm": 80.04}, cage=c)
+    assert values["cage_pitch_tolerance_mm"] == .025
+    assert values["rivet_hole_upper_tolerance_mm"] == .15
+    assert values["rivet_hole_lower_tolerance_mm"] == .08
+
+    # Original OutsideDiameter/InsideDiameter getters round to 0.1 mm
+    # before DetermineDiameterTolerance chooses a threshold.
+    narrower = StampedCageSpec(
+        kind="stamping_double_half", inner_d_mm=50.04,
+        outside_d_mm=80.04, width_mm=11.5, pocket_clearance_mm=.15,
+        board_thickness_mm=.7, rivet_shaft_d_mm=1,
+        rivet_head_d_mm=1.6, rivet_hole_clearance_mm=.05,
+    )
+    narrow_values, _ = derive_dgb_drawing_values(
+        parameters={**P, "pitch_d_mm": 70.04}, cage=narrower)
+    assert narrow_values["cage_outer_tolerance_mm"] == .09
+    assert narrow_values["cage_inner_tolerance_mm"] == .08

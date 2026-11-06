@@ -172,3 +172,44 @@ def test_acb_width_and_position_tolerances_use_original_diameter_getters():
     assert values["T_Lower"] == "-0.2"
     assert values["t_SK"] == "0.1"
     assert values["t_SK_Lower"] == "-0.015"
+
+
+def test_ball_mass_rounds_ball_diameter_public_getter_before_formula():
+    # BallRoller.BallDiameter getter: 2.0465 mm -> 2.046 mm.
+    # The unrounded source value would produce W04 4e-05, not 3e-05.
+    params = {**P, "ball_d_mm": 2.0465, "ball_count": 2}
+    r = apply_deep_groove_dimensions(
+        report=report(["W04", "W04Z", "W09", "W09Z", "W16", "W46"]),
+        parameters=params)
+    values = {row["name"]: row["value"] for row in r["variables"]}
+    assert values["W04"] == "3e-05"
+    assert values["W04Z"] == "6e-05"
+    assert all(values[name] is None for name in ("W09", "W09Z", "W16", "W46"))
+
+
+def test_stamping_cage_drawing_strings_match_original_public_getter_precision():
+    old = {
+        "cage_pocket_spacing_mm": 15.004,
+        "cage_pocket_rivet_spacing_mm": 7.006,
+        "cage_board_thickness_mm": .74,
+        "cage_flat_to_sphere_radius_mm": 3.006,
+        "cage_sphere_radius_mm": 4.155,
+        "cage_pocket_depth_mm": 4.004,
+        "cage_rivet_hole_d_mm": 1.234567,
+        "cage_pitch_d_mm": 80.04,
+        "cage_pitch_tolerance_mm": .025,
+        "cage_outer_d_mm": 80.04,
+        "cage_outer_tolerance_mm": .09,
+        "cage_inner_d_mm": 50.04,
+        "cage_inner_tolerance_mm": .08,
+    }
+    fields = list(("C_", "C1_", "S_", "rrc", "Rc", "K_", "tc", "Dcp", "Dc", "Dc1"))
+    output = apply_deep_groove_dimensions(
+        report=report(fields), parameters=P, legacy_values=old)
+    values = {row["name"]: row["value"] for row in output["variables"]}
+    assert values == {
+        "C_": "15±0.025", "C1_": "7.01±0.025",
+        "S_": "0.7", "rrc": "3.01", "Rc": "4.16",
+        "K_": "4", "tc": "1.234567",
+        "Dcp": "80±0.025", "Dc": "80±0.09", "Dc1": "50±0.08",
+    }
