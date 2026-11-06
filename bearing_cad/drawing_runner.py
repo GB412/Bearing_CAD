@@ -73,6 +73,17 @@ def _source_audit_cache_marker(bearing_type: str, evidence: dict | None) -> dict
     }}
 
 
+def _acb_cage_getter_cache_marker(bearing_type: str) -> dict:
+    """Ensure old ACB manifests cannot mask a revised 2D getter contract.
+
+    Immutable drawing bundles must be regenerated even when rounded TEXT
+    happens to be identical but the source provenance fields have changed.
+    Other bearing types preserve their previous cache identity.
+    """
+    return ({"acb_cage_getter_precision": "robas.public-getters.v1"}
+            if bearing_type == "rolling.angular_contact_ball" else {})
+
+
 def _digest(file: Path) -> str:
     h = sha256()
     with file.open("rb") as handle:
@@ -253,6 +264,7 @@ def generate_drawing_bundle(*, resources: Path, bridge: Path, output_root: Path,
         "variables": bridge_values(report), "engine": "robas.dwg.cadimport.v1.svgpreview.v3.variable-diagnostics.v1.standards.v1.design-values.v1",
         "radial_clearance_group": radial_clearance_group,
         **_source_audit_cache_marker(bearing_type, auto_evidence),
+        **_acb_cage_getter_cache_marker(bearing_type),
     }, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
     destination = target_root / identity
     if destination.exists():

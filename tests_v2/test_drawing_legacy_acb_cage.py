@@ -33,7 +33,7 @@ def report(names):
 def test_acb_cage_derives_actual_geometry_and_original_tolerances():
     values, evidence = derive_acb_cage_drawing_values(parameters=PARAMS, cage=cage())
     assert values["cage_pitch_d_mm"] == 54.
-    assert values["cage_pocket_spacing_mm"] == pytest.approx(57*math.sin(math.pi/11))
+    assert values["cage_pocket_spacing_mm"] == round(57*math.sin(math.pi/11), 3)
     assert values["cage_pocket_d_mm"] == pytest.approx(8.3)
     assert values["cage_outer_d_tolerance_mm"] == .074
     assert values["cage_inner_d_tolerance_mm"] == .074
@@ -84,3 +84,67 @@ def test_outside_original_range_does_not_fabricate_zero_tolerance():
         parameters=PARAMS, cage=cage(outside_d_mm=290))
     assert "cage_outer_d_tolerance_mm" not in values
     assert "ACB_CAGE_OUTER_TOLERANCE_UNDEFINED_IN_ROBAS" in evidence["warnings"]
+
+
+def test_acb_cage_getter_rounding_follows_original_setcadtextvalue_labels():
+    # StraightPocketCage.cs: PocketDiameter=round(...,1),
+    # PitchDiameter/PocketToPocketDistance=round(...,3).
+    # BaseCage.cs: OutsideDiameter/InsideDiameter/Width=round(...,2).
+    # Tolerance tables use the public rounded getter values, not raw inputs.
+    actual = cage(outside_d_mm=50.004, inner_d_mm=30.004,
+                  width_mm=10.004, pocket_clearance_mm=.15)
+    params = {**PARAMS, "pitch_d_mm":40.12345, "ball_d_mm":8.13}
+    values, evidence = derive_acb_cage_drawing_values(parameters=params, cage=actual)
+    assert values["cage_outer_d_mm"] == 50.0
+    assert values["cage_inner_d_mm"] == 30.0
+    assert values["cage_width_mm"] == 10.0
+    assert values["cage_pitch_d_mm"] == 40.123
+    assert values["cage_pocket_spacing_mm"] == round(50*math.sin(math.pi/11), 3)
+    assert values["cage_pocket_d_mm"] == 8.4
+    assert values["cage_outer_d_tolerance_mm"] == .062   # 50.00, not 50.004
+    assert values["cage_inner_d_tolerance_mm"] == .052   # 30.00, not 30.004
+    assert values["cage_width_tolerance_mm"] == .090     # 10.00, not 10.004
+    assert evidence["source_getter_precision_decimals"]["cage_pocket_d_mm"] == 1
+    # Original 3D CAD dimensions stay unchanged by label preparation.
+    assert actual.outside_d_mm == 50.004
+    assert actual.width_mm == 10.004
+
+    names = ["Dc","Dc_Lower","Dc1","Dc1_Lower","Bc","Bc_Lower",
+             "Bca","Dcp","C_","Deltac","Deltac_Upper","e_"]
+    rows = apply_angular_contact_dimensions(
+        report=report(names), parameters=params, legacy_values=values)
+    labeled = {row["name"]:row["value"] for row in rows["variables"]}
+    assert labeled["Dc"] == "50"
+    assert labeled["Dc_Lower"] == "-0.062"
+    assert labeled["Dc1"] == "30"
+    assert labeled["Dc1_Lower"] == "-0.052"
+    assert labeled["Bc"] == "10"
+    assert labeled["Bc_Lower"] == "-0.09"
+    assert labeled["Bca"] == "5"
+    assert labeled["Dcp"] == "40.123±0.015"
+    assert labeled["C_"] == f"{values['cage_pocket_spacing_mm']}±0.05"
+    assert labeled["Deltac"] == "8.4"
+    assert labeled["Deltac_Upper"] == "+0.1"
+    assert labeled["e_"] is None  # Current OCCT cage has no source chamfer.
+
+
+def test_acb_source_tolerance_undefined_even_after_getter_rounding():
+    # Do not fabricate the source's fallback 0 outside its defined table.
+    actual = cage(outside_d_mm=250.006)
+    values, evidence = derive_acb_cage_drawing_values(parameters=PARAMS,cage=actual)
+    assert values["cage_outer_d_mm"] == 250.01
+    assert "cage_outer_d_tolerance_mm" not in values
+    assert "ACB_CAGE_OUTER_TOLERANCE_UNDEFINED_IN_ROBAS" in evidence["warnings"]
+
+
+@pytest.mark.parametrize("ball_diameter, expected", [
+    (18.0004, .10), (18.0006, .15),
+])
+def test_acb_cage_pocket_tolerance_uses_robas_three_decimal_ball_getter(
+        ball_diameter, expected):
+    # BallRoller.BallDiameter rounds to 0.001 mm, then
+    # StraightPocketCage.DeterminePocketDiameterUpperDeviation checks <= 18.
+    values, _ = derive_acb_cage_drawing_values(
+        parameters={**PARAMS, "ball_d_mm": ball_diameter},
+        cage=cage())
+    assert values["cage_pocket_d_upper_tolerance_mm"] == expected
