@@ -145,11 +145,13 @@ def derive_dgb_drawing_values(*, parameters: dict,
     else:
         updates["outer_groove_d_mm"] = Dpw + Dw + radial
 
-    # RoBAS/Core/BallBearing/DeepGroveBallBearing/DGBGeometry.cs:53-91
-    # uses Dpw=(D+d)/2, then d2=di+(0.35 or 0.40)*Dw and
-    # Dd2=De-(0.35 or 0.40)*Dw. BallGeometry publishes mm getters rounded
-    # to 0.01. These SOURCE values must never silently overwrite a different
-    # user-selected OCCT shoulder: the actual 3D shoulder is authoritative.
+    # RoBAS DGBGeometry.cs:53-91 defines the nominal Dpw and shoulder rules.
+    # The original DGBGeometry path mixes metres with the millimetre result
+    # of DGBOptimizer.CalcuRadialClearance; use the original *millimetre*
+    # SingleRowDeepGroove{Inner,Outer}Race constructors (lines 88-111)
+    # to interpret the same nominal equations without that unit defect.
+    # BallGeometry publishes mm getters rounded to 0.01. These reference
+    # values must never overwrite a different user-selected OCCT shoulder.
     source_shoulder_reference = {}
     source_shoulder_match = {}
     D = _number(p["outside_d_mm"], "outside_d_mm")

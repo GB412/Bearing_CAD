@@ -5,7 +5,9 @@
 本轮核对了用户上传的原始 `RoBAS(1).zip`：
 `Controls/DeepGrooveBallServer/DeepGrooveBallBearingServer.cs:SetCADTextValue()`
 （原版约 592–1180 行）、`Core/BallBearing/DeepGroveBallBearing/DGBGeometry.cs:53–99`，
-以及 `Core/BallBearing/BallGeometry.cs` 对毫米尺寸的两位小数 getter。
+以及 `Core/BallBearing/BallGeometry.cs` 对毫米尺寸的两位小数 getter；
+同时核对 `BearingModel/Race/{InnerRace,OuterRace}/SingleRowDeepGroove*.cs`
+以毫米为单位的独立构造函数（原版约 88–111 行）。
 
 **不是重新绘制 DWG**。仍由原版 SQLite 变量表、CADImport 逐项 `CADText.Text`
 替换完成 DXF；未验证的制造公差、额定载荷和缺失源数据不得伪填。
@@ -29,7 +31,14 @@
 
 ## 本轮源公式补充
 
-RoBAS `DGBGeometry` 的源值（毫米）：
+**原版来源存在单位冲突，必须明确选择路径。** `DGBGeometry` 内部尺寸以米
+存储，却将 `DGBOptimizer.CalcuRadialClearance` 返回的毫米值直接加到
+`outerRaceGrooveDiameter`（原始 `DGBGeometry.cs:67–68`）。
+另一条原版 `SingleRowDeepGrooveOuterRace` 构造函数使用毫米参数，
+直接调用相同游隙计算函数，量纲一致。**本 PR 参考后者和现有 Python 毫米归一化逻辑**，
+不是声称原版上述混合单位路径本身正确，也没有偷偷修改原版软件。
+
+采用该原版毫米路径、并以 `DGBGeometry` 的节圆构造约定为前提，参考值为：
 
 - `Dpw = (d + D) / 2`
 - `di = Dpw - Dw`
@@ -40,7 +49,7 @@ RoBAS `DGBGeometry` 的源值（毫米）：
   `SetCADTextValue` 输出时 `Dd2/d2` 用 `f1` 标注，公差通过
   `DetermineSidewallDiameterTolerance` 分段表形成。
 
-新代码为当前设计计算原版理论 `Dd2/d2` 参考值，并写入
+新代码按照**原版毫米构造路径**为当前设计计算 `Dd2/d2` 参考值，并写入
 `legacy_design_evidence.original_source_shoulder_mm` 与
 `original_source_shoulder_matches_cad`。
 **只有原版节圆和实际三维挡肩同时匹配时才把源值作为标注来源。**
