@@ -206,13 +206,19 @@ def derive_dgb_drawing_values(*, parameters: dict,
             raise DrawingDataError("Stamped cage must straddle ball pitch diameter")
         # The current 3D stamping shell explicitly uses Rc=Dw/2+pocket clearance.
         # RoBAS's *default* Rc=0.55 Dw is not silently applied to this model.
+        # Public StampingCage getters control drawing tolerance thresholds.
+        dcp_source = _source_mm(Dpw, 1, "cage pitch diameter")
+        dc_source = _source_mm(Dc, 1, "cage outside diameter")
+        di_source = _source_mm(dc, 1, "cage inside diameter")
+        s_source = _source_mm(S, 1, "cage board thickness")
+        rc_source = _source_mm(Rc, 2, "cage sphere radius")
         updates.update({
             "cage_pitch_d_mm": Dpw,
-            "cage_pitch_tolerance_mm": .025 if Dpw <= 80 else .05,
+            "cage_pitch_tolerance_mm": .025 if dcp_source <= 80 else .05,
             "cage_outer_d_mm": Dc,
-            "cage_outer_tolerance_mm": _cage_diameter_tolerance(Dc),
+            "cage_outer_tolerance_mm": _cage_diameter_tolerance(dc_source),
             "cage_inner_d_mm": dc,
-            "cage_inner_tolerance_mm": _cage_diameter_tolerance(dc),
+            "cage_inner_tolerance_mm": _cage_diameter_tolerance(di_source),
             "cage_board_thickness_mm": S,
             "cage_sphere_radius_mm": Rc,
             "cage_sphere_upper_tolerance_mm": _pocket_tolerance(Dw),
@@ -268,7 +274,7 @@ def derive_dgb_drawing_values(*, parameters: dict,
         else:
             warnings.append("STAMPING_SOURCE_MODEL_NOT_SELECTED_FOR_K_RRC")
 
-        rivet_tol = _rivet_tolerances(2 * S)
+        rivet_tol = _rivet_tolerances(2 * s_source)
         if rivet_tol:
             updates["rivet_hole_upper_tolerance_mm"] = rivet_tol[0]
             updates["rivet_hole_lower_tolerance_mm"] = rivet_tol[1]
@@ -277,14 +283,9 @@ def derive_dgb_drawing_values(*, parameters: dict,
         # Original StampingCage.CalculateWeight nominal/empirical equation.
         # Source StampingCage getters: Dcp, Dc, dc, S to 0.1 mm;
         # SphereRadius to 0.01 mm. Do not round the 3D cage geometry.
-        dcp_mass = _source_mm(Dpw, 1, "cage pitch diameter")
-        dc_mass = _source_mm(Dc, 1, "cage outside diameter")
-        di_mass = _source_mm(dc, 1, "cage inside diameter")
-        rc_mass = _source_mm(Rc, 2, "cage sphere radius")
-        s_mass = _source_mm(S, 1, "cage board thickness")
-        cage_mass = (10.35 * (dcp_mass + .36388 * count *
-                              (rc_mass + .5 * s_mass)) *
-                     (dc_mass - di_mass) * s_mass / 1_000_000)
+        cage_mass = (10.35 * (dcp_source + .36388 * count *
+                              (rc_source + .5 * s_source)) *
+                     (dc_source - di_source) * s_source / 1_000_000)
         if cage_mass > 0 and math.isfinite(cage_mass):
             updates["half_cage_weight_kg"] = cage_mass
     else:
