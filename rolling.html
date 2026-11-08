@@ -84,6 +84,35 @@
             </div>
             <p class="hint">仅迁移 DGB 优化的第一阶段。候选由用户确认后应用到完整 CAD 参数；三维和二维均需重新点击生成。尚未进行拟静力学求解或制造审核。</p>
           </div>
+          <div id="acbOptimizationPanel" hidden>
+            <div class="section-heading">RoBAS 多目标优化 · 角接触球</div>
+            <p class="hint">先填写 d/D/B、接触角和保持架材料；接触角只支持原版已审核的 15°/25°/40°。原版还需要预载荷 Fa（N）。候选不自动修改设计，精度等级及轴承型号在二维图纸设置中指定。</p>
+            <div class="buttonrow">
+              <button type="button" id="editACBOptimizationContext" class="secondary">设置轴承型号 / 精度等级（转到二维设置）</button>
+            </div>
+            <div class="optimization-weights">
+              <label class="field" for="acbPreloadN">预载荷 Fa（N）
+                <input id="acbPreloadN" type="number" min="0.001" step="any" value="100">
+              </label>
+              <label class="field" for="acbSpinWeight">旋滚比权重
+                <input id="acbSpinWeight" type="number" min="0" max="1" step="0.05" value="0.3">
+              </label>
+              <label class="field" for="acbAxialStiffnessWeight">轴向刚度 Ka 权重
+                <input id="acbAxialStiffnessWeight" type="number" min="0" max="1" step="0.05" value="0.3">
+              </label>
+              <label class="field" for="acbDynamicLoadWeight">额定动载荷 Cr 权重
+                <input id="acbDynamicLoadWeight" type="number" min="0" max="1" step="0.05" value="0.4">
+              </label>
+            </div>
+            <div class="buttonrow">
+              <button id="runRoBASACBOptimizer" type="button" class="secondary" disabled>生成角接触球优化候选（不修改设计）</button>
+            </div>
+            <div id="acbOptimizationResults" class="optimization-results" hidden>
+              <p id="acbOptimizationHint" class="hint" role="status"></p>
+              <div id="acbOptimizationCandidates" class="optimization-candidates"></div>
+            </div>
+            <p class="hint">原版 ACBOptimizer 以较大旋滚比为高得分，其工程优化方向需后续专业审核；此处只做原版算法候选比较。原版保持架优化与当前 CAD 保持架几何尚未对齐，因此本阶段请先关闭保持架，确认候选后再考虑保持架方案。</p>
+          </div>
           <div class="section-heading">尺寸调整</div>
           <div class="scale-tools">
             <label class="field" for="scaleTarget">目标内径 d（mm）
