@@ -197,3 +197,16 @@ def test_cli_inspect_reports_mismatched_source_instead_of_executing(source, caps
                  "--input", str(data), "--family", "ball"])
     assert code == 2
     assert "SHA-256 differs" in capsys.readouterr().err
+
+def test_failed_process_start_is_never_marked_executed(source, tmp_path):
+    root, data, digest = source
+    _input_data(data)
+    def broken_launcher(exe, cwd, timeout):
+        raise OSError("load failure")
+    result = run_probe(
+        resources=root, input_path=data, family="ball",
+        output_dir=tmp_path / "out", expected_sha=digest,
+        _platform="Windows", _launcher=broken_launcher)
+    assert result["output_status"] == "PROCESS_START_FAILED"
+    assert result["solver_executed"] is False
+    assert result["solver_converged"] is None

@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 from hashlib import sha256
 import json
-import os
 from pathlib import Path
 import platform
 import re
@@ -215,6 +214,7 @@ def run_probe(*, resources: str | Path, input_path: str | Path,
     except subprocess.TimeoutExpired:
         report["output_status"] = "PROCESS_TIMEOUT"
     except OSError as exc:
+        report["solver_executed"] = False
         report["output_status"] = "PROCESS_START_FAILED"
         report["process_error"] = type(exc).__name__
     for name in ("OUT.txt", "PRINT.txt", "a0_Final", "process.log"):
