@@ -56,7 +56,7 @@ def _initial(data) -> dict:
         raise OptimizationError(
             "ACB cage must be recalculated after ball optimization; disable it "
             "until a source-backed cage adapter is verified", "/initial/cage")
-    if data["cage_material"] not in _MATERIALS or type(data["cage_material"]) is not str:
+    if type(data["cage_material"]) is not str or data["cage_material"] not in _MATERIALS:
         raise OptimizationError("Choose original engineering_plastic or phenolic material",
                                 "/initial/cage_material")
     cleaned = {"bearing_type": data["bearing_type"], "cage": None,
@@ -207,9 +207,13 @@ def optimize_acb_candidates(*, resources: Path, initial: dict,
     root = Path(resources)
     table = root / "Resource" / "BallDB.csv"
     coefficient = root / "Resource" / "球轴承零件相关系数.csv"
+    source_hashes = {}
     for path in (table, coefficient):
         if path.is_symlink() or not path.is_file():
             raise OptimizationError("Missing original RoBAS CSV: " + path.name)
+        if path.stat().st_size > 1_000_000:
+            raise OptimizationError("Unexpectedly large RoBAS CSV: " + path.name)
+        source_hashes[path.name] = sha256(path.read_bytes()).hexdigest()
     try:
         rows = _read(table, ("diameter(mm)",))
     except (ValueError, OSError, UnicodeError) as error:
@@ -305,6 +309,7 @@ def optimize_acb_candidates(*, resources: Path, initial: dict,
         "source_initial_hash": request_id,
         "source_model": options["model"],
         "optimization": options,
+        "source_csv_sha256": source_hashes,
         "total_valid_candidates": len(candidates),
         "candidates": selected,
         "source_basis": [
