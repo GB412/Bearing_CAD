@@ -147,15 +147,15 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
                 return create_drawing(self, data, root, robas_resources,
                                       cadimport_bridge, build_lock)
             if route == "/api/v2/cad/optimization/dgb":
-                if not isinstance(data, dict) or set(data) != {"design", "optimization"}:
+                if not isinstance(data, dict) or set(data) != {"initial", "optimization"}:
                     return self._error(422, "PARAMETER_INVALID",
-                                       "Expected design and optimization objects")
+                                       "Expected initial and optimization objects")
                 if robas_resources is None:
                     return self._error(503, "ROBAS_RESOURCES_UNAVAILABLE",
                                        "Configure --robas-resources to enable RoBAS optimization")
                 try:
                     candidates = optimize_dgb_candidates(
-                        resources=robas_resources, design=data["design"],
+                        resources=robas_resources, initial=data["initial"],
                         optimization=data["optimization"])
                 except ContractError as error:
                     return self._error(422, error.error_code, str(error), error.field_path)
