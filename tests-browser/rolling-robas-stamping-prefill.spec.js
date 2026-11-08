@@ -49,7 +49,7 @@ test('source RoBAS stamped-cage prefill is opt-in, separate from drawing model',
  await expect(page.locator('#cage-rivet_shaft_d_mm')).toHaveValue('1');
  await expect(page.locator('#cage-rivet_head_d_mm')).toHaveValue('1.6');
  await expect(page.locator('#cage-rivet_hole_clearance_mm')).toHaveValue('0.05');
- await expect(page.locator('#drawingModel')).toHaveValue('6208');
+ await expect(page.locator('#drawingModel')).toHaveValue('6008');
  expect(requests).toEqual([{
   bearing_type:'rolling.deep_groove_ball',
   bearing_model:'6008',

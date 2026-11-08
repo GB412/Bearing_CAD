@@ -143,3 +143,35 @@ def test_all_three_source_standard_getter_contracts_bump_drawing_cache_keys():
             "robas_standard_lookup_getter":"bearing-diameter.v2",
         }
     assert _robas_standard_getter_cache_marker("unknown") == {}
+
+
+def test_nup_fifth_sheet_is_required_in_cached_artifact(tmp_path):
+    import json
+    from bearing_cad.drawing_runner import (
+        SHEETS_NUP, DrawingExportError, verify_drawing_bundle, _digest)
+    folder = tmp_path / "nup-evidence"
+    folder.mkdir()
+    sheets = []
+    for view in SHEETS_NUP:
+        path = folder / (view + ".dxf")
+        path.write_bytes(b"DXF test payload: " + view.encode("ascii"))
+        sheets.append({
+            "view": view, "file": path.name,
+            "size_bytes": path.stat().st_size,
+            "sha256": _digest(path),
+            "template_file": ("NUP-12.dwg" if view == "loose_rib"
+                              else "source.dwg"),
+        })
+    manifest = {
+        "schema_version": "robas.drawing.bundle.v1",
+        "bundle_key": "fake-nup", "bearing_type": "rolling.cylindrical_roller",
+        "configuration": "NUP", "sheets": sheets,
+    }
+    (folder / "drawing_manifest.json").write_text(
+        json.dumps(manifest), encoding="utf-8")
+    assert verify_drawing_bundle(folder, "fake-nup")["sheets"][-1]["view"] == "loose_rib"
+    manifest["sheets"] = manifest["sheets"][:-1]
+    (folder / "drawing_manifest.json").write_text(
+        json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(DrawingExportError, match="Unexpected drawing-sheet order"):
+        verify_drawing_bundle(folder, "fake-nup")

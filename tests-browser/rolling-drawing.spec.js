@@ -54,7 +54,8 @@ test('2D drawing generation opens the large preview workspace and supports sheet
     }
     if (path === '/api/v2/cad/drawings' && request.method() === 'POST') {
       const body = request.postDataJSON();
-      expect(body.drawing.model).toBe('6208');
+      expect(body.drawing.model).toBe('6008');
+      expect(body.drawing.diameter_series).toBe('0');
       expect(body.drawing.radial_clearance_group).toBe('C0');
       expect(body.design.schema_version).toBe('bearing-cad.request.v1');
       return route.fulfill({status: 201, json: {
@@ -68,8 +69,13 @@ test('2D drawing generation opens the large preview workspace and supports sheet
           request_hash: 'd'.repeat(64),
           unfilled_template_variable_count: 2,
           unfilled_database_unused_count: 54,
+          drawing_model_consistency: {warnings: ['MODEL_CATALOG_UNAVAILABLE']},
+          suspected_unmapped_template_text_occurrences: 2,
           sheets: sheets.map(([view, file, preview_file]) => ({
             view, file, preview_file,
+            suspected_unmapped_text_diagnostics: view === 'outer_ring'
+              ? [{text: '@DdS', occurrences: 2,
+                  reason: 'POSSIBLE_CASE_MISMATCH_WITH_SOURCE_VARIABLE'}] : [],
             variable_diagnostics: {
               unfilled_variable_count: view === 'assembly' ? 2 : 0,
               unfilled_variable_names: view === 'assembly' ? ['C_', 'W01'] : [],
@@ -108,12 +114,15 @@ test('2D drawing generation opens the large preview workspace and supports sheet
   await expect(page.locator('#drawingSheetTabs [role="tab"]')).toHaveCount(4);
   await expect(page.locator('#drawingSheetTitle')).toHaveText('总装图');
   await expect(page.locator('#drawingWorkspaceSubtitle')).toContainText('模板实际命中空变量 2 项');
+  await expect(page.locator('#drawingWorkspaceSubtitle')).toContainText('型号/尺寸来源尚未完整核实');
+  await expect(page.locator('#drawingWorkspaceSubtitle')).toContainText('疑似残留占位文字 2 处');
   await expect(page.locator('#drawingSheetDiagnostics')).toContainText('C_、W01');
   await expect(page.locator('#drawingDownloadCurrent')).toHaveAttribute('download', 'assembly.dxf');
 
   await page.locator('#drawingSheetTabs [data-sheet-key="outer_ring"]').click();
   await expect(page.locator('#drawingSheetTitle')).toHaveText('外圈图');
   await expect(page.locator('#drawingSheetDiagnostics')).toContainText('均有值');
+  await expect(page.locator('#drawingSheetDiagnostics')).toContainText('@DdS');
   await expect(page.locator('#drawingDownloadCurrent')).toHaveAttribute('download', 'outer_ring.dxf');
 
   await page.locator('#drawingZoomIn').click();
