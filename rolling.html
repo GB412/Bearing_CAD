@@ -63,6 +63,26 @@
                     title="需要通过 --robas-resources 指定原版资源目录">RoBAS DGBGeometry 候选预填</button>
           </div>
           <p class="hint">只迁移原版 DGBGeometry 初始构造路径，不运行 DGBOptimizer。简化保持架尺寸可预填；冲压双半笼请单独选择原版系列并显式设置 CAD 铆钉孔净距。</p>
+          <div id="dgbOptimizationPanel">
+            <div class="section-heading">RoBAS 多目标优化 · 深沟球</div>
+            <p class="hint">初始设计仅需上面的 d / D / B，以及右侧图纸设置中的型号、精度等级和游隙组。无需先确定钢球数量与沟道。原版 DGBOptimizer 候选搜索，优化目标为 Cr 与经验径向刚度；不会自行改动模型。</p>
+            <div class="optimization-weights">
+              <label class="field" for="optimizerCrWeight">动载荷 Cr 权重
+                <input id="optimizerCrWeight" type="number" min="0" max="1" step="0.05" value="0.8">
+              </label>
+              <label class="field" for="optimizerStiffnessWeight">径向刚度权重
+                <input id="optimizerStiffnessWeight" type="number" min="0" max="1" step="0.05" value="0.2">
+              </label>
+            </div>
+            <div class="buttonrow">
+              <button id="runRoBASOptimizer" type="button" class="secondary" disabled>生成优化候选（不修改设计）</button>
+            </div>
+            <div id="optimizationResults" class="optimization-results" hidden>
+              <p id="optimizationHint" class="hint" role="status"></p>
+              <div id="optimizationCandidates" class="optimization-candidates"></div>
+            </div>
+            <p class="hint">仅迁移 DGB 优化的第一阶段。候选由用户确认后应用到完整 CAD 参数；三维和二维均需重新点击生成。尚未进行拟静力学求解或制造审核。</p>
+          </div>
           <div class="section-heading">尺寸调整</div>
           <div class="scale-tools">
             <label class="field" for="scaleTarget">目标内径 d（mm）
