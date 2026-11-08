@@ -40,7 +40,12 @@ def _input_data(path, family="ball", *, mode="-1"):
         "'" + rec + "'," + (mode if n == 0 else "0") + ",1"
         for n, rec in enumerate(_RECORDS[family])
     ]
-    path.write_text("\r\n".join(lines) + "\r\n", encoding="utf-8")
+    # Preserve the requested CRLF bytes on Windows; text-mode newline
+    # translation would otherwise turn each LF into CRCRLF.
+    with path.open("w", encoding="utf-8", newline="") as stream:
+        stream.write("\r\n".join(lines) + "\r\n")
+    assert path.read_bytes().count(b"\r\n") == len(lines)
+    assert b"\r\r\n" not in path.read_bytes()
     return path
 
 
