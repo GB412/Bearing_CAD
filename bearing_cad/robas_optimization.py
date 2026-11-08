@@ -16,7 +16,7 @@ import math
 from pathlib import Path
 import re
 
-from .contracts import BearingRequest, BearingType, ContractError, parse_request
+from .contracts import BearingType, ContractError, parse_request
 from .drawing_consistency import audit_drawing_design
 from .drawing_legacy_ratings import _coefficients
 from .drawing_standards import original_dotnet_math_round
@@ -71,6 +71,47 @@ def _validate_options(data) -> dict:
                         ("dynamic_load", "radial_stiffness")}}
 
 
+def _initial_envelope(data) -> dict:
+    """Only original optimization inputs, never a complete CAD geometry."""
+    expected = {"bearing_type", "bore_d_mm", "outside_d_mm", "width_mm", "cage"}
+    if type(data) is not dict or set(data) != expected:
+        raise OptimizationError(
+            "Expected bearing_type, bore_d_mm, outside_d_mm, width_mm and cage",
+            "/initial")
+    if data["bearing_type"] != BearingType.DEEP_GROOVE.value:
+        raise OptimizationError("Only DGB is implemented in this optimization PR",
+                                "/initial/bearing_type")
+    result = {"bearing_type": data["bearing_type"]}
+    for key in ("bore_d_mm", "outside_d_mm", "width_mm"):
+        value = data[key]
+        if (type(value) not in (float, int) or not math.isfinite(value)
+                or not 0 < value <= 1000):
+            raise OptimizationError("Expected positive finite CAD envelope dimension",
+                                    "/initial/" + key)
+        result[key] = float(value)
+    if result["bore_d_mm"] >= result["outside_d_mm"]:
+        raise OptimizationError("Outer diameter must exceed bore",
+                                "/initial/outside_d_mm")
+    cage = data["cage"]
+    if cage is None:
+        result["cage"] = None
+    elif (type(cage) is dict and set(cage) == {"kind", "pocket_clearance_mm"}
+          and cage["kind"] == "simplified_annular"
+          and type(cage["pocket_clearance_mm"]) in (float, int)
+          and math.isfinite(cage["pocket_clearance_mm"])
+          and 0 < cage["pocket_clearance_mm"] <= 1000):
+        result["cage"] = {
+            "kind": "simplified_annular",
+            "pocket_clearance_mm": float(cage["pocket_clearance_mm"]),
+        }
+    else:
+        raise OptimizationError(
+            "Only no cage or simplified_annular can be optimized; "
+            "stamped cage must be recomputed separately",
+            "/initial/cage")
+    return result
+
+
 def _source_bounds(model: str, bore: float) -> tuple[float, float, float, float]:
     """RoBAS DGBOptimizer.SetCoeffccient: Kwmin/Kwmax/Phimax/Kd."""
     if not 0 < bore <= 240:
@@ -104,18 +145,15 @@ def _nearest_diameter(values: list[float], target: float) -> float:
     return min(values, key=lambda value: abs(1 - target / value))
 
 
-def _candidate_design(request: BearingRequest, ball: float, count: int,
+def _candidate_design(initial: dict, ball: float, count: int,
                       pitch: float, clearance: float, kd: float) -> dict | None:
-    params = dict(request.parameters)
     bore, outside, width = (
-        float(params["bore_d_mm"]), float(params["outside_d_mm"]),
-        float(params["width_mm"]))
+        initial["bore_d_mm"], initial["outside_d_mm"], initial["width_mm"])
     ir, or_ = .51 * ball, .53 * ball
     inner_groove_d = pitch - ball
     outer_groove_d = pitch + ball + clearance
     inner_shoulder = inner_groove_d + kd * ball
     outer_shoulder = outer_groove_d - kd * ball
-
     if not (bore < inner_shoulder < pitch < outer_shoulder < outside):
         return None
     if not (pitch / 2 - ir > bore / 2 and
@@ -123,22 +161,21 @@ def _candidate_design(request: BearingRequest, ball: float, count: int,
             pitch * math.sin(math.pi / count) > ball):
         return None
 
-    params.update({
+    params = {
+        "bore_d_mm": bore, "outside_d_mm": outside, "width_mm": width,
         "ball_d_mm": ball, "ball_count": count, "pitch_d_mm": pitch,
         "inner_groove_radius_mm": ir, "outer_groove_radius_mm": or_,
         "inner_shoulder_d_mm": inner_shoulder,
         "outer_shoulder_d_mm": outer_shoulder,
-    })
-    design = json.loads(request.canonical_json())
-    design["parameters"] = params
-    if request.cage is not None:
-        if request.cage.kind != "simplified_annular":
-            raise OptimizationError(
-                "Stamped cage geometry must be recomputed separately; "
-                "disable the cage or select simplified_annular first",
-                "/design/cage/kind")
-        inner_cage = 1.02 * inner_shoulder
-        outer_cage = .98 * outer_shoulder
+    }
+    design = {
+        "schema_version": "bearing-cad.request.v1",
+        "bearing_type": BearingType.DEEP_GROOVE.value,
+        "unit": "mm", "detail_level": "functional",
+        "geometry_strategy": "explicit", "parameters": params,
+    }
+    if initial["cage"] is not None:
+        inner_cage, outer_cage = 1.02 * inner_shoulder, .98 * outer_shoulder
         if not inner_shoulder < inner_cage < outer_cage < outer_shoulder:
             return None
         design["cage"] = {
@@ -146,7 +183,7 @@ def _candidate_design(request: BearingRequest, ball: float, count: int,
             "inner_d_mm": inner_cage,
             "outside_d_mm": outer_cage,
             "width_mm": .95 * width,
-            "pocket_clearance_mm": request.cage.pocket_clearance_mm,
+            "pocket_clearance_mm": initial["cage"]["pocket_clearance_mm"],
         }
     try:
         parse_request(design)
@@ -155,22 +192,14 @@ def _candidate_design(request: BearingRequest, ball: float, count: int,
     return design
 
 
-def optimize_dgb_candidates(*, resources: Path, design: dict,
+def optimize_dgb_candidates(*, resources: Path, initial: dict,
                             optimization: dict) -> dict:
-    """Return top source-scored geometry candidates without applying any."""
+    """Search from d/D/B and approved options; CAD fields need not exist yet."""
     options = _validate_options(optimization)
-    if not isinstance(design, dict):
-        raise OptimizationError("Expected a complete current CAD design request",
-                                "/design")
-    request = parse_request(design)
-    if request.bearing_type != BearingType.DEEP_GROOVE:
-        raise OptimizationError(
-            "Only DGB multi-objective optimizer is migrated in this PR",
-            "/design/bearing_type")
-    if request.cage is not None and request.cage.kind != "simplified_annular":
-        raise OptimizationError(
-            "The optimizer cannot reuse an unchanged stamped cage for a new ball arrangement",
-            "/design/cage/kind")
+    initial = _initial_envelope(initial)
+    initial_hash = hashlib.sha256(json.dumps(
+        initial, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
 
     root = Path(resources)
     table = root / "Resource" / "BallDB.csv"
@@ -187,12 +216,11 @@ def optimize_dgb_candidates(*, resources: Path, design: dict,
     if len(balls) < 5 or any(a >= b for a, b in zip(balls, balls[1:])):
         raise OptimizationError("RoBAS BallDB.csv must contain ascending unique diameters")
 
-    bore = float(request.parameters["bore_d_mm"])
-    outside = float(request.parameters["outside_d_mm"])
-    width = float(request.parameters["width_mm"])
+    bore = initial["bore_d_mm"]
+    outside = initial["outside_d_mm"]
     catalog = audit_drawing_design(
-        resources=root, bearing_type=request.bearing_type.value,
-        parameters=dict(request.parameters),
+        resources=root, bearing_type=initial["bearing_type"],
+        parameters=initial,
         model_label=options["model"] + "/" + options["accuracy_class"],
         configuration=None, accuracy_class=options["accuracy_class"],
         diameter_series=options["model"][1])
@@ -229,7 +257,7 @@ def optimize_dgb_candidates(*, resources: Path, design: dict,
                 if not 180 <= fill_angle <= phi_max:
                     continue
                 candidate_design = _candidate_design(
-                    request, ball, count, pitch, radial_clearance, kd)
+                    initial, ball, count, pitch, radial_clearance, kd)
                 if candidate_design is None:
                     continue
                 gamma = original_dotnet_math_round(ball / pitch, 2)
@@ -245,7 +273,7 @@ def optimize_dgb_candidates(*, resources: Path, design: dict,
                            for value in (cr, cor, radial_stiffness)):
                     continue
                 candidate_id = hashlib.sha256(
-                    (request.request_hash + json.dumps(
+                    (initial_hash + json.dumps(
                         candidate_design["parameters"], sort_keys=True)).encode()
                 ).hexdigest()[:16]
                 results.append({
@@ -283,8 +311,8 @@ def optimize_dgb_candidates(*, resources: Path, design: dict,
         "schema_version": "bearing-cad.robas-dgb-optimization.v1",
         "candidate_only": True,
         "applied": False,
-        "bearing_type": request.bearing_type.value,
-        "source_design_hash": request.request_hash,
+        "bearing_type": initial["bearing_type"],
+        "source_initial_hash": initial_hash,
         "source_model": options["model"],
         "optimization": options,
         "source_catalog_evidence": catalog,
