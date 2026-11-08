@@ -618,6 +618,9 @@ $('generate').addEventListener('click',generate);
 $('applyRoBASGeometry').addEventListener('click',applyRoBASGeometry);
 $('applyRoBASStamping').addEventListener('click',applyRoBASStamping);
 $('runRoBASOptimizer').addEventListener('click',runRoBASOptimizer);
+$('editOptimizationContext').addEventListener('click',()=>{
+ $('workspace2dTab').click();
+});
 for(const id of ['drawingModel','drawingAccuracy','drawingClearance',
                  'optimizerCrWeight','optimizerStiffnessWeight']){
  $(id).addEventListener('input',clearOptimizationCandidates);
