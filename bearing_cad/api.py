@@ -21,6 +21,8 @@ from .contracts import ContractError, parse_request, MAX_ROLLING_ELEMENTS, MAX_C
 from .drawing_http import drawing_status, create_drawing, serve_drawing
 from .robas_sizing import dgb_geometry_profile
 from .robas_stamping import robas_stamping_profile
+from .robas_optimization import optimize_dgb_candidates, OptimizationError
+from .drawing_variables import DrawingDataError
 
 _MAX_BODY = 16 * 1024
 _MAX_JOBS = 128
@@ -110,7 +112,8 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
             if not self._host_allowed():
                 return self._error(403, "HOST_FORBIDDEN", "Invalid loopback host")
             route = self._route()
-            if route not in ("/api/v2/cad/jobs", "/api/v2/cad/drawings", "/api/v2/cad/sizing/dgb-geometry", "/api/v2/cad/sizing/dgb-stamping"):
+            if route not in ("/api/v2/cad/jobs", "/api/v2/cad/drawings", "/api/v2/cad/sizing/dgb-geometry", "/api/v2/cad/sizing/dgb-stamping",
+                             "/api/v2/cad/optimization/dgb"):
                 return self._error(404, "NOT_FOUND", "Unknown route")
             if not self._origin_allowed():
                 return self._error(403, "ORIGIN_FORBIDDEN", "A same-origin browser request is required")
@@ -143,6 +146,23 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
             if route == "/api/v2/cad/drawings":
                 return create_drawing(self, data, root, robas_resources,
                                       cadimport_bridge, build_lock)
+            if route == "/api/v2/cad/optimization/dgb":
+                if not isinstance(data, dict) or set(data) != {"design", "optimization"}:
+                    return self._error(422, "PARAMETER_INVALID",
+                                       "Expected design and optimization objects")
+                if robas_resources is None:
+                    return self._error(503, "ROBAS_RESOURCES_UNAVAILABLE",
+                                       "Configure --robas-resources to enable RoBAS optimization")
+                try:
+                    candidates = optimize_dgb_candidates(
+                        resources=robas_resources, design=data["design"],
+                        optimization=data["optimization"])
+                except ContractError as error:
+                    return self._error(422, error.error_code, str(error), error.field_path)
+                except (OptimizationError, DrawingDataError) as error:
+                    return self._error(422, "OPTIMIZATION_INVALID", str(error),
+                                       getattr(error, "field_path", "/optimization"))
+                return self._respond(200, candidates)
             if route == "/api/v2/cad/sizing/dgb-geometry":
                 expected = {"bearing_type", "bore_d_mm", "outside_d_mm", "width_mm"}
                 if not isinstance(data, dict) or set(data) != expected:
@@ -281,8 +301,13 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
                                 if robas_resources is not None else None)
                 sizing_available = bool(sizing_table and sizing_table.is_file()
                                         and not sizing_table.is_symlink())
+                optimization_available = bool(
+                    sizing_available and robas_resources and (
+                        robas_resources / "Resource" / "球轴承零件相关系数.csv"
+                    ).is_file())
                 return self._respond(200, {"available": True, "mode": "loopback_synchronous",
                                            "robas_sizing_available": sizing_available,
+                                           "robas_optimization_available": optimization_available,
                                            "robas_stamping_available": True,
                                            "supported_bearings": ["rolling.deep_groove_ball",
                                                                   "rolling.cylindrical_roller",
