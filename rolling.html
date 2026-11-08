@@ -113,6 +113,20 @@
             </div>
             <p class="hint">原版 ACBOptimizer 以较大旋滚比为高得分，其工程优化方向需后续专业审核；此处只做原版算法候选比较。原版保持架优化与当前 CAD 保持架几何尚未对齐，因此本阶段请先关闭保持架，确认候选后再考虑保持架方案。</p>
           </div>
+          <div id="crbOptimizationPanel" hidden>
+            <div class="section-heading">RoBAS 候选优化 · 圆柱滚子</div>
+            <p class="hint">以当前 d / D / B、N / NU / NJ / NF / NUP 挡边构型、径向净距、端部净距、挡边宽度及滚子轮廓为约束，搜索标准滚子直径 Dw、长度 Lw、数量 Z 和节圆 Dpw。只按原版额定动载荷 Cr 排序；师兄原版径向刚度 Kr 函数返回 0，本阶段明确不参与评价。</p>
+            <div class="buttonrow"><button id="editCRBOptimizationContext" type="button" class="secondary">填写 N 系列轴承型号和精度等级（转到二维设置）</button></div>
+            <p class="hint">源 CRBOptimizer 没有可用的 Kr 公式，因此目前是 **单目标 Cr 推荐**，不是双目标。保留当前 CAD 的径向/轴向净距和滚子端部轮廓；改变滚子结构前必须先取消原有窗孔保持架，确认优化后另行设计保持架。</p>
+            <div class="buttonrow">
+              <button id="runRoBASCRBOptimizer" type="button" class="secondary" disabled>搜索 Cr 优先的圆柱滚子候选（不修改设计）</button>
+            </div>
+            <div id="crbOptimizationResults" class="optimization-results" hidden>
+              <p id="crbOptimizationHint" class="hint" role="status"></p>
+              <div id="crbOptimizationCandidates" class="optimization-candidates"></div>
+            </div>
+            <p class="hint">推荐结果并非已核实的制造标准或拟静力学校核；原版 CRBOptimizer 的滚子系数 CSV 与二维出图 Server 的系数 CSV 不同，二者会分别记录来源。</p>
+          </div>
           <div class="section-heading">尺寸调整</div>
           <div class="scale-tools">
             <label class="field" for="scaleTarget">目标内径 d（mm）
