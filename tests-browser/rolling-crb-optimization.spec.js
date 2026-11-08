@@ -46,7 +46,7 @@ async function setup(page,observed){
       }});
     if(path==='/api/v2/cad/drawings/status')
       return route.fulfill({json:{
-        available:true,supported_bearings:['rolling.cylindrical_roller'],
+        available:true,supported_bearings:['rolling.cylindrical_roller:NU'],
       }});
     if(path==='/api/v2/cad/optimization/crb'){
       observed.optimizer=req.postDataJSON();
