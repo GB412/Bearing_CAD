@@ -59,7 +59,11 @@ def _validate_options(data) -> dict:
             "/optimization/weights")
     for key in ("dynamic_load", "radial_stiffness"):
         x = weights[key]
-        if type(x) not in (float, int) or not math.isfinite(x) or not 0 <= x <= 1:
+        try:
+            finite = type(x) in (float, int) and math.isfinite(x)
+        except OverflowError:
+            finite = False
+        if not finite or not 0 <= x <= 1:
             raise OptimizationError("Weights must be finite numbers in [0,1]",
                                     "/optimization/weights/" + key)
     if not math.isclose(sum(weights.values()), 1.0, rel_tol=0, abs_tol=1e-9):
@@ -84,8 +88,11 @@ def _initial_envelope(data) -> dict:
     result = {"bearing_type": data["bearing_type"]}
     for key in ("bore_d_mm", "outside_d_mm", "width_mm"):
         value = data[key]
-        if (type(value) not in (float, int) or not math.isfinite(value)
-                or not 0 < value <= 1000):
+        try:
+            finite = type(value) in (float, int) and math.isfinite(value)
+        except OverflowError:
+            finite = False
+        if not finite or not 0 < value <= 1000:
             raise OptimizationError("Expected positive finite CAD envelope dimension",
                                     "/initial/" + key)
         result[key] = float(value)
@@ -95,14 +102,19 @@ def _initial_envelope(data) -> dict:
     cage = data["cage"]
     if cage is None:
         result["cage"] = None
-    elif (type(cage) is dict and set(cage) == {"kind", "pocket_clearance_mm"}
-          and cage["kind"] == "simplified_annular"
-          and type(cage["pocket_clearance_mm"]) in (float, int)
-          and math.isfinite(cage["pocket_clearance_mm"])
-          and 0 < cage["pocket_clearance_mm"] <= 1000):
+    elif type(cage) is dict and set(cage) == {"kind", "pocket_clearance_mm"} and (
+            cage["kind"] == "simplified_annular"):
+        clearance = cage["pocket_clearance_mm"]
+        try:
+            finite = type(clearance) in (float, int) and math.isfinite(clearance)
+        except OverflowError:
+            finite = False
+        if not finite or not 0 < clearance <= 1000:
+            raise OptimizationError("Invalid original cage pocket clearance",
+                                    "/initial/cage/pocket_clearance_mm")
         result["cage"] = {
             "kind": "simplified_annular",
-            "pocket_clearance_mm": float(cage["pocket_clearance_mm"]),
+            "pocket_clearance_mm": float(clearance),
         }
     else:
         raise OptimizationError(
@@ -178,12 +190,19 @@ def _candidate_design(initial: dict, ball: float, count: int,
         inner_cage, outer_cage = 1.02 * inner_shoulder, .98 * outer_shoulder
         if not inner_shoulder < inner_cage < outer_cage < outer_shoulder:
             return None
+        cage_width = .95 * width
+        rim = cage_width / 11.0
+        pocket_clearance = initial["cage"]["pocket_clearance_mm"]
+        if not (ball / 2 + pocket_clearance < cage_width / 2 - rim and
+                pitch * math.sin(math.pi / count) - ball / 2 >
+                ball / 16 + pocket_clearance):
+            return None
         design["cage"] = {
             "kind": "simplified_annular",
             "inner_d_mm": inner_cage,
             "outside_d_mm": outer_cage,
-            "width_mm": .95 * width,
-            "pocket_clearance_mm": initial["cage"]["pocket_clearance_mm"],
+            "width_mm": cage_width,
+            "pocket_clearance_mm": pocket_clearance,
         }
     try:
         parse_request(design)

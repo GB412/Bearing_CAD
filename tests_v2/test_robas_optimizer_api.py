@@ -41,3 +41,19 @@ def test_optimizer_api_missing_resources_is_explicit(tmp_path):
         assert denied["error"]["error_code"] == "ROBAS_RESOURCES_UNAVAILABLE"
     finally:
         _stop(server, thread)
+
+
+def test_optimized_candidate_builds_real_valid_occt_brep(tables):
+    import pytest
+    pytest.importorskip("cadquery")
+    from bearing_cad.contracts import parse_request
+    from bearing_cad.deep_groove import build_deep_groove
+    from bearing_cad.geometry_checks import inspect_solid
+    from bearing_cad.robas_optimization import optimize_dgb_candidates
+
+    result = optimize_dgb_candidates(
+        resources=tables, initial=INITIAL, optimization=OPTIONS)
+    selected = parse_request(result["candidates"][0]["design"])
+    model = build_deep_groove(selected)
+    assert all(inspect_solid(part.shape).valid for part in model.components)
+    assert len(model.instances) == selected.parameters["ball_count"] + 3
