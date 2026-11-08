@@ -29,15 +29,6 @@ _REQUIRED_CASES = (
     "rolling.cylindrical_roller:NF",
     "rolling.cylindrical_roller:NUP",
 )
-_ISSUE_TYPES = (
-    "SOURCE_CALCULATION",
-    "FIELD_APPLICABILITY",
-    "CADIMPORT_TEXT_REPLACEMENT",
-    "ORIGINAL_DWG_TEMPLATE",
-    "SVG_PREVIEW_ONLY",
-)
-
-
 def _case_type(manifest: dict) -> str:
     bearing = manifest["bearing_type"]
     if bearing == "rolling.cylindrical_roller":
@@ -62,6 +53,9 @@ def inspect_case(label: str, folder: Path) -> dict:
         if folder.is_symlink():
             raise ValueError("Bundle directory must not be a symlink")
         manifest = verify_drawing_bundle(folder, expected_key=folder.name)
+        case_type = _case_type(manifest)
+        if case_type not in _REQUIRED_CASES:
+            raise ValueError("Unsupported RoBAS drawing acceptance case type: " + case_type)
         if manifest.get("manufacturing_approved") is not False:
             raise ValueError("Manifest must explicitly retain manufacturing_approved=false")
         if not isinstance(manifest.get("drawing_model_consistency"), dict):
@@ -70,8 +64,14 @@ def inspect_case(label: str, folder: Path) -> dict:
             raise ValueError("Stale drawing: missing legacy-input provenance")
         if not isinstance(manifest.get("request_hash"), str) or len(manifest["request_hash"]) != 64:
             raise ValueError("Missing confirmed-design request SHA256")
+        for key in ("unfilled_template_variable_names",
+                    "source_conflict_template_variable_names",
+                    "suspected_unmapped_template_texts",
+                    "standard_lookup_warnings"):
+            if not isinstance(manifest.get(key, []), list):
+                raise ValueError("Invalid RoBAS drawing manifest evidence: " + key)
         result.update({
-            "case_type": _case_type(manifest),
+            "case_type": case_type,
             "bundle_key": manifest["bundle_key"],
             "request_hash": manifest["request_hash"],
             "database_sha256": manifest.get("database_sha256"),
@@ -164,7 +164,7 @@ def _parse_case(spec: str) -> tuple[str, Path]:
     label, separator, location = spec.partition("=")
     if not separator or not _LABEL.fullmatch(label) or not location.strip():
         raise ValueError("Use --case LABEL=PATH (label: letters, digits, _, ., -)")
-    return label, Path(location).expanduser().resolve()
+    return label, Path(location).expanduser().absolute()
 
 
 def _checklist(cases: list[dict]) -> str:
@@ -250,6 +250,8 @@ def _markdown(report: dict) -> str:
 
 def create_acceptance_package(specs: list[str], output: Path) -> dict:
     """Emit a new evidence directory; never overwrite existing review evidence."""
+    if not specs:
+        raise ValueError("At least one --case LABEL=PATH is required")
     parsed = [_parse_case(spec) for spec in specs]
     labels = [label for label, _ in parsed]
     if len(set(labels)) != len(labels):

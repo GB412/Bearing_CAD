@@ -126,7 +126,7 @@ def test_modified_dxf_blocks_autocheck_without_altering_manifest(tmp_path):
         stream.write(b"tampered")
     report = create_acceptance_package([f"BAD={folder}"], tmp_path / "report")
     assert report["automatic_pass_count"] == 0
-    assert "DXF checksum mismatch" in report["cases"][0]["blocking_errors"][0]
+    assert "Missing or modified DXF" in report["cases"][0]["blocking_errors"][0]
     assert report["cases"][0]["manufacturing_approved"] is False
 
 
@@ -195,3 +195,24 @@ def test_cli_exit_codes_and_pending_manual_status(capsys, tmp_path):
                  "--out", str(tmp_path / "failed")]) == 2
     assert '"manufacturing_approved": false' in (
         tmp_path / "failed" / "acceptance_report.json").read_text("utf-8")
+
+
+def test_same_size_dxf_tampering_is_caught_by_sha256(tmp_path):
+    folder = _fixture(tmp_path)
+    path = folder / "assembly.dxf"
+    data = path.read_bytes()
+    assert b"6008/P5" in data
+    path.write_bytes(data.replace(b"6008/P5", b"6208/P5", 1))
+    result = inspect_case("TAMPER_SAME_SIZE", folder)
+    assert result["automatic_status"] == "FAILED"
+    assert "DXF checksum mismatch" in result["blocking_errors"][0]
+
+
+def test_bad_bearing_configuration_and_empty_batch_do_not_pass(tmp_path):
+    folder = _fixture(tmp_path, name="bad-kind")
+    _edit(folder, lambda m: m.__setitem__("bearing_type", "rolling.unknown"))
+    result = inspect_case("BAD_KIND", folder)
+    assert result["automatic_status"] == "FAILED"
+    assert "Unsupported RoBAS drawing acceptance case type" in result["blocking_errors"][0]
+    with pytest.raises(ValueError, match="At least one"):
+        create_acceptance_package([], tmp_path / "empty")
