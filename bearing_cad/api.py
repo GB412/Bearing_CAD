@@ -23,6 +23,7 @@ from .robas_sizing import dgb_geometry_profile
 from .robas_stamping import robas_stamping_profile
 from .robas_optimization import optimize_dgb_candidates, OptimizationError
 from .robas_acb_optimization import optimize_acb_candidates
+from .robas_crb_optimization import optimize_crb_candidates
 from .drawing_variables import DrawingDataError
 
 _MAX_BODY = 16 * 1024
@@ -115,7 +116,8 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
             route = self._route()
             if route not in ("/api/v2/cad/jobs", "/api/v2/cad/drawings", "/api/v2/cad/sizing/dgb-geometry", "/api/v2/cad/sizing/dgb-stamping",
                              "/api/v2/cad/optimization/dgb",
-                             "/api/v2/cad/optimization/acb"):
+                             "/api/v2/cad/optimization/acb",
+                             "/api/v2/cad/optimization/crb"):
                 return self._error(404, "NOT_FOUND", "Unknown route")
             if not self._origin_allowed():
                 return self._error(403, "ORIGIN_FORBIDDEN", "A same-origin browser request is required")
@@ -148,6 +150,21 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
             if route == "/api/v2/cad/drawings":
                 return create_drawing(self, data, root, robas_resources,
                                       cadimport_bridge, build_lock)
+            if route == "/api/v2/cad/optimization/crb":
+                if not isinstance(data, dict) or set(data) != {"initial", "optimization"}:
+                    return self._error(422, "PARAMETER_INVALID",
+                                       "Expected initial and optimization objects")
+                if robas_resources is None:
+                    return self._error(503, "ROBAS_RESOURCES_UNAVAILABLE",
+                                       "Configure --robas-resources to enable RoBAS optimization")
+                try:
+                    candidates = optimize_crb_candidates(
+                        resources=robas_resources, initial=data["initial"],
+                        optimization=data["optimization"])
+                except (OptimizationError, DrawingDataError) as error:
+                    return self._error(422, "OPTIMIZATION_INVALID", str(error),
+                                       getattr(error, "field_path", "/optimization"))
+                return self._respond(200, candidates)
             if route == "/api/v2/cad/optimization/acb":
                 if not isinstance(data, dict) or set(data) != {"initial", "optimization"}:
                     return self._error(422, "PARAMETER_INVALID",
@@ -322,10 +339,17 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
                     sizing_available and robas_resources and (
                         robas_resources / "Resource" / "球轴承零件相关系数.csv"
                     ).is_file())
+                crb_optimization_available = bool(
+                    robas_resources and all(
+                        (robas_resources / "Resource" / name).is_file()
+                        for name in ("CylinderRollerDiameterDB.csv",
+                                     "CylinderRollerDB.csv",
+                                     "圆柱滚子轴承相关系数.csv")))
                 return self._respond(200, {"available": True, "mode": "loopback_synchronous",
                                            "robas_sizing_available": sizing_available,
                                            "robas_optimization_available": optimization_available,
                                            "robas_acb_optimization_available": optimization_available,
+                                           "robas_crb_optimization_available": crb_optimization_available,
                                            "robas_stamping_available": True,
                                            "supported_bearings": ["rolling.deep_groove_ball",
                                                                   "rolling.cylindrical_roller",
