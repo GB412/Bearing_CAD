@@ -218,14 +218,14 @@ def optimize_dgb_candidates(*, resources: Path, initial: dict,
 
     bore = initial["bore_d_mm"]
     outside = initial["outside_d_mm"]
+    kw_min, kw_max, phi_max, kd = _source_bounds(options["model"], bore)
+    radial_clearance = dgb_radial_clearance_mm(bore)
     catalog = audit_drawing_design(
         resources=root, bearing_type=initial["bearing_type"],
         parameters=initial,
         model_label=options["model"] + "/" + options["accuracy_class"],
         configuration=None, accuracy_class=options["accuracy_class"],
         diameter_series=options["model"][1])
-    kw_min, kw_max, phi_max, kd = _source_bounds(options["model"], bore)
-    radial_clearance = dgb_radial_clearance_mm(bore)
     if radial_clearance is None:
         raise OptimizationError("Original radial clearance rule does not cover this bore",
                                 "/design/parameters/bore_d_mm")
