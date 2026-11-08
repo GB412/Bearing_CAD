@@ -87,7 +87,9 @@ function syncDerivedGrooves(){
 renderFields($('parameters'),'param-',fields);
 renderFields($('cageParams'),'cage-',cages);
 let active=null, token=0, controller=null, available=false;
-let supportedTypes=new Set(), robasSizingAvailable=false, appliedSizingEvidence=null, appliedStampingEvidence=null;
+let supportedTypes=new Set(), robasSizingAvailable=false, robasOptimizationAvailable=false;
+let appliedSizingEvidence=null, appliedStampingEvidence=null, appliedOptimizationEvidence=null;
+let optimizationPreview=null;
 const scene=new THREE.Scene();scene.background=null;
 const camera=new THREE.PerspectiveCamera(36,1,.1,5000);
 const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
@@ -243,6 +245,9 @@ function updateStampingActions(){
 }
 function updateAvailability(){
  updateStampingActions();
+ const dgb=selectedType()==='rolling.deep_groove_ball';
+ $('dgbOptimizationPanel').hidden=!dgb;
+ $('runRoBASOptimizer').disabled=!robasOptimizationAvailable||!dgb;
  const enabled=canGenerate();$('generate').disabled=!enabled;
  $('connection').textContent=available?'本地 OCCT 引擎在线':'CAD 引擎不可用';
  $('connection').dataset.state=available?'ready':'offline';
@@ -250,9 +255,16 @@ function updateAvailability(){
  $('applyRoBASGeometry').disabled=!robasSizingAvailable||selectedType()!=='rolling.deep_groove_ball';
  if(available&&!enabled)status('当前 CAD 服务暂不支持所选轴承类型',true);
 }
+function clearOptimizationCandidates(){
+ optimizationPreview=null;
+ $('optimizationResults').hidden=true;
+ $('optimizationHint').textContent='';
+ $('optimizationCandidates').replaceChildren();
+}
 function invalidatePreview(message='输入已改变，请重新生成 CAD'){
  token++;controller?.abort();controller=null;
- appliedSizingEvidence=null;appliedStampingEvidence=null;
+ clearOptimizationCandidates();
+ appliedSizingEvidence=null;appliedStampingEvidence=null;appliedOptimizationEvidence=null;
  dispose();status(message);
  $('generate').disabled=!canGenerate();
 }
@@ -331,6 +343,143 @@ async function applyRoBASGeometry(){
  }finally{
   button.disabled=!robasSizingAvailable||selectedType()!=='rolling.deep_groove_ball';
  }
+}
+function currentOptimizationInput(){
+ if(selectedType()!=='rolling.deep_groove_ball')
+  throw Error('当前仅支持深沟球轴承 DGB 优化');
+ const numberFrom=(id,label)=>{
+  const raw=$(id).value.trim();
+  if(!raw)throw Error('请填写'+label);
+  const value=Number(raw);
+  if(!Number.isFinite(value))throw Error(label+'必须是有限数值');
+  return value;
+ };
+ const model=$('drawingModel').value.trim();
+ const grade=$('drawingAccuracy').value;
+ const clearance=$('drawingClearance').value;
+ if(!model)throw Error('请在二维图纸设置中填写原版轴承型号');
+ if(!clearance)throw Error('请在二维图纸设置中选择径向游隙组');
+ let cage=null;
+ if($('cageEnabled').checked){
+  if($('cageKind').value!=='simplified_annular')
+   throw Error('冲压保持架需要重新计算，请先选择简化环缘保持架或暂时取消保持架');
+  cage={kind:'simplified_annular',
+        pocket_clearance_mm:numberFrom('cage-pocket_clearance_mm','保持架球兜间隙')};
+ }
+ return {
+  initial:{
+   bearing_type:selectedType(),
+   bore_d_mm:numberFrom('param-bore_d_mm','内径 d'),
+   outside_d_mm:numberFrom('param-outside_d_mm','外径 D'),
+   width_mm:numberFrom('param-width_mm','宽度 B'),
+   cage
+  },
+  optimization:{
+   model,accuracy_class:grade,radial_clearance_group:clearance,
+   weights:{
+    dynamic_load:numberFrom('optimizerCrWeight','动载荷权重'),
+    radial_stiffness:numberFrom('optimizerStiffnessWeight','径向刚度权重')
+   }
+  }
+ };
+}
+function optimizationSnapshot(){
+ return JSON.stringify(currentOptimizationInput());
+}
+function renderOptimizationCandidates(reply,snapshot,version){
+ const container=$('optimizationCandidates');
+ container.replaceChildren();
+ $('optimizationResults').hidden=false;
+ $('optimizationHint').textContent=
+  '原版搜索网格中有 '+reply.total_valid_candidates+
+  ' 组符合候选筛选的设计；显示前 '+reply.candidates.length+
+  ' 组。此处没有修改任何 CAD 参数。评分仅用于候选排序，尚未经 3D B-Rep、拟静力分析或制造审核。';
+ for(const item of reply.candidates){
+  const card=document.createElement('div');
+  card.className='optimization-candidate';
+  const title=document.createElement('strong');
+  title.textContent='候选 '+item.rank+' · 综合评分 '+item.score.toFixed(3);
+  const metrics=document.createElement('div');
+  metrics.className='candidate-metrics';
+  const p=item.design.parameters;
+  metrics.textContent='钢球 Dw '+p.ball_d_mm.toFixed(3)+' mm · Z '+p.ball_count+
+    ' · 节圆 Dpw '+p.pitch_d_mm.toFixed(2)+' mm · Cr '+
+    (item.metrics.dynamic_load_n/1000).toFixed(2)+' kN · 经验径向刚度 '+
+    item.metrics.radial_stiffness_source_units.toFixed(2)+'（原版公式值）';
+  const button=document.createElement('button');
+  button.type='button';button.className='secondary';
+  button.textContent='确认并应用此设计';
+  button.addEventListener('click',()=>{
+   try{
+    if(version!==token||!optimizationPreview||
+       optimizationPreview.snapshot!==optimizationSnapshot())
+     throw Error('设计输入已改变，请重新计算优化候选');
+    const candidate=optimizationPreview.reply.candidates.find(
+      row=>row.candidate_id===item.candidate_id);
+    if(!candidate)throw Error('候选已失效');
+    const design=candidate.design;
+    const draft=rawDraft();
+    const next={...draft.values,...design.parameters};
+    const nextCage=design.cage??null;
+    const verified=requestFromFields(next,nextCage,selectedType());
+    const issues=geometryIssues(verified);
+    if(issues.length)throw Error(issues[0].message);
+    // Only mutate controls after the whole candidate passes preflight.
+    for(const [key] of fields)$('param-'+key).value=String(design.parameters[key]);
+    if(nextCage)for(const [key] of cages)$('cage-'+key).value=String(nextCage[key]);
+    $('scaleTarget').value=String(design.parameters.bore_d_mm);
+    invalidatePreview('已确认优化候选，请重新生成二维或三维模型');
+    appliedOptimizationEvidence={
+      source_model:optimizationPreview?.reply?.source_model??reply.source_model,
+      candidate_id:item.candidate_id,
+      source_initial_hash:reply.source_initial_hash,
+    };
+    showDraftIssues();
+    status('已确认 RoBAS 优化候选 '+item.rank+'：钢球 '+p.ball_d_mm+
+           ' mm，'+p.ball_count+' 颗，Dpw '+p.pitch_d_mm+
+           ' mm。请分别点击生成三维模型或二维工程图；非制造批准。');
+   }catch(error){status('不能应用优化候选：'+error.message,true);}
+  });
+  card.append(title,metrics,button);container.append(card);
+ }
+}
+async function runRoBASOptimizer(){
+ if(!robasOptimizationAvailable||selectedType()!=='rolling.deep_groove_ball')return;
+ const button=$('runRoBASOptimizer');
+ const version=token;
+ let snapshot;
+ try{
+  const payload=currentOptimizationInput();
+  snapshot=JSON.stringify(payload);
+  clearOptimizationCandidates();
+  button.disabled=true;
+  status('正在按原版 DGBOptimizer 网格搜索候选方案…');
+  const response=await fetch('/api/v2/cad/optimization/dgb',{
+   method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify(payload)
+  });
+  const reply=await response.json();
+  if(version!==token||snapshot!==optimizationSnapshot())return;
+  if(!response.ok)throw Error(reply.error?.message||'RoBAS 优化候选计算失败');
+  if(reply.schema_version!=='bearing-cad.robas-dgb-optimization.v1'||
+     reply.candidate_only!==true||reply.applied!==false||
+     !Array.isArray(reply.candidates)||reply.candidates.length===0)
+   throw Error('RoBAS 优化响应契约不正确');
+  for(const candidate of reply.candidates)
+   if(typeof candidate.candidate_id!=='string'||
+      typeof candidate.score!=='number'||!Number.isFinite(candidate.score)||
+      !candidate.design?.parameters||!candidate.metrics)
+    throw Error('RoBAS 优化候选数据无效');
+  optimizationPreview={reply,snapshot,version};
+  renderOptimizationCandidates(reply,snapshot,version);
+  status('已得到 '+reply.candidates.length+
+         ' 组优化候选；请先比较并确认，现有 CAD 参数未更改。');
+ }catch(error){
+  if(version===token){
+   clearOptimizationCandidates();
+   status('RoBAS 优化失败：'+error.message,true);
+  }
+ }finally{button.disabled=!robasOptimizationAvailable||selectedType()!=='rolling.deep_groove_ball';}
 }
 async function applyRoBASStamping(){
  if(!available||selectedType()!=='rolling.deep_groove_ball'||
@@ -420,6 +569,7 @@ async function loadArtifacts(result, sequence){
  const sourceParts=[];
  if(sourceHash)sourceParts.push('RoBAS DGBGeometry · BallDB SHA256 '+sourceHash.slice(0,12)+'… · 非 Optimizer');
  if(appliedStampingEvidence)sourceParts.push('RoBAS StampingCage ('+appliedStampingEvidence.bearing_model+') 候选');
+ if(appliedOptimizationEvidence)sourceParts.push('RoBAS DGBOptimizer · 已确认候选 '+appliedOptimizationEvidence.candidate_id);
  const sourceNote=sourceParts.length
   ?'参数来源（本会话）：'+sourceParts.join(' + ')
   :'参数来源：显式输入/几何测试预设';
@@ -467,6 +617,15 @@ async function generate(){
 $('generate').addEventListener('click',generate);
 $('applyRoBASGeometry').addEventListener('click',applyRoBASGeometry);
 $('applyRoBASStamping').addEventListener('click',applyRoBASStamping);
+$('runRoBASOptimizer').addEventListener('click',runRoBASOptimizer);
+$('editOptimizationContext').addEventListener('click',()=>{
+ $('workspace2dTab').click();
+});
+for(const id of ['drawingModel','drawingAccuracy','drawingClearance',
+                 'optimizerCrWeight','optimizerStiffnessWeight']){
+ $(id).addEventListener('input',clearOptimizationCandidates);
+ $(id).addEventListener('change',clearOptimizationCandidates);
+}
 $('robasStampingModel').addEventListener('input',()=>invalidatePreview('RoBAS 保持架型号已更改，请重新生成 CAD'));
 initDrawingWorkbench(getParams);
 $('resetParams').addEventListener('click',()=>{
@@ -511,11 +670,13 @@ $('viewReset').addEventListener('click',()=>{resetCamera();controls.reset();rese
  available=response.ok&&data.available===true&&Array.isArray(data.supported_bearings);
  supportedTypes=new Set(available?data.supported_bearings:[]);
  robasSizingAvailable=available&&data.robas_sizing_available===true;
+ robasOptimizationAvailable=available&&data.robas_optimization_available===true;
  updateAvailability();
  if(canGenerate())status('请选择轴承类型、输入参数并生成精确 CAD 模型');
  else if(!available)status('CAD 服务不可用；启动 python -m bearing_cad.api --static dist',true);
  }catch{
-  available=false;robasSizingAvailable=false;updateAvailability();status('CAD-V2 服务不可用，请启动本地 API',true);
+  available=false;robasSizingAvailable=false;robasOptimizationAvailable=false;
+  updateAvailability();status('CAD-V2 服务不可用，请启动本地 API',true);
  }
  $('generate').disabled=!canGenerate();
 })();

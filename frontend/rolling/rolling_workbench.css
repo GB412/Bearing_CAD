@@ -973,3 +973,17 @@ body[data-cad-view="2d"] #parameters { grid-template-columns: repeat(2,minmax(0,
 @media (min-width: 1101px) {
   .side > .panel { flex: 0 0 auto; }
 }
+
+/* Candidate-only RoBAS DGB optimization: no automatic geometry mutation. */
+.optimization-weights { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 9px; margin-top: 10px; }
+.optimization-results { margin-top: 12px; border-top: 1px solid #d9e4e8; padding-top: 9px; }
+.optimization-results[hidden] { display: none; }
+.optimization-candidates { display: grid; gap: 9px; }
+.optimization-candidate {
+  border: 1px solid #d4e2e8; border-radius: 8px; padding: 12px;
+  background: #f7fafb; display: grid; gap: 7px;
+}
+.optimization-candidate strong { color: #244958; font-size: 13px; }
+.optimization-candidate .candidate-metrics { color: #45606b; font-size: 12px; line-height: 1.55; }
+.optimization-candidate button { justify-self: start; }
+@media (max-width: 420px) { .optimization-weights { grid-template-columns: minmax(0,1fr); } }
