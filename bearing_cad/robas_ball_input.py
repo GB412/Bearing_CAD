@@ -212,7 +212,7 @@ def geometry_updates(request: BearingRequest, *,
     else:
         groove_inner = float(p["inner_groove_radius_mm"])
         groove_outer = float(p["outer_groove_radius_mm"])
-        angle = float(p["contact_angle_deg"])
+        angle = _dotnet_round(float(p["contact_angle_deg"]), 2)
         if analysis_shoulder_diameters_mm is None:
             raise BallDataError("ACB DATA has one shoulder diameter per race; supply the two RoBAS-analysis sidewall diameters explicitly")
         if (len(analysis_shoulder_diameters_mm) != 2 or
@@ -265,15 +265,10 @@ def geometry_updates(request: BearingRequest, *,
         (10, "bReDia"): ball_d / 1000,
         (10, "pitchDia"): pitch_d / 1000,
         (10, "freeConAngDeg"): angle,
-        (10, "freeIntCls"): 0,
         (10, "raceCurFac1"): groove_outer / ball_d,
         (10, "raceCurFac2"): groove_inner / ball_d,
         (10, "shoulderDia1"): shoulder_outer / 1000,
         (10, "shoulderDia2"): shoulder_inner / 1000,
-        (10, "shimThickness1"): 0,
-        (10, "shimThickness2"): 0,
-        (10, "rmsAspHt1"): 1e-7,
-        (10, "rmsAspHt2"): 1e-7,
         (12, "cageDia1"): cage_outer / 1000,
         (12, "cageDia2"): cage_inner / 1000,
         (12, "cageWidth"): cage_width / 1000,
@@ -304,6 +299,7 @@ def update_ball_data(reference_data: str | Path, request: BearingRequest, *,
                      analysis_shoulder_diameters_mm: tuple[float, float] | None = None,
                      analysis_inner_race_outside_diameter_mm: float | None = None,
                      allow_reference_geometry_mismatch: bool = False,
+                     analysis_parameters_mm: Mapping[str, int | float] | None = None,
                      solver_updates: Mapping[tuple[int, str], str | int | float] | None = None,
                      material_updates: Mapping[tuple[int, str], str | int | float] | None = None,
                      lubricant_updates: Mapping[tuple[int, str], str | int | float] | None = None) -> BallDataDocument:
@@ -343,6 +339,20 @@ def update_ball_data(reference_data: str | Path, request: BearingRequest, *,
                     {(index, field) for index in (*range(28, 35), 42)
                      for field in _RECORD_FIELDS[index][1]})
     values = dict(operating_updates)
+    analysis_parameter_fields = {
+        "freeIntCls", "shimThickness1", "shimThickness2", "rmsAspHt1", "rmsAspHt2",
+    }
+    analysis_parameters_mm = analysis_parameters_mm or {}
+    unknown_analysis_parameters = set(analysis_parameters_mm) - analysis_parameter_fields
+    if unknown_analysis_parameters:
+        raise BallDataError(
+            f"analysis_parameters_mm accepts only {sorted(analysis_parameter_fields)}; "
+            f"got {sorted(unknown_analysis_parameters)}")
+    for field, millimetres in analysis_parameters_mm.items():
+        if (type(millimetres) not in (int, float) or not math.isfinite(millimetres)
+                or millimetres < 0):
+            raise BallDataError(f"analysis_parameters_mm.{field} must be a finite non-negative mm value")
+        values[(10, field)] = millimetres / 1000
     if geometry_mode == "cad_geometry":
         if analysis_inner_race_outside_diameter_mm is None:
             raise BallDataError("cad_geometry mode requires analysis_inner_race_outside_diameter_mm")

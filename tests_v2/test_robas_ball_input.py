@@ -113,6 +113,23 @@ def test_acb_inner_sidewall_uses_one_decimal_getter_before_clearance():
         updates[(12, "cageDia2")] - 75.9 / 1000)
 
 
+@pytest.mark.parametrize(("angle", "expected"), [
+    (25.123, 25.12),
+    (25.126, 25.13),
+    (25.125, 25.12),
+    (25.135, 25.14),
+])
+def test_acb_contact_angle_matches_dotnet_getter_rounding(angle, expected):
+    request = parse_request(_case("acb_25deg_window"))
+    request = replace(request, parameters={
+        **request.parameters, "contact_angle_deg": angle,
+    })
+    updates = geometry_updates(
+        request, analysis_shoulder_diameters_mm=(47.0, 61.0),
+        analysis_inner_race_outside_diameter_mm=50.0)
+    assert updates[(10, "freeConAngDeg")] == expected
+
+
 @pytest.mark.parametrize(("folder", "digest", "source_values"), [
     (DGB, DGB_SHA256, {
         "ball": 8.334, "pitch": 54.0, "width": 15.0, "outer_sidewall": 59.02,
@@ -237,6 +254,62 @@ def test_cad_geometry_requires_mismatch_ack_and_sets_all_source_overrides():
     assert float(result.value(10, "raceCurFac1")) == pytest.approx(4.5 / 8)
     assert float(result.value(10, "raceCurFac2")) == pytest.approx(4.3 / 8)
     assert hashlib.sha256(path.read_bytes()).hexdigest() == DGB_SHA256
+
+
+def test_cad_geometry_preserves_reference_clearance_shims_and_roughness(tmp_path):
+    path = _local_case_data(DGB)
+    source_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+    original = BallDataDocument.read(path)
+    fields = {
+        "freeIntCls": 0.000025,
+        "shimThickness1": 0.000012,
+        "shimThickness2": 0.000034,
+        "rmsAspHt1": 0.00000027,
+        "rmsAspHt2": 0.00000049,
+    }
+    custom_reference = tmp_path / "DATA.txt"
+    custom_reference.write_bytes(
+        original.with_updates({(10, name): value for name, value in fields.items()})
+        .render().encode("utf-8"))
+    request = parse_request(_case("dgb_no_cage"))
+    kwargs = {
+        "geometry_mode": "cad_geometry",
+        "operating_updates": {},
+        "analysis_inner_race_outside_diameter_mm": 49.0,
+        "allow_reference_geometry_mismatch": True,
+    }
+    result = update_ball_data(custom_reference, request, **kwargs)
+    for field, expected in fields.items():
+        assert float(result.value(10, field)) == pytest.approx(expected)
+
+    explicit_mm = {
+        "freeIntCls": 0.05,
+        "shimThickness1": 0.012,
+        "shimThickness2": 0.034,
+        "rmsAspHt1": 0.00027,
+        "rmsAspHt2": 0.00049,
+    }
+    result = update_ball_data(custom_reference, request,
+                              analysis_parameters_mm=explicit_mm, **kwargs)
+    for field, expected_mm in explicit_mm.items():
+        assert float(result.value(10, field)) == pytest.approx(expected_mm / 1000)
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == source_hash
+
+
+def test_analysis_parameter_updates_require_known_fields_and_millimetre_values():
+    path = _local_case_data(DGB)
+    request = parse_request(_case("dgb_no_cage"))
+    kwargs = {
+        "geometry_mode": "cad_geometry", "operating_updates": {},
+        "analysis_inner_race_outside_diameter_mm": 49.0,
+        "allow_reference_geometry_mismatch": True,
+    }
+    with pytest.raises(BallDataError, match="accepts only"):
+        update_ball_data(path, request,
+                         analysis_parameters_mm={"raceCurFac1": 0.6}, **kwargs)
+    with pytest.raises(BallDataError, match="finite non-negative mm"):
+        update_ball_data(path, request,
+                         analysis_parameters_mm={"rmsAspHt1": float("nan")}, **kwargs)
 
 
 def test_acb_requires_explicit_analysis_sidewalls_and_inner_race_od():
