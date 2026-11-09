@@ -62,6 +62,13 @@ def test_public_protocol_schema_round_trips_43_crlf_records():
     assert BallDataDocument.parse(rendered).rows == BallDataDocument.parse(_synthetic_data()).rows
 
 
+@pytest.mark.parametrize("field", ["kUnit", "kBrg"])
+def test_ball_data_rejects_unsupported_unit_or_bearing_code(field):
+    doc = BallDataDocument.parse(_synthetic_data())
+    with pytest.raises(BallDataError, match=rf"rec 3\.2.*{field}"):
+        doc.with_updates({(5, field): 2})
+
+
 def test_dotnet_rounding_ties_to_even_and_cage_assignment_chain_boundaries():
     from bearing_cad.robas_ball_input import _dotnet_round, _straight_pocket_reference
 
@@ -132,6 +139,7 @@ def test_acb_contact_angle_matches_dotnet_getter_rounding(angle, expected):
 
 @pytest.mark.parametrize(("folder", "digest", "source_values"), [
     (DGB, DGB_SHA256, {
+        "bore": 40.0, "od": 68.0, "count": 11,
         "ball": 8.334, "pitch": 54.0, "width": 15.0, "outer_sidewall": 59.02,
         "inner_sidewall": 49.0, "inner_race_od": 49.0,
         "pocket": 8.5, "guide_gap": 0.0996, "cage_od": 58.92,
@@ -140,6 +148,7 @@ def test_acb_contact_angle_matches_dotnet_getter_rounding(angle, expected):
         "guide_width": 2.42, "guide_pos": 5.5, "guide_clearance": 4.92,
     }),
     (ACB, ACB_SHA256, {
+        "bore": 65.0, "od": 100.0, "count": 20,
         "ball": 11.0, "pitch": 82.5, "angle": 25.0, "width": 18.0,
         "outer_sidewall": 89.15, "inner_sidewall": 75.9, "inner_race_od": 75.9,
         "pocket": 11.2, "guide_gap": 0.12, "cage_od": 89.03,
@@ -154,6 +163,8 @@ def test_real_original_cases_match_independently_traced_csharp_values(folder, di
     raw_hash = hashlib.sha256(path.read_bytes()).hexdigest()
     assert raw_hash == digest
     doc = BallDataDocument.read(path)
+    replay = update_ball_data(path, None, geometry_mode="legacy_data", operating_updates={})
+    assert replay.render().encode("utf-8") == path.read_bytes()
     # Actual source geometry/operating values are read from the real DATA, not
     # inferred from the different current CAD fixtures.
     assert float(doc.value(10, "bReDia")) == pytest.approx(source_values["ball"] / 1000)
@@ -167,11 +178,17 @@ def test_real_original_cases_match_independently_traced_csharp_values(folder, di
         "dgb_no_cage" if folder == DGB else "acb_25deg_window"))
     request = replace(request, parameters={
         **request.parameters,
+        "bore_d_mm": source_values["bore"],
+        "outside_d_mm": source_values["od"],
+        "ball_count": source_values["count"],
         "ball_d_mm": source_values["ball"],
         "pitch_d_mm": source_values["pitch"],
         "width_mm": source_values["width"],
         "inner_shoulder_d_mm": source_values["inner_sidewall"],
         "outer_shoulder_d_mm": source_values["outer_sidewall"],
+        # Configure the legacy analysis curvatures explicitly for this comparison.
+        "inner_groove_radius_mm": 0.54 * source_values["ball"],
+        "outer_groove_radius_mm": 0.52 * source_values["ball"],
     })
     analysis_sidewalls = ((source_values["inner_sidewall"],
                            source_values["outer_sidewall"])
@@ -204,6 +221,18 @@ def test_real_original_cases_match_independently_traced_csharp_values(folder, di
     }
     for (record, field), value in expected.items():
         assert float(python_values[(record, field)]) == pytest.approx(value, abs=1e-12), (record, field)
+    for (record, field), value in python_values.items():
+        assert float(doc.value(record, field)) == pytest.approx(value, abs=1e-12), (record, field)
+    result = update_ball_data(
+        path, request, geometry_mode="cad_geometry", operating_updates={},
+        analysis_shoulder_diameters_mm=analysis_sidewalls,
+        analysis_inner_race_outside_diameter_mm=source_values["inner_race_od"],
+    )
+    assert result.reference_data_sha256 == digest
+    for record, (actual, reference) in enumerate(zip(result.rows, doc.rows)):
+        for column, (actual_value, reference_value) in enumerate(zip(actual, reference)):
+            if actual_value != reference_value:
+                assert float(actual_value) == pytest.approx(float(reference_value), abs=1e-12), (record, column)
     assert hashlib.sha256(path.read_bytes()).hexdigest() == raw_hash
 
 
@@ -256,7 +285,7 @@ def test_cad_geometry_requires_mismatch_ack_and_sets_all_source_overrides():
     assert hashlib.sha256(path.read_bytes()).hexdigest() == DGB_SHA256
 
 
-def test_cad_geometry_preserves_reference_clearance_shims_and_roughness(tmp_path):
+def test_cad_geometry_preserves_analysis_fields_not_assigned_by_csharp(tmp_path):
     path = _local_case_data(DGB)
     source_hash = hashlib.sha256(path.read_bytes()).hexdigest()
     original = BallDataDocument.read(path)
@@ -267,9 +296,13 @@ def test_cad_geometry_preserves_reference_clearance_shims_and_roughness(tmp_path
         "rmsAspHt1": 0.00000027,
         "rmsAspHt2": 0.00000049,
     }
+    cage_fields = {"bPocCls2": 0.0002, "cageAngCut": 2, "cageConeAng": 3}
     custom_reference = tmp_path / "DATA.txt"
     custom_reference.write_bytes(
-        original.with_updates({(10, name): value for name, value in fields.items()})
+        original.with_updates({
+            **{(10, name): value for name, value in fields.items()},
+            **{(12, name): value for name, value in cage_fields.items()},
+        })
         .render().encode("utf-8"))
     request = parse_request(_case("dgb_no_cage"))
     kwargs = {
@@ -281,6 +314,8 @@ def test_cad_geometry_preserves_reference_clearance_shims_and_roughness(tmp_path
     result = update_ball_data(custom_reference, request, **kwargs)
     for field, expected in fields.items():
         assert float(result.value(10, field)) == pytest.approx(expected)
+    for field, expected in cage_fields.items():
+        assert float(result.value(12, field)) == expected
 
     explicit_mm = {
         "freeIntCls": 0.05,
@@ -346,6 +381,40 @@ def test_custom_operating_value_overrides_only_requested_field():
                               operating_updates={(29, "appLoadX"): 1234.5})
     assert result.value(29, "appLoadX") == "1234.5"
     assert result.value(29, "appLoadZ") == "2000"
+
+
+def test_count_only_geometry_change_requires_explicit_acknowledgement(tmp_path):
+    request = parse_request(_case("dgb_no_cage"))
+    geometry = {"analysis_inner_race_outside_diameter_mm": 49.0}
+    original = BallDataDocument.parse(_synthetic_data()).with_updates(
+        geometry_updates(request, **geometry))
+    path = tmp_path / "DATA.txt"
+    path.write_bytes(original.render().encode())
+    changed = replace(request, parameters={**request.parameters, "ball_count": 10})
+    kwargs = {"geometry_mode": "cad_geometry", "operating_updates": {}, **geometry}
+    with pytest.raises(BallDataError, match=r"rec 3\.2\.nRe"):
+        update_ball_data(path, changed, **kwargs)
+    updated = update_ball_data(path, changed, allow_reference_geometry_mismatch=True, **kwargs)
+    assert updated.value(5, "nRe") == "10"
+    assert updated.value(7, "kPltElemInd2") == "11"
+
+
+def test_ring_speeds_follow_base_bc_setters_with_explicit_endpoint_precedence(tmp_path):
+    path = tmp_path / "DATA.txt"
+    path.write_bytes(_synthetic_data().encode())
+    original = BallDataDocument.read(path)
+    overrides = {(30, "rpm1"): -450, (30, "rpm2"): 15000}
+    result = update_ball_data(path, None, geometry_mode="legacy_data", operating_updates=overrides)
+    assert result.value(32, "rpmRange21") == "-450"
+    assert result.value(32, "rpmRange12") == "15000"
+    assert result.value(32, "rpmRange11") == original.value(32, "rpmRange11")
+    assert result.value(32, "rpmRange22") == original.value(32, "rpmRange22")
+    assert len(overrides) == 2
+    overrides[(32, "rpmRange12")] = 17000
+    result = update_ball_data(path, None, geometry_mode="legacy_data", operating_updates=overrides)
+    assert result.value(30, "rpm2") == "15000"
+    assert result.value(32, "rpmRange12") == "17000"
+    assert original.with_updates({(30, "rpm2"): 15000}).rows[32] == original.rows[32]
 
 
 def test_rejects_nonfinite_and_misclassified_overrides():

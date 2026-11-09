@@ -65,6 +65,8 @@ _RECORD_FIELDS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 BALL_RECORD_LABELS = tuple(label for label, _ in _RECORD_FIELDS)
 _TEXT_RECORDS = {3, 4}
+
+
 class BallDataError(ValueError):
     """Invalid source DATA or a field that cannot be safely migrated."""
 
@@ -105,6 +107,8 @@ class BallDataDocument:
             rows.append(tuple(cell.strip() for cell in row))
         if rows[0][1] != "-1":
             raise BallDataError("Ball DATA must use Mode=-1 (quasi-static)")
+        if float(rows[5][1]) != 1 or float(rows[5][2]) != 1:
+            raise BallDataError("Ball DATA requires rec 3.2 kUnit=1 and kBrg=1")
         return cls(tuple(rows))
 
     @classmethod
@@ -279,9 +283,6 @@ def geometry_updates(request: BearingRequest, *,
         (12, "bPocCls1"): (pocket["pocket_clearance_mm"] / 1000
                             if request.bearing_type is BearingType.DEEP_GROOVE
                             else pocket["pocket_clearance_mm"]),
-        (12, "bPocCls2"): 0,
-        (12, "cageAngCut"): 0,
-        (12, "cageConeAng"): 0,
         (13, "cageGsDia1"): cage_inner / 1000,
         (13, "cageGsWidth1"): pocket["guide_width_mm"] / 1000,
         (13, "cageGsPos1"): pocket["guide_position_mm"] / 1000,
@@ -293,7 +294,7 @@ def geometry_updates(request: BearingRequest, *,
     }
 
 
-def update_ball_data(reference_data: str | Path, request: BearingRequest, *,
+def update_ball_data(reference_data: str | Path, request: BearingRequest | None, *,
                      geometry_mode: str,
                      operating_updates: Mapping[tuple[int, str], str | int | float],
                      analysis_shoulder_diameters_mm: tuple[float, float] | None = None,
@@ -310,6 +311,9 @@ def update_ball_data(reference_data: str | Path, request: BearingRequest, *,
     source profile for materials, lubricant and operating conditions. A mismatch
     requires explicit acknowledgement. ACB analysis sidewalls and both families'
     inner-race outside diameter must come from the analysis model.
+
+    Operating values use DATA units. Ring speed updates also set the matching
+    scan endpoints as in BaseBC, unless the caller explicitly sets an endpoint.
     """
     base = BallDataDocument.read(reference_data)
     if geometry_mode not in {"legacy_data", "cad_geometry"}:
@@ -334,11 +338,10 @@ def update_ball_data(reference_data: str | Path, request: BearingRequest, *,
     check_group("lubricant", lubricant_updates or {},
                 {(index, field) for index in range(35, 42)
                  for field in _RECORD_FIELDS[index][1]})
-    if geometry_mode == "legacy_data":
-        check_group("operating", operating_updates,
-                    {(index, field) for index in (*range(28, 35), 42)
-                     for field in _RECORD_FIELDS[index][1]})
     values = dict(operating_updates)
+    for speed_field, endpoint in (("rpm1", "rpmRange21"), ("rpm2", "rpmRange12")):
+        if (30, speed_field) in values:
+            values.setdefault((32, endpoint), values[(30, speed_field)])
     analysis_parameter_fields = {
         "freeIntCls", "shimThickness1", "shimThickness2", "rmsAspHt1", "rmsAspHt2",
     }
@@ -359,19 +362,13 @@ def update_ball_data(reference_data: str | Path, request: BearingRequest, *,
         derived = geometry_updates(
             request, analysis_shoulder_diameters_mm=analysis_shoulder_diameters_mm,
             analysis_inner_race_outside_diameter_mm=analysis_inner_race_outside_diameter_mm)
-        geometry_records = {9, 10, 12, 13, 14}
         mismatches = []
         for (record_index, field), expected in derived.items():
-            if record_index not in geometry_records:
-                continue
-            actual = base.value(record_index, field)
-            try:
-                if not math.isclose(float(actual), float(expected), rel_tol=1e-9, abs_tol=1e-12):
-                    mismatches.append((record_index, field, actual, expected))
-            except ValueError:
-                mismatches.append((record_index, field, actual, expected))
+            actual = float(base.value(record_index, field))
+            if not math.isclose(actual, expected, rel_tol=1e-9, abs_tol=1e-12):
+                mismatches.append(f"{_RECORD_FIELDS[record_index][0]}.{field}")
         if mismatches and not allow_reference_geometry_mismatch:
-            examples = ", ".join(f"rec{r + 1}.{name}" for r, name, _, _ in mismatches[:4])
+            examples = ", ".join(mismatches[:4])
             raise BallDataError(f"reference DATA geometry differs from CAD geometry at {examples}; explicitly set allow_reference_geometry_mismatch=True to overlay CAD geometry")
         values.update(derived)
     for updates in (solver_updates or {}, material_updates or {}, lubricant_updates or {}):

@@ -20,14 +20,14 @@ Source categories:
 | 3 | `kFD11,kFD21,kFD31,kFD12,kFD22,kFD32,kMD11,kMD21,kMD31,kMD12,kMD22,kMD32` | Legacy defaults; custom load/moment control flags require explicit override. |
 | 4 | `finName,pltNames1..pltNames9` | Legacy output filename defaults. |
 | 5 | `runId` | Caller-provided run identifier. |
-| 6 | `kUnit,kBrg,nRe,nCseg,kRaceFlex,kReGeoImp,kRaceGeoImp1,kRaceGeoImp2,kFlngInd11,kFlngInd12,kFlngInd21,kFlngInd22` | `kBrg=1` and `nRe` are explicitly assigned by both ball `SetAnalysisValue` methods; remaining fields retain the selected source profile. |
+| 6 | `kUnit,kBrg,nRe,nCseg,kRaceFlex,kReGeoImp,kRaceGeoImp1,kRaceGeoImp2,kFlngInd11,kFlngInd12,kFlngInd21,kFlngInd22` | This mapping accepts the audited `kUnit=1`, `kBrg=1` profiles. Both ball `SetAnalysisValue` methods assign `kBrg` and `nRe`. A change in ball count requires geometry mismatch acknowledgement. |
 | 7 | `kStaticConstraint[5],kAngVel,kStif,kChrn,kReMat,kRaceMat1,kRaceMat2,kHsngMat,kShftMat,kLifeCons` | Legacy solver defaults; material switches must agree with selected material profile. |
 | 8 | `kRotLoad,kRotFrame,kReIP,kRaceIP1,kRaceIP2,kNumPltElem,kPltElemInd[6]` | Six indices are assigned from `GetPltElemInd(nRe)`: `[1,nRe+1,0,0,0,0]`. |
 | 9 | `kCoolant,kBaseTemp,kHTC,kGeoMod,kMatPropMod` | Legacy defaults; changed thermal boundary settings require explicit values. |
 | 10 | `brgBore,brgOD,shftID,hsngOD,raceWidth1,raceWidth2` | Bore and OD first pass through `BaseInnerRace.InsideDiameter` / `BaseOuterRace.OutsideDiameter` getters (0.01 mm), then convert to m. `shftID` is the rounded bore divided by 5; `hsngOD` is the rounded outer diameter multiplied by 1.14. Both race widths use the 0.01 mm `Width` getter. |
 | 11 | `bReDia,pitchDia,freeConAngDeg,freeIntCls,raceCurFac1,raceCurFac2,shoulderDia1,shoulderDia2,shimThickness1,shimThickness2,rmsAspHt1,rmsAspHt2` | CAD geometry mode uses rounded ball (0.001 mm), pitch (0.01 mm), contact angle (ACB getter: 0.01 degree), and source-family race getter values. DGB sidewalls and ACB outer sidewall use 0.01 mm; ACB inner sidewall uses 0.1 mm. CAD curvature coefficients are radius/ball diameter and are distinct from legacy `BallBearingGeometry` defaults 0.52/0.54; legacy mode preserves the selected DATA values. The two modes must not be represented as numerically equivalent. DGB/ACB `SetAnalysisValue` does not assign internal clearance, either shim field, or roughness, so CAD mode preserves those values from the selected DATA profile. Explicit `analysis_parameters_mm` values override these fields and are converted from mm to the DATA metre units. C# `ShimThickness1` reads/writes `freeIntCls`; DATA serializes the backing fields separately. |
 | 12 | `kPoctype,kCagePocImp,kCageGsImp,kRaceGsImp,kPocHydro,kGsHydro,kCageMat,kCageIP,nGL,iCageGuide[4]` | `kPoctype=0` is explicitly assigned by both ball `SetAnalysisValue` methods; remaining fields retain `BaseGeometry` values. |
-| 13 | `cageDia1,cageDia2,cageWidth,cageCls1,cageCls2,bPocCls1,bPocCls2,cageAngCut,cageConeAng` | Getter/setter order matters: BallDiameter getter to 0.001 mm; PocketDiameter getter to 0.1 mm; guide gap; OutsideDiameter/InsideDiameter getters to 0.01 mm; `CalculateWidth`; Width getter to 0.01 mm. DGB CageCls2 subtracts inner sidewall; ACB subtracts inner race outside diameter. DGB writes `BPocCls1` property (mm to m); ACB writes `bPocCls1` backing field directly (DATA keeps the mm magnitude). Remaining lengths convert to m. |
+| 13 | `cageDia1,cageDia2,cageWidth,cageCls1,cageCls2,bPocCls1,bPocCls2,cageAngCut,cageConeAng` | Getter/setter order matters: BallDiameter getter to 0.001 mm; PocketDiameter getter to 0.1 mm; guide gap; OutsideDiameter/InsideDiameter getters to 0.01 mm; `CalculateWidth`; Width getter to 0.01 mm. DGB CageCls2 subtracts inner sidewall; ACB subtracts inner race outside diameter. DGB writes `BPocCls1` property (mm to m); ACB writes `bPocCls1` backing field directly (DATA keeps the mm magnitude). Both leave `bPocCls2`, `cageAngCut`, and `cageConeAng` in the reference profile. |
 | 14 | `cageGsDia1,cageGsWidth1,cageGsPos1,cageGsCls1` | Both families use rounded cage inside diameter, `0.22*cage.Width`, `0.5*cage.Width`, and cage inside minus inner race outside diameter. |
 | 15 | `cageGsDia2,cageGsWidth2,cageGsPos2,cageGsCls2` | Same assignments as record 14 for guide 2. |
 | 16 | `density,elasticModules,poissonRatio,thermalExpansion,specificHeat,conductivity,strainLimit,hardness,wearCoeff,misis` (rolling element) | Original `Material` defaults or explicitly selected local material entry. |
@@ -47,7 +47,7 @@ Source categories:
 | 30 | `appLoadX,appLoadY,appLoadZ,appDispX,appDispY,appDispZ` | User-supplied force components and prescribed displacement; never inferred from CAD. |
 | 31 | `appMomY,appMomZ,appMis11,appMis21,appMis12,appMis22,rpm1,rpm2` | User-supplied moments, misalignment and ring speeds. The source protocol has no `appMomX` field. |
 | 32 | `hsngTemp,shftTemp,raceTemp1,raceTemp2,reTemp,cageTemp` | User-supplied temperatures or explicit legacy profile defaults; K in DATA. |
-| 33 | `pctDisp,rpmRange11,rpmRange21,rpmRange12,rpmRange22` | Legacy scan defaults or explicitly supplied speed ranges; not inferred from a single speed. |
+| 33 | `pctDisp,rpmRange11,rpmRange21,rpmRange12,rpmRange22` | `BaseBC.Rpm1` also sets `rpmRange21`, and `BaseBC.Rpm2` also sets `rpmRange12`. An explicitly supplied scan endpoint takes precedence. The remaining scan settings come from the reference profile or explicit overrides. |
 | 34 | `pocLubFilm,wvRatio,avRatio,cageGcPosX,cageGcPosY,cageGcPosZ,cageAngPosX,cageAngPosY,cageAngPosZ` | Legacy defaults or explicit lubricant/initial-condition inputs; cage initial position is not in CAD. |
 | 35 | `baseTemp,cFlowRate,cPres,reHTC,cageHTC,aveTime,skipTime` | Legacy thermal defaults or explicit boundary inputs. |
 | 36 | `xRo,xMu,xCp,xK` | Original lubricant profile properties or explicit override. |
@@ -96,6 +96,11 @@ DATA SHA-256.
 
 `operating_updates`, `solver_updates`, `material_updates`, and
 `lubricant_updates` use `(zero_based_record_index, field_name)` keys.
+Values use the serialized DATA units, such as N, N·m, m, K, and rpm for
+force, moment, displacement, temperature, and ring speeds. When setting a
+ring speed through `update_ball_data`, the matching scan endpoint follows
+the speed unless explicitly supplied. `BallDataDocument.with_updates` edits
+serialized fields directly and applies no setter side effects.
 `solver_updates` is limited to `(0, "nStps")`. The original reference is never
 changed; write `document.render()` to a new path after reviewing the profile.
 
