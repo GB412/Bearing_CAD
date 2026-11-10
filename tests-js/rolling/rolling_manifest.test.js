@@ -45,6 +45,16 @@ test('cylinder configurations are constrained and numeric fields are validated',
  assert.throws(()=>requestFromFields(values(angular),{},angular),/保持架/);
  assert.throws(()=>requestFromFields(values(deep),null,'rolling.unknown'),/未支持/);
 });
+test('straight roller zeros and explicit ACB material omission survive request serialization',()=>{
+ const plain={...values(cylindrical),configuration:'N',roller_profile:'plain',
+  roller_end_chamfer_mm:'0',roller_crown_relief_mm:'0'};
+ const roller=requestFromFields(plain,null,cylindrical);
+ assert.equal(roller.parameters.roller_end_chamfer_mm,0);
+ assert.equal(roller.parameters.roller_crown_relief_mm,0);
+ const ball=requestFromFields({...values(angular),cage_material:''},null,angular);
+ assert.equal(Object.hasOwn(ball.parameters,'cage_material'),false);
+ assert.equal(requestFromFields(values(angular),null,angular).parameters.cage_material,'engineering_plastic');
+});
 test('prototype STL is expanded to unique instances',()=>{
  const parts=buildAssemblyIndex(def());
  assert.equal(parts.length,3);

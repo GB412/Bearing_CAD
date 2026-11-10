@@ -96,6 +96,7 @@ test('DGB search uses minimal initial input and never writes CAD until candidate
   expect(observed.drawing).toBeUndefined();
 
   await page.getByRole('button', {name: '确认并应用此设计'}).click();
+  await expect(page.locator('#designConfirmation')).toContainText('当前设计已确认');
   await expect(page.locator('#param-ball_d_mm')).toHaveValue('8.5');
   await expect(page.locator('#param-pitch_d_mm')).toHaveValue('55.5');
   await expect(page.locator('#param-ball_count')).toHaveValue('12');

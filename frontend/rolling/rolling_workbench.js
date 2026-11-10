@@ -3,6 +3,7 @@ import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {STLLoader} from 'three/addons/loaders/STLLoader.js';
 import './rolling_workbench.css';
 import {initDrawingWorkbench} from './rolling_drawing.js';
+import {initAnalysisWorkbench} from './rolling_analysis.js';
 import {deriveRoBASGrooves,deriveRoBASBallCount} from './rolling_robas_geometry.js';
 import {bearingForms, cageForms, cageChoices, defaultCageEnabled, buildAssemblyIndex, validateArtifact, requestFromFields, geometryIssues, scaleGeometryFields, describeCadError, ParameterInputError} from './rolling_manifest.js';
 
@@ -16,7 +17,7 @@ function renderFields(container, prefix, data) {
   if(prefix==='param-')el.dataset.parameterTier=key==='configuration'?'drawing':(['bore_d_mm','outside_d_mm','width_mm'].includes(key)?'basic':'advanced');
   const field=choices?document.createElement('select'):document.createElement('input');
   if(choices){
-   for(const option of choices){const item=document.createElement('option');item.value=option;item.textContent=({engineering_plastic:'工程塑料',phenolic:'酚醛层压布管',plain:'原版直圆柱',chamfered:'端部倒角',crowned:'凸度修形 + 倒角'}[option]||option);field.append(item);}
+   for(const option of choices){const item=document.createElement('option');item.value=option;item.textContent=({'':'不指定（手动录入球数）',engineering_plastic:'工程塑料',phenolic:'酚醛层压布管',plain:'原版直圆柱',chamfered:'端部倒角',crowned:'凸度修形 + 倒角'}[option]??option);field.append(item);}
    field.value=value;
   }else{
    field.type='number';field.step=key.endsWith('_count')?'1':'any';field.value=String(value);
@@ -40,11 +41,22 @@ function renderFields(container, prefix, data) {
 }
 function syncDerivedGeometry(){
  syncRollerProfileInputs();
- syncDerivedGrooves();
  const ball=$('param-ball_d_mm');
  const pitch=$('param-pitch_d_mm');
  const countField=$('param-ball_count');
  if(!ball||!pitch||!countField)return;
+ const explicit=$('explicitBallGeometry').checked;
+ for(const key of ['ball_count','inner_groove_radius_mm','outer_groove_radius_mm']){
+  const field=$('param-'+key);
+  field.readOnly=!explicit;
+  field.classList.toggle('derived-input',!explicit);
+ }
+ if(explicit)return;
+ syncDerivedGrooves();
+ if($('param-cage_material')?.value===''){
+  countField.value='';
+  return;
+ }
  const material=$('param-cage_material')?.value||'engineering_plastic';
  try{
   const count=deriveRoBASBallCount($('bearingType').value,ball.value,pitch.value,material);
@@ -87,6 +99,8 @@ function syncDerivedGrooves(){
 renderFields($('parameters'),'param-',fields);
 renderFields($('cageParams'),'cage-',cages);
 let active=null, token=0, controller=null, available=false;
+let confirmedKey=null;
+let drawings, analysis;
 let supportedTypes=new Set(), robasSizingAvailable=false, robasOptimizationAvailable=false;
 let robasACBOptimizationAvailable=false, robasCRBOptimizationAvailable=false;
 let appliedSizingEvidence=null, appliedStampingEvidence=null, appliedOptimizationEvidence=null;
@@ -279,6 +293,10 @@ function invalidatePreview(message='输入已改变，请重新生成 CAD'){
  clearOptimizationCandidates();
  appliedSizingEvidence=null;appliedStampingEvidence=null;appliedOptimizationEvidence=null;
  dispose();status(message);
+ confirmedKey=null;
+ $('designConfirmation').textContent='当前设计尚未确认';
+ drawings?.invalidate();
+ analysis?.invalidateDesign();
  $('generate').disabled=!canGenerate();
 }
 function configureCageKind(reset=false){
@@ -298,6 +316,8 @@ function configureCageKind(reset=false){
 }
 function configureForm(){
  fields=bearingForms[selectedType()].fields;
+ $('explicitBallGeometry').checked=false;
+ $('explicitBallGeometryControl').hidden=selectedType()==='rolling.cylindrical_roller';
  renderFields($('parameters'),'param-',fields);
  $('cageEnabled').checked=defaultCageEnabled[selectedType()];
  configureCageKind(true);
@@ -309,6 +329,17 @@ function configureForm(){
 function getParams(){
  const draft=rawDraft();
  return requestFromFields(draft.values,draft.cage,selectedType());
+}
+function checkedDesign(){
+ const design=getParams();
+ const issues=geometryIssues(design);
+ if(issues.length)throw new ParameterInputError(issues[0].message,issues[0].fieldPath);
+ return design;
+}
+function confirmDesign(){
+ confirmedKey=JSON.stringify(checkedDesign());
+ $('designConfirmation').textContent='当前设计已确认 · 仅限本次工作台会话';
+ analysis?.syncDesign();
 }
 async function applyRoBASGeometry(){
  if(selectedType()!=='rolling.deep_groove_ball'||!robasSizingAvailable)return;
@@ -397,6 +428,7 @@ function currentOptimizationInput(){
  };
 }
 function currentACBOptimizationInput(){
+ if(!$('param-cage_material')?.value)throw Error('角接触球优化需明确选择球数计算使用的保持架材料');
  if(selectedType()!=='rolling.angular_contact_ball')
   throw Error('当前仅支持角接触球轴承 ACB 优化');
  if($('cageEnabled').checked)
@@ -528,7 +560,13 @@ function renderOptimizationCandidates(reply,snapshot,version,kind='dgb'){
     const issues=geometryIssues(verified);
     if(issues.length)throw Error(issues[0].message);
     // Only mutate controls after the whole candidate passes preflight.
-    for(const [key] of fields)$('param-'+key).value=String(design.parameters[key]);
+    for(const [key] of fields)$('param-'+key).value=String(next[key]??'');
+    $('cageEnabled').checked=Boolean(nextCage);
+    if(nextCage&&$('cageKind').value!==nextCage.kind){
+     $('cageKind').value=nextCage.kind;
+     configureCageKind();
+    }
+    $('cageOptions').hidden=!nextCage;
     if(nextCage)for(const [key] of cages)$('cage-'+key).value=String(nextCage[key]);
     $('scaleTarget').value=String(design.parameters.bore_d_mm);
     invalidatePreview('已确认优化候选，请重新生成二维或三维模型');
@@ -537,6 +575,7 @@ function renderOptimizationCandidates(reply,snapshot,version,kind='dgb'){
       candidate_id:item.candidate_id,
       source_initial_hash:reply.source_initial_hash,
     };
+    confirmDesign();
     showDraftIssues();
     status((isCRB
       ? '已确认 RoBAS CRB Cr 候选 '+item.rank+'：滚子 '+p.roller_d_mm+
@@ -787,7 +826,7 @@ async function loadArtifacts(result, sequence){
 async function generate(){
  if(!canGenerate())return;
  controller?.abort();controller=new AbortController();const version=++token;
- $('generate').disabled=true;dispose();status('提交 CAD 请求…');
+ $('generate').disabled=true;dispose();analysis.syncDesign();drawings.updateVersion();status('提交 CAD 请求…');
  try{
   const data=getParams();
   const problems=geometryIssues(data);
@@ -808,9 +847,17 @@ async function generate(){
   if(!result.ok)throw Error('成果清单无法读取');
   const payload=await result.json();if(version!==token)return;
   await loadArtifacts(payload,version);
+  if(version!==token)return;
+  const snapshotUrl=payload.file_urls['design_snapshot.json'];
+  if(/^[a-f0-9]{32}$/.test(reply.job_id??'')&&payload.job_id===reply.job_id&&
+     reply.request_hash===active.manifest.request_hash&&
+     snapshotUrl===`/api/v2/cad/artifacts/${reply.job_id}/files/design_snapshot.json`){
+   active.analysisEvidence={jobId:reply.job_id, hash:reply.request_hash, snapshotUrl, key:JSON.stringify(data)};
+  }
+  analysis.syncDesign();drawings.updateVersion();
  }catch(error){
   if(version===token&&error.name!=='AbortError'){
-   dispose();
+   dispose();analysis.syncDesign();drawings.updateVersion();
    if(error.fieldPath)paintIssues([{fieldPath:error.fieldPath,message:error.message}]);
    status('CAD 生成失败：'+error.message,true);
   }
@@ -838,8 +885,22 @@ for(const id of ['drawingModel','drawingAccuracy','drawingClearance',
  $(id).addEventListener('change',clearOptimizationCandidates);
 }
 $('robasStampingModel').addEventListener('input',()=>invalidatePreview('RoBAS 保持架型号已更改，请重新生成 CAD'));
-initDrawingWorkbench(getParams);
+drawings=initDrawingWorkbench(getParams,()=>active?.analysisEvidence?.hash);
+analysis=initAnalysisWorkbench({
+ getType:selectedType,
+ getDesign:getParams,
+ getConfirmedKey:()=>confirmedKey,
+ getCad:()=>active?.analysisEvidence,
+});
+$('confirmDesign').addEventListener('click',()=>{
+ try{confirmDesign();showDraftIssues();}
+ catch(error){status('不能确认设计：'+error.message,true);showDraftIssues();}
+});
+$('explicitBallGeometry').addEventListener('change',()=>{
+ syncDerivedGeometry();invalidatePreview();showDraftIssues();
+});
 $('resetParams').addEventListener('click',()=>{
+ $('explicitBallGeometry').checked=false;
  renderFields($('parameters'),'param-',fields);
  $('cageEnabled').checked=defaultCageEnabled[selectedType()];
  configureCageKind(true);

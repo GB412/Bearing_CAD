@@ -33,6 +33,7 @@
           </label>
           <div class="section-heading">模型尺寸</div>
           <div class="fields" id="parameters"></div>
+          <label class="switch" id="explicitBallGeometryControl"><input id="explicitBallGeometry" type="checkbox"><span>手动录入已核实的球数和沟曲率半径</span></label>
           <div id="modelSpecificControls">
           <div id="cagePanel">
             <div class="section-heading">保持架</div>
@@ -139,9 +140,11 @@
           <div id="validation" class="parameter-warning" role="alert" hidden></div>
           <p class="hint" id="modelSafetyNote">预设数据用于几何测试，不代表厂家选型或制造公差。</p>
           <div class="buttonrow" id="modelGenerationActions">
+            <button id="confirmDesign" class="secondary" type="button">确认当前设计</button>
             <button id="generate" class="primary">生成三维模型</button>
             <button id="resetParams" class="secondary">恢复默认</button>
           </div>
+          <p id="designConfirmation" class="hint" role="status">当前设计尚未确认</p>
           <div class="notice" id="status" role="status" aria-live="polite">正在检查 CAD 引擎…</div>
         </div>
       </section>
@@ -207,6 +210,11 @@
           <span class="workspace-tab-icon">2D</span>
           <span><strong>二维图纸</strong><small id="drawingTabCount">等待生成</small></span>
         </button>
+        <button id="workspaceAnalysisTab" class="workspace-tab" type="button" role="tab"
+                aria-selected="false" aria-controls="analysisWorkspace">
+          <span class="workspace-tab-icon">QA</span>
+          <span><strong>拟静力学分析</strong><small>RoBAS 原版求解器</small></span>
+        </button>
       </div>
 
       <section id="modelWorkspace" class="workspace-view" role="tabpanel" aria-labelledby="workspace3dTab">
@@ -254,6 +262,7 @@
             <span class="drawing-eyebrow">ROBAS · ORIGINAL DWG TEMPLATE</span>
             <h2>二维工程图预览</h2>
             <p id="drawingWorkspaceSubtitle">生成图纸后，在这里查看四张原版模板图纸。</p>
+            <p id="drawingDesignVersion" class="hint"></p>
           </div>
           <div class="drawing-head-status" id="drawingWorkspaceStatus" role="status" aria-live="polite">
             <span class="status-dot"></span>等待生成
@@ -297,6 +306,27 @@
             <a id="drawingDownloadCurrent" class="drawing-download-current" href="#" hidden>下载当前 DXF <span aria-hidden="true">↓</span></a>
           </div>
         </div>
+      </section>
+      <section id="analysisWorkspace" class="workspace-view analysis-workspace" role="tabpanel" aria-labelledby="workspaceAnalysisTab" hidden>
+        <div class="viewer-head"><div><h2>RoBAS 拟静力学分析</h2><p id="analysisDesign">先确认设计并生成三维模型。</p></div></div>
+        <form id="analysisForm" class="analysis-card" novalidate>
+          <label class="field">原版参考配置<select id="analysisProfile"></select></label>
+          <p id="analysisProfileSource" class="hint"></p>
+          <p id="analysisAvailability" class="hint" role="status"></p>
+          <p class="hint">DGB / ACB 的显式 CAD 保持架及 ACB 的 CAD 保持架材料暂未映射到分析。可主动修改设计并重新确认。CRB 仅支持 N 型直滚子。</p>
+          <h3>分析几何</h3>
+          <div id="analysisGeometry" class="fields"></div>
+          <h3>运行工况</h3>
+          <p class="hint">载荷方向遵循 RoBAS X/Y/Z 坐标。留空的字段继承参考 DATA。材料、润滑、温度及力矩等由参考配置提供。</p>
+          <div id="analysisConditions" class="fields"></div>
+          <label id="analysisMismatch" class="switch" hidden><input type="checkbox" id="analysisAllowMismatch"><span>已核对上方配置和几何差异，使用当前设计几何继续</span></label>
+          <div class="buttonrow"><button id="runAnalysis" class="primary" type="submit" disabled>运行拟静力学分析</button></div>
+          <p id="analysisStatus" class="notice" role="status" aria-live="polite"></p>
+        </form>
+        <section id="analysisResult" class="analysis-card" aria-label="拟静力学结果" hidden>
+          <h3>计算结果</h3><p id="analysisResultVersion" class="notice" role="status"></p>
+          <div id="analysisResultBody"></div>
+        </section>
       </section>
     </section>
   </main>
