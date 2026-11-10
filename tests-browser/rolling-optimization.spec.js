@@ -131,6 +131,6 @@ test('optimizer rejects missing source clearance instead of assuming C0', async 
   await page.locator('#drawingClearance').selectOption('');
   await page.locator('#workspace3dTab').click();
   await page.locator('#runRoBASOptimizer').click();
-  await expect(page.locator('#status')).toContainText('选择径向游隙组');
+  await expect(page.locator('#optimizationHint')).toContainText('选择径向游隙组');
   expect(observed.initial).toBeUndefined();
 });

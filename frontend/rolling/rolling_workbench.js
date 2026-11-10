@@ -104,7 +104,14 @@ let drawings, analysis;
 let supportedTypes=new Set(), robasSizingAvailable=false, robasOptimizationAvailable=false;
 let robasACBOptimizationAvailable=false, robasCRBOptimizationAvailable=false;
 let appliedSizingEvidence=null, appliedStampingEvidence=null, appliedOptimizationEvidence=null;
-let optimizationPreview=null;
+let optimizationPreview=null, optimizationRun=null, optimizationRevision=0;
+const OPTIMIZERS={
+ dgb:{type:'rolling.deep_groove_ball',button:'runRoBASOptimizer',stem:'optimization',available:()=>robasOptimizationAvailable},
+ acb:{type:'rolling.angular_contact_ball',button:'runRoBASACBOptimizer',stem:'acbOptimization',available:()=>robasACBOptimizationAvailable},
+ crb:{type:'rolling.cylindrical_roller',button:'runRoBASCRBOptimizer',stem:'crbOptimization',available:()=>robasCRBOptimizationAvailable},
+};
+const ACB_MODEL=/^7[023][0-9]{2,3}$/;
+const ACB_WEIGHTS=['acbSpinWeight','acbAxialStiffnessWeight','acbDynamicLoadWeight'];
 const scene=new THREE.Scene();scene.background=null;
 const camera=new THREE.PerspectiveCamera(36,1,.1,5000);
 const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
@@ -260,15 +267,10 @@ function updateStampingActions(){
 }
 function updateAvailability(){
  updateStampingActions();
- const dgb=selectedType()==='rolling.deep_groove_ball';
- $('dgbOptimizationPanel').hidden=!dgb;
- $('runRoBASOptimizer').disabled=!robasOptimizationAvailable||!dgb;
- const acb=selectedType()==='rolling.angular_contact_ball';
- $('acbOptimizationPanel').hidden=!acb;
- $('runRoBASACBOptimizer').disabled=!robasACBOptimizationAvailable||!acb;
- const crb=selectedType()==='rolling.cylindrical_roller';
- $('crbOptimizationPanel').hidden=!crb;
- $('runRoBASCRBOptimizer').disabled=!robasCRBOptimizationAvailable||!crb;
+ for(const [kind,opt] of Object.entries(OPTIMIZERS))
+  $(kind+'OptimizationPanel').hidden=selectedType()!==opt.type;
+ updateOptimizationButtons();
+ $('dgbSizingPanel').hidden=selectedType()!==OPTIMIZERS.dgb.type;
  const enabled=canGenerate();$('generate').disabled=!enabled;
  $('connection').textContent=available?'本地 OCCT 引擎在线':'CAD 引擎不可用';
  $('connection').dataset.state=available?'ready':'offline';
@@ -276,21 +278,31 @@ function updateAvailability(){
  $('applyRoBASGeometry').disabled=!robasSizingAvailable||selectedType()!=='rolling.deep_groove_ball';
  if(available&&!enabled)status('当前 CAD 服务暂不支持所选轴承类型',true);
 }
-function clearOptimizationCandidates(){
+function optimizationFeedback(kind,message,state=''){
+ const hint=$(OPTIMIZERS[kind].stem+'Hint');
+ hint.textContent=message;
+ hint.hidden=!message;
+ hint.dataset.state=state;
+}
+function updateOptimizationButtons(){
+ for(const opt of Object.values(OPTIMIZERS))
+  $(opt.button).disabled=Boolean(optimizationRun)||!opt.available()||selectedType()!==opt.type;
+}
+function clearOptimizationCandidates(invalidated=false){
+ const affected=optimizationPreview?.kind??optimizationRun?.kind;
+ optimizationRevision++;
  optimizationPreview=null;
- $('optimizationResults').hidden=true;
- $('optimizationHint').textContent='';
- $('optimizationCandidates').replaceChildren();
- $('acbOptimizationResults').hidden=true;
- $('acbOptimizationHint').textContent='';
- $('acbOptimizationCandidates').replaceChildren();
- $('crbOptimizationResults').hidden=true;
- $('crbOptimizationHint').textContent='';
- $('crbOptimizationCandidates').replaceChildren();
+ for(const [kind,opt] of Object.entries(OPTIMIZERS)){
+  $(opt.stem+'Results').hidden=true;
+  $(opt.stem+'Candidates').replaceChildren();
+  if(!invalidated||$(opt.stem+'Hint').dataset.state!=='stale')optimizationFeedback(kind,'');
+ }
+ if(invalidated&&affected)optimizationFeedback(affected,'输入已改变，原候选已失效，请重新计算。','stale');
 }
 function invalidatePreview(message='输入已改变，请重新生成 CAD'){
  token++;controller?.abort();controller=null;
- clearOptimizationCandidates();
+ clearOptimizationCandidates(true);
+ updateACBValidation();
  appliedSizingEvidence=null;appliedStampingEvidence=null;appliedOptimizationEvidence=null;
  dispose();status(message);
  confirmedKey=null;
@@ -427,12 +439,37 @@ function currentOptimizationInput(){
   }
  };
 }
+function acbWeightIssue(){
+ const weights=ACB_WEIGHTS.map(id=>$(id).value.trim());
+ if(weights.some(value=>!value||!Number.isFinite(Number(value))||Number(value)<0||Number(value)>1))
+  return '请为三项权重分别填写 0 至 1 的数值。';
+ const sum=weights.reduce((total,value)=>total+Number(value),0);
+ return Math.abs(sum-1)>1e-9?'权重合计为 '+Number(sum.toFixed(10))+'，须等于 1。':'';
+}
+function acbCageIssue(){
+ if($('cageEnabled').checked)return '请先取消保持架，再计算角接触球候选。';
+ if(!$('param-cage_material')?.value)return '请在模型尺寸中选择球数计算使用的保持架材料。';
+ return '';
+}
+function updateACBValidation(){
+ if(selectedType()!==OPTIMIZERS.acb.type)return;
+ const valid=ACB_MODEL.test($('acbModel').value.trim());
+ $('acbModel').setAttribute('aria-invalid',String(!valid));
+ const model=$('acbModelHint');
+ model.textContent=valid?'与二维图纸共用型号。':'请输入 70、72 或 73 系列型号，例如 7008。';
+ model.classList.toggle('field-error',!valid);
+ const weightIssue=acbWeightIssue();
+ $('acbWeightHint').textContent=weightIssue||'权重合计 1';
+ $('acbWeightHint').classList.toggle('field-error',Boolean(weightIssue));
+ const cageIssue=acbCageIssue();
+ $('acbCageHint').textContent=cageIssue;
+ $('acbCageHint').hidden=!cageIssue;
+}
 function currentACBOptimizationInput(){
- if(!$('param-cage_material')?.value)throw Error('角接触球优化需明确选择球数计算使用的保持架材料');
  if(selectedType()!=='rolling.angular_contact_ball')
   throw Error('当前仅支持角接触球轴承 ACB 优化');
- if($('cageEnabled').checked)
-  throw Error('当前角接触球候选优化尚未对齐保持架，请先取消保持架');
+ const issue=acbCageIssue();
+ if(issue)throw Error(issue);
  const numeric=(id,label)=>{
   const value=$(id).value.trim();
   if(value==='')throw Error('请填写'+label);
@@ -441,20 +478,26 @@ function currentACBOptimizationInput(){
   return parsed;
  };
  const model=$('drawingModel').value.trim();
- if(!model)throw Error('请填写轴承型号（例如 7008）');
+ if(!ACB_MODEL.test(model))throw Error('请输入 70、72 或 73 系列轴承型号，例如 7008。');
+ const weightIssue=acbWeightIssue();
+ if(weightIssue)throw Error(weightIssue);
+ const contactAngle=numeric('param-contact_angle_deg','接触角');
+ if(![15,25,40].includes(contactAngle))throw Error('请将接触角设为 15°、25° 或 40°。');
+ const preload=numeric('acbPreloadN','预载荷 Fa');
+ if(preload<=0)throw Error('预载荷 Fa 须大于 0 N。');
  return {
   initial:{
    bearing_type:selectedType(),
    bore_d_mm:numeric('param-bore_d_mm','内径 d'),
    outside_d_mm:numeric('param-outside_d_mm','外径 D'),
    width_mm:numeric('param-width_mm','宽度 B'),
-   contact_angle_deg:numeric('param-contact_angle_deg','接触角'),
+   contact_angle_deg:contactAngle,
    cage_material:$('param-cage_material').value,
    cage:null
   },
   optimization:{
    model,accuracy_class:$('drawingAccuracy').value,
-   preload_n:numeric('acbPreloadN','预载荷 Fa'),
+   preload_n:preload,
    weights:{
     spin_ratio:numeric('acbSpinWeight','旋滚比权重'),
     axial_stiffness:numeric('acbAxialStiffnessWeight','轴向刚度权重'),
@@ -507,45 +550,44 @@ function optimizationInputFor(kind){
 function optimizationSnapshot(kind='dgb'){
  return JSON.stringify(optimizationInputFor(kind));
 }
-function renderOptimizationCandidates(reply,snapshot,version,kind='dgb'){
+function renderOptimizationCandidates(reply,snapshot,version,kind){
  const isACB=kind==='acb',isCRB=kind==='crb';
- const prefix=isACB?'acb':isCRB?'crb':'';
- const container=$(prefix?prefix+'OptimizationCandidates':'optimizationCandidates');
+ const stem=OPTIMIZERS[kind].stem;
+ const container=$(stem+'Candidates');
  container.replaceChildren();
- $(prefix?prefix+'OptimizationResults':'optimizationResults').hidden=false;
- $(prefix?prefix+'OptimizationHint':'optimizationHint').textContent=
-  '原版搜索网格中有 '+reply.total_valid_candidates+
-  ' 组符合候选筛选的设计；显示前 '+reply.candidates.length+
-  ' 组。此处没有修改任何 CAD 参数。评分仅用于候选排序，尚未经 3D B-Rep、拟静力分析或制造审核。';
+ $(stem+'Results').hidden=false;
+ optimizationFeedback(kind,'找到 '+reply.total_valid_candidates+' 组可行方案，显示前 '+reply.candidates.length+' 组。','success');
  for(const item of reply.candidates){
   const card=document.createElement('div');
   card.className='optimization-candidate';
   const title=document.createElement('strong');
   title.textContent='候选 '+item.rank+
     (isCRB?' · Cr 相对评分 ':' · 综合评分 ')+item.score.toFixed(3);
-  const metrics=document.createElement('div');
+  const metrics=document.createElement('dl');
   metrics.className='candidate-metrics';
   const p=item.design.parameters;
-  metrics.textContent=isCRB
-    ? '滚子 Dw '+p.roller_d_mm.toFixed(3)+' mm · Lw '+p.roller_length_mm.toFixed(2)+
-      ' mm · Z '+p.roller_count+' · 节圆 Dpw '+p.pitch_d_mm.toFixed(2)+
-      ' mm · Cr '+(item.metrics.dynamic_load_n/1000).toFixed(2)+
-      ' kN · Cor '+(item.metrics.static_load_n/1000).toFixed(2)+
-      ' kN · Kr 原版未实现（不可用）'
-    : '钢球 Dw '+p.ball_d_mm.toFixed(3)+' mm · Z '+p.ball_count+
-      ' · 节圆 Dpw '+p.pitch_d_mm.toFixed(2)+' mm · Cr '+
-      (item.metrics.dynamic_load_n/1000).toFixed(2)+' kN · '+
-      (isACB
-        ? '旋滚比 '+item.metrics.spin_ratio.toFixed(5)+
-          ' · 原版 Ka '+item.metrics.axial_stiffness_source_units.toFixed(2)
-        : '经验径向刚度 '+item.metrics.radial_stiffness_source_units.toFixed(2))+
-      '（原版经验公式值）';
+  const rows=isCRB
+   ? [['滚子直径',p.roller_d_mm.toFixed(3)+' mm'],['滚子长度',p.roller_length_mm.toFixed(2)+' mm'],['滚子数',p.roller_count]]
+   : [['钢球直径',p.ball_d_mm.toFixed(3)+' mm'],['球数',p.ball_count]];
+  rows.push(['节圆直径',p.pitch_d_mm.toFixed(2)+' mm'],
+            ['动载荷 Cr',(item.metrics.dynamic_load_n/1000).toFixed(2)+' kN']);
+  if(isACB)rows.push(['轴向刚度 Ka',item.metrics.axial_stiffness_source_units.toFixed(2)],
+                     ['旋滚比',item.metrics.spin_ratio.toFixed(5)]);
+  else if(isCRB)rows.push(['静载荷 Cor',(item.metrics.static_load_n/1000).toFixed(2)+' kN'],
+                         ['Kr 原版未实现','不可用']);
+  else rows.push(['经验径向刚度',item.metrics.radial_stiffness_source_units.toFixed(2)]);
+  for(const [label,value] of rows){
+   const cell=document.createElement('div');
+   const name=document.createElement('dt');name.textContent=label;
+   const number=document.createElement('dd');number.textContent=String(value);
+   cell.append(name,number);metrics.append(cell);
+  }
   const button=document.createElement('button');
   button.type='button';button.className='secondary';
   button.textContent='确认并应用此设计';
   button.addEventListener('click',()=>{
    try{
-    if(version!==token||!optimizationPreview||
+    if(version!==optimizationRevision||!optimizationPreview||
        optimizationPreview.kind!==kind||
        optimizationPreview.snapshot!==optimizationSnapshot(kind))
      throw Error('设计输入已改变，请重新计算优化候选');
@@ -577,147 +619,66 @@ function renderOptimizationCandidates(reply,snapshot,version,kind='dgb'){
     };
     confirmDesign();
     showDraftIssues();
-    status((isCRB
-      ? '已确认 RoBAS CRB Cr 候选 '+item.rank+'：滚子 '+p.roller_d_mm+
-        '×'+p.roller_length_mm+' mm，'+p.roller_count+' 个'
-      : '已确认 RoBAS 优化候选 '+item.rank+'：钢球 '+p.ball_d_mm+
-        ' mm，'+p.ball_count+' 颗')+
-      '，Dpw '+p.pitch_d_mm+
-      ' mm。请分别点击生成三维模型或二维工程图；非制造批准。');
-   }catch(error){status('不能应用优化候选：'+error.message,true);}
+    const message='已应用候选 '+item.rank+'。可生成 CAD，三维完成后可进入拟静力学分析，按页面提示检查保持架兼容性。';
+    optimizationFeedback(kind,message,'success');
+    $(stem+'Hint').focus({preventScroll:true});
+   }catch(error){optimizationFeedback(kind,'不能应用候选：'+error.message,'error');}
   });
   card.append(title,metrics,button);container.append(card);
  }
 }
-async function runRoBASOptimizer(){
- if(!robasOptimizationAvailable||selectedType()!=='rolling.deep_groove_ball')return;
- const button=$('runRoBASOptimizer');
- const version=token;
- let snapshot;
- try{
-  const payload=currentOptimizationInput();
-  snapshot=JSON.stringify(payload);
-  clearOptimizationCandidates();
-  button.disabled=true;
-  status('正在按原版 DGBOptimizer 网格搜索候选方案…');
-  const response=await fetch('/api/v2/cad/optimization/dgb',{
-   method:'POST',headers:{'Content-Type':'application/json'},
-   body:JSON.stringify(payload)
-  });
-  const reply=await response.json();
-  if(version!==token||snapshot!==optimizationSnapshot())return;
-  if(!response.ok)throw Error(reply.error?.message||'RoBAS 优化候选计算失败');
-  if(reply.schema_version!=='bearing-cad.robas-dgb-optimization.v1'||
-     reply.candidate_only!==true||reply.applied!==false||
-     !Array.isArray(reply.candidates)||reply.candidates.length===0)
-   throw Error('RoBAS 优化响应契约不正确');
-  for(const candidate of reply.candidates)
-   if(typeof candidate.candidate_id!=='string'||
-      typeof candidate.score!=='number'||!Number.isFinite(candidate.score)||
-      !candidate.design?.parameters||!candidate.metrics)
-    throw Error('RoBAS 优化候选数据无效');
-  optimizationPreview={reply,snapshot,version,kind:'dgb'};
-  renderOptimizationCandidates(reply,snapshot,version,'dgb');
-  status('已得到 '+reply.candidates.length+
-         ' 组优化候选；请先比较并确认，现有 CAD 参数未更改。');
- }catch(error){
-  if(version===token){
-   clearOptimizationCandidates();
-   status('RoBAS 优化失败：'+error.message,true);
-  }
- }finally{button.disabled=!robasOptimizationAvailable||selectedType()!=='rolling.deep_groove_ball';}
+const NO_CANDIDATES='未找到可行候选。请核对型号、外形尺寸和当前约束，再重新计算。';
+function optimizationError(reply,http){
+ const detail=reply?.error?.message??'';
+ if(/^No (?:source-backed )?(?:DGB |ACB |CRB )?candidates?\b/i.test(detail))return NO_CANDIDATES;
+ if(http===503)return '优化服务暂不可用。请检查本机 RoBAS 资源配置后重试。';
+ if(reply?.error?.field_path==='/optimization/model')return '型号不符合原版系列要求，请核对型号后重试。';
+ if(reply?.error?.field_path?.startsWith('/optimization/weights'))return '请检查各项权重均在 0 至 1 范围内，且合计为 1。';
+ return detail ? detail+'。请检查当前输入或原版数据后重试。' : '未收到有效响应，请检查本机 CAD 服务后重试。';
 }
-async function runRoBASACBOptimizer(){
- if(!robasACBOptimizationAvailable||
-    selectedType()!=='rolling.angular_contact_ball')return;
- const button=$('runRoBASACBOptimizer');
- const version=token;
- let snapshot;
+function validOptimizationCandidate(candidate,kind){
+ const p=candidate?.design?.parameters,m=candidate?.metrics;
+ if(typeof candidate?.candidate_id!=='string'||!p||!m||!Number.isFinite(candidate.score))return false;
+ if(![p.pitch_d_mm,m.dynamic_load_n].every(Number.isFinite))return false;
+ if(kind==='crb')return [p.roller_d_mm,p.roller_length_mm,p.roller_count,m.static_load_n].every(Number.isFinite)&&
+  m.radial_stiffness_source_units===null;
+ if(![p.ball_d_mm,p.ball_count].every(Number.isFinite))return false;
+ return kind==='acb'?[m.spin_ratio,m.axial_stiffness_source_units].every(Number.isFinite):
+  Number.isFinite(m.radial_stiffness_source_units);
+}
+async function runOptimization(kind){
+ const opt=OPTIMIZERS[kind];
+ if(optimizationRun||!opt.available()||selectedType()!==opt.type)return;
+ clearOptimizationCandidates();
+ const version=optimizationRevision;
  try{
-  const payload=currentACBOptimizationInput();
-  snapshot=JSON.stringify(payload);
-  clearOptimizationCandidates();
-  button.disabled=true;
-  status('正在按原版 ACBOptimizer 网格搜索候选方案…');
-  const response=await fetch('/api/v2/cad/optimization/acb',{
-   method:'POST',headers:{'Content-Type':'application/json'},
-   body:JSON.stringify(payload),
+  const snapshot=optimizationSnapshot(kind);
+  optimizationRun={kind};
+  updateOptimizationButtons();
+  optimizationFeedback(kind,'正在计算候选方案…','busy');
+  const response=await fetch('/api/v2/cad/optimization/'+kind,{
+   method:'POST',headers:{'Content-Type':'application/json'},body:snapshot
   });
-  const reply=await response.json();
-  if(version!==token||snapshot!==optimizationSnapshot('acb'))return;
-  if(!response.ok)throw Error(reply.error?.message||'ACB 优化候选计算失败');
-  if(reply.schema_version!=='bearing-cad.robas-acb-optimization.v1'||
+  const reply=await response.json().catch(()=>null);
+  if(version!==optimizationRevision||snapshot!==optimizationSnapshot(kind))return;
+  if(!response.ok)throw Error(optimizationError(reply,response.status));
+  if(reply?.schema_version!=='bearing-cad.robas-'+kind+'-optimization.v1'||
      reply.candidate_only!==true||reply.applied!==false||
-     !Array.isArray(reply.candidates)||reply.candidates.length===0)
-   throw Error('ACB 优化响应格式无效');
-  for(const candidate of reply.candidates){
-   const p=candidate.design?.parameters;
-   const m=candidate.metrics;
-   if(typeof candidate.candidate_id!=='string'||!p||!m||
-      !Number.isFinite(candidate.score)||!Number.isFinite(m.spin_ratio)||
-      !Number.isFinite(m.axial_stiffness_source_units)||
-      !Number.isFinite(m.dynamic_load_n))
-    throw Error('ACB 候选结果包含无效数值');
-  }
-  optimizationPreview={reply,snapshot,version,kind:'acb'};
-  renderOptimizationCandidates(reply,snapshot,version,'acb');
-  status('已得到 '+reply.candidates.length+
-         ' 组角接触球优化候选；确认前不会修改 CAD 参数。');
+     (kind==='crb'&&reply.objective_status!=='CR_ONLY_SOURCE_KR_NOT_IMPLEMENTED')||
+     !Array.isArray(reply.candidates))throw Error('候选结果格式无效，请检查本机服务后重试。');
+  if(!reply.candidates.length)throw Error(NO_CANDIDATES);
+  if(!reply.candidates.every(candidate=>validOptimizationCandidate(candidate,kind)))
+   throw Error('候选结果包含无效指标，请检查原版数据后重试。');
+  optimizationPreview={reply,snapshot,kind};
+  renderOptimizationCandidates(reply,snapshot,version,kind);
  }catch(error){
-  if(version===token){
-   clearOptimizationCandidates();
-   status('ACB 优化失败：'+error.message,true);
+  if(version===optimizationRevision){
+   const message=error instanceof TypeError?'连接优化服务失败，请检查本机 CAD 服务后重试。':error.message;
+   optimizationFeedback(kind,message,'error');
   }
  }finally{
-  button.disabled=!robasACBOptimizationAvailable||
-    selectedType()!=='rolling.angular_contact_ball';
- }
-}
-async function runRoBASCRBOptimizer(){
- if(!robasCRBOptimizationAvailable||
-    selectedType()!=='rolling.cylindrical_roller')return;
- const button=$('runRoBASCRBOptimizer');
- const version=token;
- let snapshot;
- try{
-  const payload=currentCRBOptimizationInput();
-  snapshot=JSON.stringify(payload);
-  clearOptimizationCandidates();
-  button.disabled=true;
-  status('正在按 RoBAS CRBOptimizer 搜索 Cr 优先候选；原版径向刚度暂不可用…');
-  const response=await fetch('/api/v2/cad/optimization/crb',{
-   method:'POST',headers:{'Content-Type':'application/json'},
-   body:JSON.stringify(payload)
-  });
-  const reply=await response.json();
-  if(version!==token||snapshot!==optimizationSnapshot('crb'))return;
-  if(!response.ok)throw Error(reply.error?.message||'CRB 优化候选失败');
-  if(reply.schema_version!=='bearing-cad.robas-crb-optimization.v1'||
-     reply.candidate_only!==true||reply.applied!==false||
-     reply.objective_status!=='CR_ONLY_SOURCE_KR_NOT_IMPLEMENTED'||
-     !Array.isArray(reply.candidates)||reply.candidates.length===0)
-    throw Error('CRB 候选响应格式无效');
-  for(const candidate of reply.candidates){
-   const p=candidate.design?.parameters,m=candidate.metrics;
-   if(typeof candidate.candidate_id!=='string'||!p||!m||
-      !Number.isFinite(candidate.score)||
-      !Number.isFinite(m.dynamic_load_n)||
-      !Number.isFinite(m.static_load_n)||
-      m.radial_stiffness_source_units!==null)
-    throw Error('CRB 候选指标无效；Kr 必须标为未实现');
-  }
-  optimizationPreview={reply,snapshot,version,kind:'crb'};
-  renderOptimizationCandidates(reply,snapshot,version,'crb');
-  status('已得到 '+reply.candidates.length+
-         ' 组 Cr 优先的圆柱滚子候选；Kr 无有效原版公式，确认前不会修改参数。');
- }catch(error){
-  if(version===token){
-   clearOptimizationCandidates();
-   status('CRB 候选搜索失败：'+error.message,true);
-  }
- }finally{
-  button.disabled=!robasCRBOptimizationAvailable||
-    selectedType()!=='rolling.cylindrical_roller';
+  optimizationRun=null;
+  updateOptimizationButtons();
  }
 }
 async function applyRoBASStamping(){
@@ -866,23 +827,28 @@ async function generate(){
 $('generate').addEventListener('click',generate);
 $('applyRoBASGeometry').addEventListener('click',applyRoBASGeometry);
 $('applyRoBASStamping').addEventListener('click',applyRoBASStamping);
-$('runRoBASOptimizer').addEventListener('click',runRoBASOptimizer);
-$('runRoBASACBOptimizer').addEventListener('click',runRoBASACBOptimizer);
-$('runRoBASCRBOptimizer').addEventListener('click',runRoBASCRBOptimizer);
+for(const [kind,opt] of Object.entries(OPTIMIZERS))
+ $(opt.button).addEventListener('click',()=>runOptimization(kind));
 $('editCRBOptimizationContext').addEventListener('click',()=>{
- $('workspace2dTab').click();
-});
-$('editACBOptimizationContext').addEventListener('click',()=>{
  $('workspace2dTab').click();
 });
 $('editOptimizationContext').addEventListener('click',()=>{
  $('workspace2dTab').click();
 });
+$('acbModel').value=$('drawingModel').value;
+$('acbModel').addEventListener('input',()=>{
+ const shared=$('drawingModel');
+ shared.value=$('acbModel').value;
+ shared.dispatchEvent(new Event('input',{bubbles:true}));
+});
 for(const id of ['drawingModel','drawingAccuracy','drawingClearance',
-                 'optimizerCrWeight','optimizerStiffnessWeight','acbPreloadN',
-                 'acbSpinWeight','acbAxialStiffnessWeight','acbDynamicLoadWeight']){
- $(id).addEventListener('input',clearOptimizationCandidates);
- $(id).addEventListener('change',clearOptimizationCandidates);
+                 'optimizerCrWeight','optimizerStiffnessWeight','acbPreloadN',...ACB_WEIGHTS]){
+ $(id).addEventListener('input',()=>{
+  if(id==='drawingModel'&&$('acbModel').value!==$('drawingModel').value)
+   $('acbModel').value=$('drawingModel').value;
+  clearOptimizationCandidates(true);
+  updateACBValidation();
+ });
 }
 $('robasStampingModel').addEventListener('input',()=>invalidatePreview('RoBAS 保持架型号已更改，请重新生成 CAD'));
 drawings=initDrawingWorkbench(getParams,()=>active?.analysisEvidence?.hash);
