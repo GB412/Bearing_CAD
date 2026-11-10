@@ -227,18 +227,26 @@ def _execution(report: Mapping | None, family: str, files: dict) -> dict:
         observed = [files[name]["sha256"]] if "sha256" in files[name] else []
         if expected != observed:
             raise ResultParseError("solver_probe_report.json", f"{name} SHA-256 mismatch")
-    executed = report.get("solver_executed")
-    code = report.get("process_exit_code")
-    output = report.get("output_status")
+    if not {"solver_executed", "process_exit_code", "output_status"}.issubset(report):
+        raise ResultParseError("solver_probe_report.json", "missing execution fields")
+    executed = report["solver_executed"]
+    code = report["process_exit_code"]
+    output = report["output_status"]
     if executed is True and type(code) is int:
-        status = "EXITED_ZERO" if code == 0 else "EXITED_NONZERO"
-    elif executed is True and code is None and output == "PROCESS_TIMEOUT":
-        status = "TIMEOUT"
-    elif executed is False and code is None:
-        status = "START_FAILED" if output == "PROCESS_START_FAILED" else "NOT_EXECUTED"
-    else:
-        raise ResultParseError("solver_probe_report.json", "inconsistent execution fields")
-    return {"status": status, "exit_code": code}
+        if code == 0 and output in ("OUTPUT_PRESENT_UNPARSED_NOT_CONVERGENCE_PROOF", "OUTPUT_ABSENT_OR_INVALID"):
+            return {"status": "EXITED_ZERO", "exit_code": code}
+        if code != 0 and output == "PROCESS_NONZERO_EXIT":
+            return {"status": "EXITED_NONZERO", "exit_code": code}
+    if code is None:
+        if executed is True and output == "PROCESS_TIMEOUT":
+            return {"status": "TIMEOUT", "exit_code": None}
+        if executed is False and output in ("PROCESS_START_FAILED", "NOT_EXECUTED"):
+            status = "START_FAILED" if output == "PROCESS_START_FAILED" else "NOT_EXECUTED"
+            return {"status": status, "exit_code": None}
+    raise ResultParseError(
+        "solver_probe_report.json",
+        "inconsistent execution fields (solver_executed, process_exit_code, output_status)",
+    )
 
 
 def parse_static_results(
@@ -246,8 +254,9 @@ def parse_static_results(
 ) -> dict:
     """Read paired DATA/OUT and optional evidence, returning a JSON-safe result.
 
-    Pass the existing probe's report to establish execution state and bind
-    hashes. Metrics describe printed values. Convergence remains unknown.
+    Pass the same-run probe report to verify input/output hashes and read
+    execution state. Without it, source binding is unverified. Metrics
+    describe printed values, with convergence assessed separately.
     """
     if family not in _FAMILIES:
         raise ResultParseError("DATA.txt", "family must be ball or roller")
@@ -292,6 +301,10 @@ def parse_static_results(
     return {
         "schema_version": "bearing-cad.robas-static-results.v1", "family": family,
         "files": files, "execution": execution, "convergence": {"status": "UNKNOWN"},
+        "source_binding": (
+            {"status": "UNVERIFIED", "evidence": "LIMITED_OUT_ECHO"} if probe_report is None
+            else {"status": "HASH_VERIFIED", "evidence": "PROBE_REPORT_SHA256"}
+        ),
         "output_status": "PARSED_SUPPORTED_SECTIONS", "rolling_element_count": count,
         "contacts": _contacts(lines, count), "stiffness_sweep": _sweep(lines),
         "summary": {

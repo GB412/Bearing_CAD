@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from bearing_cad.robas_ball_input import _RECORD_FIELDS as BALL_FIELDS
+from bearing_cad.robas_ball_input import BallDataDocument, _RECORD_FIELDS as BALL_FIELDS
 from bearing_cad.robas_results import ResultParseError, parse_static_results
 
 
@@ -85,6 +85,8 @@ def test_parses_units_rounding_and_keeps_execution_independent(run):
     result = parse_static_results(run, family="ball")
     assert result["execution"] == {"status": "UNKNOWN", "exit_code": None}
     assert result["convergence"] == {"status": "UNKNOWN"}
+    assert result["source_binding"] == {"status": "UNVERIFIED", "evidence": "LIMITED_OUT_ECHO"}
+    assert result["output_status"] == "PARSED_SUPPORTED_SECTIONS"
     assert result["files"]["a0_Final"] == {"status": "MISSING"}
     assert result["files"]["OUT.txt"]["sha256"] == _hash(run / "OUT.txt")
     assert result["nonfinite_evidence"] == []  # The `AT INF SLIP` heading is text.
@@ -104,9 +106,11 @@ def test_parses_units_rounding_and_keeps_execution_independent(run):
 
 @pytest.mark.parametrize(("executed", "code", "probe_status", "expected"), [
     (True, 0, "OUTPUT_PRESENT_UNPARSED_NOT_CONVERGENCE_PROOF", "EXITED_ZERO"),
+    (True, 0, "OUTPUT_ABSENT_OR_INVALID", "EXITED_ZERO"),
     (True, 6, "PROCESS_NONZERO_EXIT", "EXITED_NONZERO"),
     (True, None, "PROCESS_TIMEOUT", "TIMEOUT"),
     (False, None, "PROCESS_START_FAILED", "START_FAILED"),
+    (False, None, "NOT_EXECUTED", "NOT_EXECUTED"),
 ])
 def test_uses_hash_bound_execution_evidence(run, executed, code, probe_status, expected):
     (run / "a0_Final").write_bytes(b"0 0.05\r\n0 1\r\n")
@@ -114,6 +118,7 @@ def test_uses_hash_bound_execution_evidence(run, executed, code, probe_status, e
         run, executed=executed, code=code, status=probe_status,
     ))
     assert result["execution"] == {"status": expected, "exit_code": code}
+    assert result["source_binding"] == {"status": "HASH_VERIFIED", "evidence": "PROBE_REPORT_SHA256"}
     assert result["convergence"]["status"] == "UNKNOWN"
     assert result["files"]["a0_Final"]["status"] == "PRESENT_UNINTERPRETED"
     assert result["files"]["a0_Final"]["sha256"] == _hash(run / "a0_Final")
@@ -123,6 +128,45 @@ def test_probe_hash_mismatch_is_rejected(run):
     report = _probe(run)
     _replace_out(run, "2.3E+8", "2.4E+8")
     with pytest.raises(ResultParseError, match="OUT.txt SHA-256 mismatch"):
+        parse_static_results(run, family="ball", probe_report=report)
+
+
+def test_equal_echo_does_not_bind_modified_operating_conditions(run):
+    report = _probe(run)
+    data = run / "DATA.txt"
+    modified = BallDataDocument.read(data).with_updates({(29, "appLoadX"): 1500})
+    data.write_bytes(modified.render().encode())
+    result = parse_static_results(run, family="ball")
+    assert result["output_status"] == "PARSED_SUPPORTED_SECTIONS"
+    assert result["source_binding"]["status"] == "UNVERIFIED"
+    with pytest.raises(ResultParseError, match="DATA.txt family or SHA-256 mismatch"):
+        parse_static_results(run, family="ball", probe_report=report)
+
+
+@pytest.mark.parametrize(("executed", "code", "status"), [
+    (True, 0, "PROCESS_NONZERO_EXIT"),
+    (True, 0, "PROCESS_TIMEOUT"),
+    (True, 3, "OUTPUT_PRESENT_UNPARSED_NOT_CONVERGENCE_PROOF"),
+    (True, 3, "OUTPUT_ABSENT_OR_INVALID"),
+    (True, None, "PROCESS_START_FAILED"),
+    (False, None, "PROCESS_TIMEOUT"),
+    (False, None, "OUTPUT_PRESENT_UNPARSED_NOT_CONVERGENCE_PROOF"),
+    (False, None, "UNRECOGNIZED_STATUS"),
+    (False, 1, "PROCESS_NONZERO_EXIT"),
+    (True, False, "OUTPUT_ABSENT_OR_INVALID"),
+    (1, 0, "OUTPUT_PRESENT_UNPARSED_NOT_CONVERGENCE_PROOF"),
+])
+def test_rejects_contradictory_execution_fields(run, executed, code, status):
+    report = _probe(run, executed=executed, code=code, status=status)
+    with pytest.raises(ResultParseError, match="inconsistent execution fields") as error:
+        parse_static_results(run, family="ball", probe_report=report)
+    assert error.value.filename == "solver_probe_report.json"
+
+
+def test_missing_exit_code_is_distinct_from_explicit_null(run):
+    report = _probe(run, executed=True, code=None, status="PROCESS_TIMEOUT")
+    del report["process_exit_code"]
+    with pytest.raises(ResultParseError, match="missing execution fields"):
         parse_static_results(run, family="ball", probe_report=report)
 
 
@@ -154,6 +198,8 @@ def test_invalid_numbers_keep_tokens_and_never_serialize_nonstandard_json(run):
     _replace_out(run, "2.3E+8 1.6E+8", "NaN -Infinity")
     _replace_out(run, "1.23456E-5", "1E+999")
     result = parse_static_results(run, family="ball")
+    assert result["output_status"] == "PARSED_SUPPORTED_SECTIONS"
+    assert result["execution"]["status"] == result["convergence"]["status"] == "UNKNOWN"
     row = result["contacts"][0]
     for metric, raw in ((row["outer"]["stress"], "NaN"), (row["inner"]["stress"], "-Infinity"),
                         (row["outer"]["deflection"], "1E+999")):
@@ -200,6 +246,8 @@ def test_real_windows_goldens(folder, family, digest, count, line, outer, inner,
     assert result["summary"]["total_power_loss"]["value"] == summary[0]
     assert result["summary"]["internal_clearance"]["value"] == summary[1]
     assert result["execution"] == {"status": "EXITED_ZERO", "exit_code": 0}
+    assert result["source_binding"]["status"] == "HASH_VERIFIED"
+    assert result["output_status"] == "PARSED_SUPPORTED_SECTIONS"
     assert result["convergence"]["status"] == "UNKNOWN"
     assert result["files"]["OUT.txt"]["sha256"] == _hash(path) == digest
     if family == "roller":
