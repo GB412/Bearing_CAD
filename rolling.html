@@ -34,6 +34,15 @@
           <div class="section-heading">模型尺寸</div>
           <div class="fields" id="parameters"></div>
           <label class="switch" id="explicitBallGeometryControl"><input id="explicitBallGeometry" type="checkbox"><span>手动录入已核实的球数和沟曲率半径</span></label>
+          <div id="validation" class="parameter-warning" role="alert" hidden></div>
+          <p class="hint" id="modelSafetyNote">设计结果需工程审核。</p>
+          <div class="buttonrow" id="modelGenerationActions">
+            <button id="confirmDesign" class="secondary" type="button">确认当前设计</button>
+            <button id="generate" class="primary">生成三维模型</button>
+            <button id="resetParams" class="secondary">恢复默认</button>
+          </div>
+          <p id="designConfirmation" class="hint" role="status">当前设计尚未确认</p>
+          <div class="notice" id="status" role="status" aria-live="polite">正在检查 CAD 引擎…</div>
           <div id="modelSpecificControls">
           <div id="cagePanel">
             <div class="section-heading">保持架</div>
@@ -52,22 +61,24 @@
                   <input id="robasStampingModel" type="text" value="6008" maxlength="18" autocomplete="off">
                 </label>
                 <div class="buttonrow">
-                  <button id="applyRoBASStamping" type="button" class="secondary" disabled>按原版 StampingCage 预填</button>
+                  <button id="applyRoBASStamping" type="button" class="secondary" disabled>预填冲压保持架</button>
                 </div>
-                <p class="hint">型号仅选择原版经验计算系列，不自动校验与轴承外形尺寸的型号匹配。球兜半径、板厚、铆钉尺寸来自原版规则；铆钉孔净距沿用当前显式 CAD 输入。</p>
+                <details class="calculation-note"><summary>计算说明</summary><p>球兜、板厚和铆钉尺寸按型号系列计算；铆钉孔净距沿用输入值。型号与外形尺寸需核对。</p></details>
               </div>
             </div>
           </div>
-          <div class="section-heading">RoBAS 初始几何</div>
+          <section id="dgbSizingPanel" class="design-section" aria-label="初始尺寸">
+          <h3 class="section-heading">初始尺寸 · 深沟球</h3>
           <div class="buttonrow">
             <button id="applyRoBASGeometry" class="secondary" type="button" disabled
-                    title="需要通过 --robas-resources 指定原版资源目录">RoBAS DGBGeometry 候选预填</button>
+                    title="需要本机原版 RoBAS 资源">计算并预填初始尺寸</button>
           </div>
-          <p class="hint">只迁移原版 DGBGeometry 初始构造路径，不运行 DGBOptimizer。简化保持架尺寸可预填；冲压双半笼请单独选择原版系列并显式设置 CAD 铆钉孔净距。</p>
-          <div id="dgbOptimizationPanel">
-            <div class="section-heading">RoBAS 多目标优化 · 深沟球</div>
-            <p class="hint">初始设计仅需上面的 d / D / B，以及右侧图纸设置中的型号、精度等级和游隙组。无需先确定钢球数量与沟道。原版 DGBOptimizer 候选搜索，优化目标为 Cr 与经验径向刚度；不会自行改动模型。</p>
-            <div class="buttonrow"><button type="button" id="editOptimizationContext" class="secondary">设置型号 / 精度 / 游隙组（转到二维设置）</button></div>
+          <details class="calculation-note"><summary>计算说明</summary><p>按 RoBAS 初始构造规则计算尺寸和简化保持架。冲压保持架需单独预填。</p></details>
+          </section>
+          <div id="dgbOptimizationPanel" class="design-section">
+            <h3 class="section-heading">深沟球优化</h3>
+            <p class="hint">按额定动载荷 Cr 和经验径向刚度排序。</p>
+            <div class="buttonrow"><button type="button" id="editOptimizationContext" class="secondary">设置型号与游隙组</button></div>
             <div class="optimization-weights">
               <label class="field" for="optimizerCrWeight">动载荷 Cr 权重
                 <input id="optimizerCrWeight" type="number" min="0" max="1" step="0.05" value="0.8">
@@ -77,75 +88,72 @@
               </label>
             </div>
             <div class="buttonrow">
-              <button id="runRoBASOptimizer" type="button" class="secondary" disabled>生成优化候选（不修改设计）</button>
+              <button id="runRoBASOptimizer" type="button" class="secondary" disabled>计算优化候选</button>
             </div>
+            <p id="optimizationHint" class="optimization-feedback" role="status" tabindex="-1" hidden></p>
             <div id="optimizationResults" class="optimization-results" hidden>
-              <p id="optimizationHint" class="hint" role="status"></p>
               <div id="optimizationCandidates" class="optimization-candidates"></div>
             </div>
-            <p class="hint">仅迁移 DGB 优化的第一阶段。候选由用户确认后应用到完整 CAD 参数；三维和二维均需重新点击生成。尚未进行拟静力学求解或制造审核。</p>
+            <details class="calculation-note"><summary>计算说明</summary><p>用外形尺寸、型号和径向游隙组搜索候选。评分仅用于方案比较。</p></details>
           </div>
-          <div id="acbOptimizationPanel" hidden>
-            <div class="section-heading">RoBAS 多目标优化 · 角接触球</div>
-            <p class="hint">先填写 d/D/B、接触角和保持架材料；接触角只支持原版已审核的 15°/25°/40°。原版还需要预载荷 Fa（N）。候选不自动修改设计，精度等级及轴承型号在二维图纸设置中指定。</p>
-            <div class="buttonrow">
-              <button type="button" id="editACBOptimizationContext" class="secondary">设置轴承型号 / 精度等级（转到二维设置）</button>
-            </div>
+          <div id="acbOptimizationPanel" class="design-section" hidden>
+            <h3 class="section-heading">角接触球优化</h3>
+            <p class="hint">当前按原版评分排序；旋滚比优化方向尚待工程审核。</p>
+            <label class="field optimization-model" for="acbModel">轴承型号
+              <input id="acbModel" type="text" maxlength="40" autocomplete="off" placeholder="例如 7008"
+                     aria-describedby="acbModelHint">
+              <span id="acbModelHint" class="field-hint" aria-live="polite"></span>
+            </label>
             <div class="optimization-weights">
               <label class="field" for="acbPreloadN">预载荷 Fa（N）
                 <input id="acbPreloadN" type="number" min="0.001" step="any" value="100">
               </label>
               <label class="field" for="acbSpinWeight">旋滚比权重
-                <input id="acbSpinWeight" type="number" min="0" max="1" step="0.05" value="0.3">
+                <input id="acbSpinWeight" aria-describedby="acbWeightHint" type="number" min="0" max="1" step="0.05" value="0.3">
               </label>
               <label class="field" for="acbAxialStiffnessWeight">轴向刚度 Ka 权重
-                <input id="acbAxialStiffnessWeight" type="number" min="0" max="1" step="0.05" value="0.3">
+                <input id="acbAxialStiffnessWeight" aria-describedby="acbWeightHint" type="number" min="0" max="1" step="0.05" value="0.3">
               </label>
               <label class="field" for="acbDynamicLoadWeight">额定动载荷 Cr 权重
-                <input id="acbDynamicLoadWeight" type="number" min="0" max="1" step="0.05" value="0.4">
+                <input id="acbDynamicLoadWeight" aria-describedby="acbWeightHint" type="number" min="0" max="1" step="0.05" value="0.4">
               </label>
             </div>
+            <p id="acbWeightHint" class="field-hint" aria-live="polite"></p>
+            <p id="acbCageHint" class="field-hint" aria-live="polite" hidden></p>
             <div class="buttonrow">
-              <button id="runRoBASACBOptimizer" type="button" class="secondary" disabled>生成角接触球优化候选（不修改设计）</button>
+              <button id="runRoBASACBOptimizer" type="button" class="secondary" disabled>计算优化候选</button>
             </div>
+            <p id="acbOptimizationHint" class="optimization-feedback" role="status" tabindex="-1" hidden></p>
             <div id="acbOptimizationResults" class="optimization-results" hidden>
-              <p id="acbOptimizationHint" class="hint" role="status"></p>
               <div id="acbOptimizationCandidates" class="optimization-candidates"></div>
             </div>
-            <p class="hint">原版 ACBOptimizer 以较大旋滚比为高得分，其工程优化方向需后续专业审核；此处只做原版算法候选比较。原版保持架优化与当前 CAD 保持架几何尚未对齐，因此本阶段请先关闭保持架，确认候选后再考虑保持架方案。</p>
+            <details class="calculation-note"><summary>计算说明</summary><p>支持 15°、25°、40° 接触角。Ka 为原版经验公式值。原版对较大旋滚比给出较高评分；二维的精度等级仅随请求记录。</p></details>
           </div>
-          <div id="crbOptimizationPanel" hidden>
-            <div class="section-heading">RoBAS 候选优化 · 圆柱滚子</div>
-            <p class="hint">以当前 d / D / B、N / NU / NJ / NF / NUP 挡边构型、径向净距、端部净距、挡边宽度及滚子轮廓为约束，搜索标准滚子直径 Dw、长度 Lw、数量 Z 和节圆 Dpw。只按原版额定动载荷 Cr 排序；师兄原版径向刚度 Kr 函数返回 0，本阶段明确不参与评价。</p>
-            <div class="buttonrow"><button id="editCRBOptimizationContext" type="button" class="secondary">填写 N 系列轴承型号和精度等级（转到二维设置）</button></div>
-            <p class="hint">源 CRBOptimizer 没有可用的 Kr 公式，因此目前是 **单目标 Cr 推荐**，不是双目标。保留当前 CAD 的径向/轴向净距和滚子端部轮廓；改变滚子结构前必须先取消原有窗孔保持架，确认优化后另行设计保持架。</p>
+          <div id="crbOptimizationPanel" class="design-section" hidden>
+            <h3 class="section-heading">圆柱滚子优化</h3>
+            <p class="hint">按额定动载荷 Cr 排序；径向刚度 Kr 暂不可用。</p>
+            <div class="buttonrow"><button id="editCRBOptimizationContext" type="button" class="secondary">设置圆柱滚子型号</button></div>
+
             <div class="buttonrow">
-              <button id="runRoBASCRBOptimizer" type="button" class="secondary" disabled>搜索 Cr 优先的圆柱滚子候选（不修改设计）</button>
+              <button id="runRoBASCRBOptimizer" type="button" class="secondary" disabled>计算 Cr 优先候选</button>
             </div>
+            <p id="crbOptimizationHint" class="optimization-feedback" role="status" tabindex="-1" hidden></p>
             <div id="crbOptimizationResults" class="optimization-results" hidden>
-              <p id="crbOptimizationHint" class="hint" role="status"></p>
               <div id="crbOptimizationCandidates" class="optimization-candidates"></div>
             </div>
-            <p class="hint">推荐结果并非已核实的制造标准或拟静力学校核；原版 CRBOptimizer 的滚子系数 CSV 与二维出图 Server 的系数 CSV 不同，二者会分别记录来源。</p>
+            <details class="calculation-note"><summary>计算说明</summary><p>搜索标准滚子尺寸和数量。保留当前挡边、净距和滚子轮廓；原版优化和二维出图使用不同系数表。</p></details>
           </div>
-          <div class="section-heading">尺寸调整</div>
+          <details class="design-section size-tools">
+            <summary>尺寸调整</summary>
           <div class="scale-tools">
             <label class="field" for="scaleTarget">目标内径 d（mm）
               <input id="scaleTarget" type="number" min="0.001" step="any" value="40" aria-label="目标内径">
             </label>
             <button id="scaleApply" type="button" class="secondary">整体等比例缩放</button>
           </div>
-          <p class="hint">仅同步缩放长度尺寸和保持架尺寸；数量、接触角及挡边构型保持不变。独立修改时不会自动覆盖其他参数。</p>
+          <p class="hint">按比例调整长度；数量、接触角和挡边构型保持不变。</p>
+          </details>
           </div>
-          <div id="validation" class="parameter-warning" role="alert" hidden></div>
-          <p class="hint" id="modelSafetyNote">预设数据用于几何测试，不代表厂家选型或制造公差。</p>
-          <div class="buttonrow" id="modelGenerationActions">
-            <button id="confirmDesign" class="secondary" type="button">确认当前设计</button>
-            <button id="generate" class="primary">生成三维模型</button>
-            <button id="resetParams" class="secondary">恢复默认</button>
-          </div>
-          <p id="designConfirmation" class="hint" role="status">当前设计尚未确认</p>
-          <div class="notice" id="status" role="status" aria-live="polite">正在检查 CAD 引擎…</div>
         </div>
       </section>
 

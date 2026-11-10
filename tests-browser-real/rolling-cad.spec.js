@@ -83,6 +83,7 @@ test('real OCCT builds a rescaled 50 mm bore angular-contact assembly',async({pa
  await page.goto('/rolling.html');
  await expect(page.locator('#generate')).toBeEnabled();
  await page.locator('#bearingType').selectOption('rolling.angular_contact_ball');
+ await page.locator('.size-tools summary').click();
  await page.locator('#scaleTarget').fill('50');
  await page.locator('#scaleApply').click();
  await expect(page.locator('#validation')).toBeHidden();

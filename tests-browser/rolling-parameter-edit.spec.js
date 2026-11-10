@@ -23,6 +23,7 @@ test('editing bore reports related fields; scaling preserves explicit geometry',
  expect(jobCalls).toBe(0);
 
  await page.locator('#resetParams').click();
+ await page.locator('.size-tools summary').click();
  await page.locator('#scaleTarget').fill('50');
  await page.locator('#scaleApply').click();
  await expect(page.locator('#param-bore_d_mm')).toHaveValue('50');
