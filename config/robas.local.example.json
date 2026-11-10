@@ -2,6 +2,7 @@
   "resources_path": "D:/path/to/RoBAS_Resources",
   "cadimport_dll_path": "D:/path/to/CADImport.dll",
   "cadimport_bridge_path": "./bridge/cadimport/bin/Release/CadImportBridge.exe",
+  "analysis_profiles_path": null,
   "port": 8090,
   "python": "python"
 }
