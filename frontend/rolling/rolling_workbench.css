@@ -930,6 +930,8 @@ body.drawing-preview-expanded {
    receives the unchanged full design specification. */
 body:not([data-cad-view="2d"]) #drawingSettingsPanel { display: none; }
 body[data-cad-view="2d"] #modelSpecificControls,
+body[data-cad-view="2d"] #explicitBallGeometryControl,
+body[data-cad-view="2d"] #designConfirmation,
 body[data-cad-view="2d"] #modelGenerationActions,
 body[data-cad-view="2d"] #modelSafetyNote,
 body[data-cad-view="2d"] #status,
@@ -940,6 +942,24 @@ body[data-cad-view="2d"] #parameters [data-parameter-tier="drawing"] { display: 
 body[data-cad-view="2d"] #modelParametersPanel .panel-body { padding-bottom: 13px; }
 body[data-cad-view="2d"] #modelParametersPanel .section-heading { margin-top: 0; }
 body[data-cad-view="2d"] #parameters { grid-template-columns: repeat(2,minmax(0,1fr)); }
+
+.analysis-workspace { min-width: 0; }
+.analysis-card { margin: 14px; padding: 16px; border: 1px solid #d9e4ea; border-radius: 12px; }
+.analysis-card h3, .analysis-card h4 { margin: 14px 0 8px; }
+.analysis-card > .field { max-width: 28rem; }
+.analysis-card .hint { overflow-wrap: anywhere; }
+#analysisDesign { overflow-wrap: anywhere; }
+.analysis-card .is-historical { background: #fff1d7; color: #714500; }
+.analysis-card details { margin: 10px 0; }
+.analysis-card summary { cursor: pointer; font-weight: 600; }
+.analysis-statusline { font-weight: 600; }
+.analysis-table { overflow-x: auto; margin: 8px 0; }
+.analysis-table table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.analysis-table th, .analysis-table td { padding: 7px 9px; border-bottom: 1px solid #d9e4ea; text-align: left; }
+.analysis-table td { overflow-wrap: anywhere; }
+.analysis-table th { min-width: 7rem; }
+.analysis-card svg { display: block; width: 100%; max-width: 52rem; color: #415368; font-size: 13px; }
+.analysis-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .88rem; }
 
 /* The canvas should use the viewport, not the height of a long form. */
 @media (min-width: 761px) {

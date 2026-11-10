@@ -35,7 +35,7 @@ export const bearingForms = Object.freeze({
       ['ball_count','钢球数量',11], ['inner_groove_radius_mm','内沟曲率半径',4.3],
       ['outer_groove_radius_mm','外沟曲率半径',4.5],
       ['contact_angle_deg','名义接触角 (°)',25],
-      ['cage_material','球数计算使用的保持架材料','engineering_plastic',['engineering_plastic','phenolic']],
+      ['cage_material','球数计算使用的保持架材料','engineering_plastic',['engineering_plastic','phenolic','']],
       ['inner_shoulder_left_d_mm','内圈左肩直径',49],
       ['inner_shoulder_right_d_mm','内圈右肩直径',47],
       ['outer_shoulder_left_d_mm','外圈左肩直径',61],
@@ -95,7 +95,7 @@ export const defaultCageEnabled = Object.freeze({
 // These numbers bound interactive CAD execution, not bearing design standards.
 export const MAX_ROLLERS = 64;
 export const MAX_DIMENSION_MM = 1000;
-const NONNEGATIVE = new Set(['radial_clearance_mm','axial_clearance_mm']);
+const NONNEGATIVE = new Set(['radial_clearance_mm','axial_clearance_mm','roller_end_chamfer_mm','roller_crown_relief_mm']);
 export class ParameterInputError extends Error {
  constructor(message,fieldPath){super(message);this.name='ParameterInputError';this.fieldPath=fieldPath;}
 }
@@ -177,7 +177,7 @@ export function requestFromFields(values, cage, bearingType='rolling.deep_groove
   for(const [key,, ,options] of form.fields) {
     if (options) {
       if (!options.includes(values[key])) throw Error('不支持的构型：'+String(values[key]));
-      params[key]=values[key];
+      if(key!=='cage_material'||values[key]!=='')params[key]=values[key];
     } else {
       params[key]=numeric(values[key],key,key.endsWith('_count'));
       if(key==='contact_angle_deg'&&!(params[key]>0&&params[key]<90))throw new ParameterInputError('接触角必须介于 0° 和 90° 之间','/parameters/contact_angle_deg');

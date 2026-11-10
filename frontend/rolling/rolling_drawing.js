@@ -1,5 +1,5 @@
 // Original RoBAS DWG four-sheet actions and the dedicated 2D preview workspace.
-export function initDrawingWorkbench(getDesign) {
+export function initDrawingWorkbench(getDesign, getCadHash) {
   const $ = name => document.getElementById(name);
   const button = $('generate2d');
   const status = $('drawingStatus');
@@ -26,6 +26,7 @@ export function initDrawingWorkbench(getDesign) {
   let generation = 0;
   let controller = null;
   let sheets = [];
+  let drawingHash = null;
   let activeSheet = null;
   let zoom = 1;
   let panX = 0;
@@ -56,16 +57,17 @@ export function initDrawingWorkbench(getDesign) {
 
   function setWorkspace(name) {
     const drawing = name === 'drawing';
-    document.body.dataset.cadView = drawing ? '2d' : '3d';
+    document.body.dataset.cadView = drawing ? '2d' : name === 'analysis' ? 'analysis' : '3d';
     if (!drawing && previewStage.classList.contains('is-expanded')) {
       setExpanded(false, false);
     }
-    $('modelWorkspace').hidden = drawing;
-    $('drawingWorkspace').hidden = !drawing;
-    $('workspace3dTab').classList.toggle('is-active', !drawing);
-    $('workspace2dTab').classList.toggle('is-active', drawing);
-    $('workspace3dTab').setAttribute('aria-selected', String(!drawing));
-    $('workspace2dTab').setAttribute('aria-selected', String(drawing));
+    for (const [key, panel, tab] of [['model','modelWorkspace','workspace3dTab'],
+                                    ['drawing','drawingWorkspace','workspace2dTab'],
+                                    ['analysis','analysisWorkspace','workspaceAnalysisTab']]) {
+      $(panel).hidden = key !== name;
+      $(tab).classList.toggle('is-active', key === name);
+      $(tab).setAttribute('aria-selected', String(key === name));
+    }
     window.dispatchEvent(new Event('resize'));
   }
 
@@ -130,6 +132,8 @@ export function initDrawingWorkbench(getDesign) {
     setExpanded(false, false);
     expandButton.disabled = true;
     sheets = [];
+    drawingHash = null;
+    updateVersion();
     activeSheet = null;
     tabs.replaceChildren();
     const placeholder = document.createElement('span');
@@ -316,6 +320,12 @@ export function initDrawingWorkbench(getDesign) {
     update(message, !online);
   }
 
+  function updateVersion() {
+    const cadHash = getCadHash();
+    const relation = !cadHash ? '等待当前三维作业比对' : cadHash === drawingHash ? '与当前三维作业使用同一设计快照' : '与当前三维作业设计版本不同';
+    $('drawingDesignVersion').textContent = drawingHash ? relation + ' · SHA-256 ' + drawingHash : '';
+  }
+
   async function refresh() {
     try {
       const response = await fetch('/api/v2/cad/drawings/status', {cache: 'no-store'});
@@ -387,6 +397,8 @@ export function initDrawingWorkbench(getDesign) {
         throw new Error('成果参数不一致');
       }
       renderSheets(results.manifest, results.file_urls || {});
+      drawingHash = reply.request_hash;
+      updateVersion();
       setWorkspace('drawing');
       update('已按原版模板生成 ' + sheets.length + ' 张 DXF（未作制造批准；非 N 圆柱图组需人工审核）');
     } catch (error) {
@@ -405,6 +417,7 @@ export function initDrawingWorkbench(getDesign) {
 
   $('workspace3dTab').addEventListener('click', () => setWorkspace('model'));
   $('workspace2dTab').addEventListener('click', () => setWorkspace('drawing'));
+  $('workspaceAnalysisTab').addEventListener('click', () => setWorkspace('analysis'));
   $('drawingZoomIn').addEventListener('click', () => changeZoom(1.2));
   $('drawingZoomOut').addEventListener('click', () => changeZoom(1 / 1.2));
   $('drawingFit').addEventListener('click', resetZoom);
@@ -445,17 +458,11 @@ export function initDrawingWorkbench(getDesign) {
   previewStage.addEventListener('pointercancel', stopDrag);
   previewStage.addEventListener('lostpointercapture', stopDrag);
 
-  $('bearingType').addEventListener('change', () => invalidate('轴承类型已改变，请重新生成二维图纸'));
-  for (const id of ['parameters', 'cageParams', 'drawingControls']) {
-    const element = $(id);
-    element.addEventListener('input', () => invalidate());
-    element.addEventListener('change', () => invalidate());
-  }
-  for (const id of ['cageEnabled', 'cageKind']) {
-    $(id).addEventListener('change', () => invalidate());
-  }
+  $('drawingControls').addEventListener('input', () => invalidate());
+  $('drawingControls').addEventListener('change', () => invalidate());
 
   document.body.dataset.cadView = '3d';
   clearResults();
   refresh();
+  return {invalidate, updateVersion};
 }
