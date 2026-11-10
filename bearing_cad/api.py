@@ -25,6 +25,7 @@ from .robas_optimization import optimize_dgb_candidates, OptimizationError
 from .robas_acb_optimization import optimize_acb_candidates
 from .robas_crb_optimization import optimize_crb_candidates
 from .drawing_variables import DrawingDataError
+from .robas_analysis import AnalysisError, analysis_status, load_analysis_profiles, run_analysis
 
 _MAX_BODY = 16 * 1024
 _MAX_JOBS = 128
@@ -38,7 +39,8 @@ _CONTENT_TYPES = {".step": "model/step", ".stl": "model/stl", ".json": "applicat
 def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"),
                 host: str = "127.0.0.1", static_root: Path | None = None,
                 robas_resources: Path | None = None,
-                cadimport_bridge: Path | None = None) -> ThreadingHTTPServer:
+                cadimport_bridge: Path | None = None,
+                robas_analysis_profiles: Path | None = None) -> ThreadingHTTPServer:
     """Bind to IPv4 loopback only. No network deployment or implicit auth."""
     if host != "127.0.0.1":
         raise ValueError("CAD-V2 API only supports IPv4 loopback")
@@ -47,11 +49,13 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
     static = Path(static_root).resolve(strict=True) if static_root is not None else None
     robas_resources = Path(robas_resources).resolve() if robas_resources is not None else None
     cadimport_bridge = Path(cadimport_bridge).resolve() if cadimport_bridge is not None else None
+    analysis_profiles = load_analysis_profiles(robas_analysis_profiles)
     if static is not None and not (static / "rolling.html").is_file():
         raise ValueError("Build rolling.html with npm run build before serving")
     jobs: OrderedDict[str, dict] = OrderedDict()
     job_lock = RLock()
     build_lock = Lock()  # Single active expensive OCCT generation per process.
+    analysis_lock = Lock()  # One solver run per service process, with no queue.
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -117,7 +121,7 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
             if route not in ("/api/v2/cad/jobs", "/api/v2/cad/drawings", "/api/v2/cad/sizing/dgb-geometry", "/api/v2/cad/sizing/dgb-stamping",
                              "/api/v2/cad/optimization/dgb",
                              "/api/v2/cad/optimization/acb",
-                             "/api/v2/cad/optimization/crb"):
+                             "/api/v2/cad/optimization/crb", "/api/v2/cad/analyses"):
                 return self._error(404, "NOT_FOUND", "Unknown route")
             if not self._origin_allowed():
                 return self._error(403, "ORIGIN_FORBIDDEN", "A same-origin browser request is required")
@@ -147,6 +151,18 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
                                   object_pairs_hook=_no_duplicate_keys)
             except (ValueError, UnicodeError, json.JSONDecodeError):
                 return self._error(400, "INVALID_JSON", "Malformed JSON document")
+            if route == "/api/v2/cad/analyses":
+                if not analysis_lock.acquire(blocking=False):
+                    return self._error(503, "ANALYSIS_BUSY", "One RoBAS analysis is already running")
+                try:
+                    response = run_analysis(data, resources=robas_resources, profiles=analysis_profiles, root=root)
+                except AnalysisError as error:
+                    return self._respond(error.status, {"error": error.to_dict(), **error.evidence})
+                except ContractError as error:
+                    return self._error(422, error.error_code, str(error), error.field_path)
+                finally:
+                    analysis_lock.release()
+                return self._respond(201, response)
             if route == "/api/v2/cad/drawings":
                 return create_drawing(self, data, root, robas_resources,
                                       cadimport_bridge, build_lock)
@@ -356,6 +372,8 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
                                                                   "rolling.angular_contact_ball"]})
             if route == "/api/v2/cad/drawings/status":
                 return drawing_status(self, robas_resources, cadimport_bridge)
+            if route == "/api/v2/cad/analyses/status":
+                return self._respond(200, analysis_status(robas_resources, analysis_profiles))
             if serve_drawing(self, route, root):
                 return
             match = _JOB_ROUTE.fullmatch(route or "")
@@ -421,10 +439,13 @@ def main() -> None:
                         help="Licensed original RoBAS_Resources directory")
     parser.add_argument("--cadimport-bridge", type=Path, default=None,
                         help="Windows x64 licensed CadImportBridge.exe")
+    parser.add_argument("--robas-analysis-profiles", type=Path, default=None,
+                        help="Operator-owned JSON manifest of pinned RoBAS analysis DATA profiles")
     args = parser.parse_args()
     server = make_server(port=args.port, artifacts_root=args.artifacts,
                          static_root=args.static, robas_resources=args.robas_resources,
-                         cadimport_bridge=args.cadimport_bridge)
+                         cadimport_bridge=args.cadimport_bridge,
+                         robas_analysis_profiles=args.robas_analysis_profiles)
     print(f"CAD-V2 API http://127.0.0.1:{server.server_port}/api/v2/cad/status", flush=True)
     try:
         server.serve_forever()
