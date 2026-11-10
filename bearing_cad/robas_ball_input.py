@@ -6,65 +6,23 @@ values. Lengths exposed by BearingRequest are millimetres; DATA geometry uses m.
 """
 from __future__ import annotations
 
-import csv
-from dataclasses import dataclass
-import hashlib
-import io
+from dataclasses import dataclass, replace
 import math
 from pathlib import Path
 from typing import Mapping
 
 from .contracts import BearingRequest, BearingType
-
-
-_RECORD_FIELDS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("rec 1", ("Mode", "kDCR", "kDOF", "klcOpt", "kFnOpt", "kPrtOpt", "kPrtFreq", "kPltFreq", "kAGraf", "kLifeFreq", "kTherm", "maxStps", "nStps", "intMet")),
-    ("rec 2.1", ("stpInit", "stpMin", "stpMax", "fTime", "Tol", "qFac")),
-    ("rec 2.2", ("kFD11", "kFD21", "kFD31", "kFD12", "kFD22", "kFD32", "kMD11", "kMD21", "kMD31", "kMD12", "kMD22", "kMD32")),
-    ("rec 2.3", ("finName", "pltNames1", "pltNames2", "pltNames3", "pltNames4", "pltNames5", "pltNames6", "pltNames7", "pltNames8", "pltNames9")),
-    ("rec 3.1", ("runId",)),
-    ("rec 3.2", ("kUnit", "kBrg", "nRe", "nCseg", "kRaceFlex", "kReGeoImp", "kRaceGeoImp1", "kRaceGeoImp2", "kFlngInd11", "kFlngInd12", "kFlngInd21", "kFlngInd22")),
-    ("rec 3.3", ("kStaticConstraint1", "kStaticConstraint2", "kStaticConstraint3", "kStaticConstraint4", "kStaticConstraint5", "kAngVel", "kStif", "kChrn", "kReMat", "kRaceMat1", "kRaceMat2", "kHsngMat", "kShftMat", "kLifeCons")),
-    ("rec 3.4", ("kRotLoad", "kRotFrame", "kReIP", "kRaceIP1", "kRaceIP2", "kNumPltElem", "kPltElemInd1", "kPltElemInd2", "kPltElemInd3", "kPltElemInd4", "kPltElemInd5", "kPltElemInd6")),
-    ("rec 3.5", ("kCoolant", "kBaseTemp", "kHTC", "kGeoMod", "kMatPropMod")),
-    ("rec 4", ("brgBore", "brgOD", "shftID", "hsngOD", "raceWidth1", "raceWidth2")),
-    ("rec 5A", ("bReDia", "pitchDia", "freeConAngDeg", "freeIntCls", "raceCurFac1", "raceCurFac2", "shoulderDia1", "shoulderDia2", "shimThickness1", "shimThickness2", "rmsAspHt1", "rmsAspHt2")),
-    ("rec 7.0", ("kPoctype", "kCagePocImp", "kCageGsImp", "kRaceGsImp", "kPocHydro", "kGsHydro", "kCageMat", "kCageIP", "nGL", "iCageGuide1", "iCageGuide2", "iCageGuide3", "iCageGuide4")),
-    ("rec 7.1", ("cageDia1", "cageDia2", "cageWidth", "cageCls1", "cageCls2", "bPocCls1", "bPocCls2", "cageAngCut", "cageConeAng")),
-    ("rec 7.2.x", ("cageGsDia1", "cageGsWidth1", "cageGsPos1", "cageGsCls1")),
-    ("rec 7.2.x", ("cageGsDia2", "cageGsWidth2", "cageGsPos2", "cageGsCls2")),
-    ("rec 8.1", ("density", "elasticModules", "poissonRatio", "thermalExpansion", "specificHeat", "conductivity", "strainLimit", "hardness", "wearCoeff", "misis")),
-    ("rec 8.2.1", ("density", "elasticModules", "poissonRatio", "thermalExpansion", "specificHeat", "conductivity", "strainLimit", "hardness", "wearCoeff", "misis")),
-    ("rec 8.2.2", ("density", "elasticModules", "poissonRatio", "thermalExpansion", "specificHeat", "conductivity", "strainLimit", "hardness", "wearCoeff", "misis")),
-    ("rec 8.3", ("density", "elasticModules", "poissonRatio", "thermalExpansion", "conductivity")),
-    ("rec 8.4", ("density", "elasticModules", "poissonRatio", "thermalExpansion", "conductivity")),
-    ("rec 8.5", ("density", "elasticModules", "poissonRatio", "thermalExpansion", "specificHeat", "conductivity", "strainLimit", "hardness", "wearCoeff", "misis")),
-    ("rec 8.6.0", ("sProb", "brgWbDis")),
-    ("rec 8.6.1", ("fcO1", "fcLP1", "shExLP1", "depExLP1", "fcGZ1", "shExGZ1", "fcIH1", "shExIH1", "depExIH1", "wbDis1")),
-    ("rec 8.6.2", ("fcO1", "fcLP1", "shExLP1", "depExLP1", "fcGZ1", "shExGZ1", "fcIH1", "shExIH1", "depExIH1", "wbDis1")),
-    ("rec 8.6.3", ("fcO1", "fcLP1", "shExLP1", "depExLP1", "fcGZ1", "shExGZ1", "fcIH1", "shExIH1", "depExIH1", "wbDis1")),
-    ("rec 8.6.4", ("rmsAspSlp1", "shearLmt1", "aspTrac1", "facMat1", "facCont1", "facProc1", "facMatLF1", "facProcLF1", "hardnessLF1")),
-    ("rec 8.6.5", ("rmsAspSlp1", "shearLmt1", "aspTrac1", "facMat1", "facCont1", "facProc1", "facMatLF1", "facProcLF1", "hardnessLF1")),
-    ("rec 8.6.6", ("facMatRe", "facContRe", "facProcRe", "facMatLFre", "facProcLFre", "hardnessLFre")),
-    ("rec 9.0", ("roomTemp", "raceFit1", "raceFit2", "angVelOrt", "resStress1", "resStress2", "facStrLimit")),
-    ("rec 9.1.1", ("appLoadX", "appLoadY", "appLoadZ", "appDispX", "appDispY", "appDispZ")),
-    ("rec 9.1.2", ("appMomY", "appMomZ", "appMis11", "appMis21", "appMis12", "appMis22", "rpm1", "rpm2")),
-    ("rec 9.1.3", ("hsngTemp", "shftTemp", "raceTemp1", "raceTemp2", "reTemp", "cageTemp")),
-    ("rec 9.2", ("pctDisp", "rpmRange11", "rpmRange21", "rpmRange12", "rpmRange22")),
-    ("rec 9.5", ("pocLubFilm", "wvRatio", "avRatio", "cageGcPosX", "cageGcPosY", "cageGcPosZ", "cageAngPosX", "cageAngPosY", "cageAngPosZ")),
-    ("rec 9.6", ("baseTemp", "cFlowRate", "cPres", "reHTC", "cageHTC", "aveTime", "skipTime")),
-    ("rec 9.7", ("xRo", "xMu", "xCp", "xK")),
-    ("rec 10.0", ("kTrac", "kTracType", "kCPTrac", "kCPTracType", "kCRTrac", "kCRTracType", "kRFTrac", "kRFTracType", "kRRTrac", "kRRTracType", "iTherm")),
-    ("rec 10.1C", ("reRaceTC1", "reRaceTC2", "reRaceTC3", "reRaceTC4")),
-    ("rec 10.3", ("reRaceFilm", "strParam")),
-    ("rec 10.5.1B", ("reCageTC1", "reCageTC2", "reCageTC3", "reCageTC4", "reCageFilm")),
-    ("rec 10.5.2B", ("cageRaceTC1", "cageRaceTC2", "cageRaceTC3", "cageRaceTC4", "cageRaceFilm")),
-    ("rec 10.6", ("pocVis", "gsVis")),
-    ("rec 11", ("gravityVecX", "gravityVecY", "gravityVecZ")),
+from .robas_data import (
+    COMMON_HEAD, COMMON_TAIL, DataDocument, check_geometry, profile_overrides,
+    dotnet_round as _dotnet_round,
 )
 
+
+_RECORD_FIELDS = COMMON_HEAD + (
+    ("rec 5A", ("bReDia", "pitchDia", "freeConAngDeg", "freeIntCls", "raceCurFac1", "raceCurFac2", "shoulderDia1", "shoulderDia2", "shimThickness1", "shimThickness2", "rmsAspHt1", "rmsAspHt2")),
+) + COMMON_TAIL
+
 BALL_RECORD_LABELS = tuple(label for label, _ in _RECORD_FIELDS)
-_TEXT_RECORDS = {3, 4}
 
 
 class BallDataError(ValueError):
@@ -72,101 +30,11 @@ class BallDataError(ValueError):
 
 
 @dataclass(frozen=True)
-class BallDataDocument:
-    rows: tuple[tuple[str, ...], ...]
-    geometry_mode: str = "unclassified"
-    reference_data_sha256: str | None = None
-
-    @classmethod
-    def parse(cls, text: str) -> "BallDataDocument":
-        if "\x00" in text:
-            raise BallDataError("DATA.txt contains NUL bytes")
-        parsed = list(csv.reader(io.StringIO(text, newline=""), skipinitialspace=True))
-        expected_count = len(_RECORD_FIELDS)
-        if len(parsed) != expected_count:
-            raise BallDataError(f"Expected {expected_count} ball records, got {len(parsed)}")
-        rows: list[tuple[str, ...]] = []
-        for index, ((label, fields), row) in enumerate(zip(_RECORD_FIELDS, parsed), 1):
-            if not row or row[0].strip().strip("'").strip('"') != label:
-                actual = row[0] if row else "<empty>"
-                raise BallDataError(f"Record {index} must be '{label}', got {actual!r}")
-            if len(row) != len(fields) + 1:
-                raise BallDataError(f"Record {index} '{label}' expects {len(fields)} values, got {len(row)-1}")
-            for value in row[1:]:
-                normalized = value.strip().strip("'").strip('"')
-                if index - 1 in _TEXT_RECORDS:
-                    if not normalized:
-                        raise BallDataError(f"Record {index} '{label}' contains empty text")
-                else:
-                    try:
-                        number = float(value)
-                    except ValueError:
-                        raise BallDataError(f"Record {index} '{label}' contains a non-numeric value") from None
-                    if not math.isfinite(number):
-                        raise BallDataError(f"Record {index} '{label}' contains a non-finite value")
-            rows.append(tuple(cell.strip() for cell in row))
-        if rows[0][1] != "-1":
-            raise BallDataError("Ball DATA must use Mode=-1 (quasi-static)")
-        if float(rows[5][1]) != 1 or float(rows[5][2]) != 1:
-            raise BallDataError("Ball DATA requires rec 3.2 kUnit=1 and kBrg=1")
-        return cls(tuple(rows))
-
-    @classmethod
-    def read(cls, path: str | Path) -> "BallDataDocument":
-        payload = Path(path).read_bytes()
-        parsed = cls.parse(payload.decode("utf-8-sig"))
-        return cls(parsed.rows, "legacy_data", hashlib.sha256(payload).hexdigest())
-
-    def render(self) -> str:
-        buffer = io.StringIO(newline="")
-        writer = csv.writer(buffer, lineterminator="\r\n", quoting=csv.QUOTE_MINIMAL)
-        for row in self.rows:
-            writer.writerow(row)
-        return buffer.getvalue()
-
-    def value(self, record_index: int, field: str) -> str:
-        """Return a field value using zero-based record indices."""
-        label, fields = _RECORD_FIELDS[record_index]
-        try:
-            column = fields.index(field) + 1
-        except ValueError:
-            raise BallDataError(f"Unknown field {field!r} in {label}") from None
-        return self.rows[record_index][column]
-
-    def with_updates(self, updates: Mapping[tuple[int, str], str | int | float]) -> "BallDataDocument":
-        rows = [list(row) for row in self.rows]
-        for (record_index, field), raw_value in updates.items():
-            if not 0 <= record_index < len(_RECORD_FIELDS):
-                raise BallDataError(f"Unknown record index: {record_index}")
-            label, fields = _RECORD_FIELDS[record_index]
-            if field not in fields:
-                raise BallDataError(f"Unknown field {field!r} in {label}")
-            if isinstance(raw_value, bool) or not isinstance(raw_value, (str, int, float)):
-                raise BallDataError(f"Invalid value type for {label}.{field}")
-            if isinstance(raw_value, str):
-                if not raw_value or any(c in raw_value for c in ",\r\n\x00"):
-                    raise BallDataError(f"Invalid text value for {label}.{field}")
-                if record_index not in _TEXT_RECORDS:
-                    try:
-                        number = float(raw_value)
-                    except ValueError:
-                        raise BallDataError(f"Expected numeric value for {label}.{field}") from None
-                    if not math.isfinite(number):
-                        raise BallDataError(f"Non-finite value for {label}.{field}")
-            elif isinstance(raw_value, float) and not math.isfinite(raw_value):
-                raise BallDataError(f"Non-finite value for {label}.{field}")
-            rows[record_index][fields.index(field) + 1] = str(raw_value)
-        parsed = BallDataDocument.parse("\n".join(",".join(row) for row in rows))
-        return BallDataDocument(parsed.rows, self.geometry_mode, self.reference_data_sha256)
-
-
-def _dotnet_round(value: float, digits: int) -> float:
-    """Match Math.Round(double, digits)' scaled ties-to-even behavior."""
-    scale = 10 ** digits
-    scaled = value * scale
-    if not math.isfinite(scaled) or abs(scaled) >= 1e16:
-        return value
-    return round(scaled) / scale
+class BallDataDocument(DataDocument):
+    _fields = _RECORD_FIELDS
+    _family = "ball"
+    _bearing_code = 1
+    _error = BallDataError
 
 
 def _straight_pocket_reference(*, ball_d_mm: float, width_mm: float,
@@ -322,26 +190,10 @@ def update_ball_data(reference_data: str | Path, request: BearingRequest | None,
         raise BallDataError("legacy_data mode must not receive a CAD request; use cad_geometry for an explicit geometry overlay")
     if geometry_mode == "cad_geometry" and request is None:
         raise BallDataError("cad_geometry mode requires a confirmed BearingRequest")
-    def check_group(name: str, updates: Mapping[tuple[int, str], str | int | float],
-                    allowed: set[tuple[int, str]]) -> None:
-        invalid = sorted(set(updates) - allowed)
-        if invalid:
-            raise BallDataError(f"{name} updates target fields outside their mapped scope: {invalid}")
-
-    check_group("operating", operating_updates,
-                {(index, field) for index in (*range(28, 35), 42)
-                 for field in _RECORD_FIELDS[index][1]})
-    check_group("solver", solver_updates or {}, {(0, "nStps")})
-    check_group("material", material_updates or {},
-                {(index, field) for index in range(15, 28)
-                 for field in _RECORD_FIELDS[index][1]})
-    check_group("lubricant", lubricant_updates or {},
-                {(index, field) for index in range(35, 42)
-                 for field in _RECORD_FIELDS[index][1]})
-    values = dict(operating_updates)
-    for speed_field, endpoint in (("rpm1", "rpmRange21"), ("rpm2", "rpmRange12")):
-        if (30, speed_field) in values:
-            values.setdefault((32, endpoint), values[(30, speed_field)])
+    values = profile_overrides(
+        base, operating=operating_updates, solver=solver_updates,
+        material=material_updates, lubricant=lubricant_updates,
+    )
     analysis_parameter_fields = {
         "freeIntCls", "shimThickness1", "shimThickness2", "rmsAspHt1", "rmsAspHt2",
     }
@@ -362,16 +214,6 @@ def update_ball_data(reference_data: str | Path, request: BearingRequest | None,
         derived = geometry_updates(
             request, analysis_shoulder_diameters_mm=analysis_shoulder_diameters_mm,
             analysis_inner_race_outside_diameter_mm=analysis_inner_race_outside_diameter_mm)
-        mismatches = []
-        for (record_index, field), expected in derived.items():
-            actual = float(base.value(record_index, field))
-            if not math.isclose(actual, expected, rel_tol=1e-9, abs_tol=1e-12):
-                mismatches.append(f"{_RECORD_FIELDS[record_index][0]}.{field}")
-        if mismatches and not allow_reference_geometry_mismatch:
-            examples = ", ".join(mismatches[:4])
-            raise BallDataError(f"reference DATA geometry differs from CAD geometry at {examples}; explicitly set allow_reference_geometry_mismatch=True to overlay CAD geometry")
+        check_geometry(base, derived, allow_mismatch=allow_reference_geometry_mismatch)
         values.update(derived)
-    for updates in (solver_updates or {}, material_updates or {}, lubricant_updates or {}):
-        values.update(updates)
-    result = base.with_updates(values)
-    return BallDataDocument(result.rows, geometry_mode, base.reference_data_sha256)
+    return replace(base.with_updates(values), geometry_mode=geometry_mode)
