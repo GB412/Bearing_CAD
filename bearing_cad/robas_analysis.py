@@ -61,7 +61,10 @@ def load_analysis_profiles(manifest: Path | None) -> dict[str, ReferenceProfile]
         raw = stream.read(32769)
     if len(raw) > 32768:
         raise ValueError("RoBAS analysis profile manifest exceeds 32 KiB")
-    entries = json.loads(raw)
+    try:
+        entries = json.loads(raw)
+    except ValueError as exc:
+        raise ValueError("RoBAS analysis profile manifest contains invalid JSON") from exc
     if not isinstance(entries, dict) or len(entries) > 16:
         raise ValueError("Expected up to 16 RoBAS analysis profiles by ID")
     profiles = {}
@@ -76,10 +79,10 @@ def load_analysis_profiles(manifest: Path | None) -> dict[str, ReferenceProfile]
         digest, source, relative = entry["sha256"], entry["source"], entry["data_file"]
         if (not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{64}", digest)
                 or not isinstance(source, str) or not source.strip() or len(source) > 256
-                or not isinstance(relative, str) or Path(relative).anchor):
+                or not isinstance(relative, str) or not relative.strip() or Path(relative).anchor):
             raise ValueError(f"Invalid file, SHA-256 or source for profile {key!r}")
-        path = (manifest.parent / relative).resolve(strict=True)
-        if not path.is_relative_to(manifest.parent) or not path.is_file():
+        path = (manifest.parent / relative).resolve()
+        if not path.is_relative_to(manifest.parent):
             raise ValueError(f"Profile {key!r} DATA must stay under the manifest directory")
         profiles[key] = ReferenceProfile(bearing_type, configuration, path, digest, source)
     return profiles
@@ -90,15 +93,87 @@ def _public_profile(profile: ReferenceProfile) -> dict:
             "sha256": profile.sha256, "source": profile.source}
 
 
-def analysis_status(resources: Path | None, profiles: dict[str, ReferenceProfile]) -> dict:
-    available = bool(profiles and resources is not None and platform.system() == "Windows")
-    if available:
+def _operating_targets(roller: bool) -> dict:
+    return {key: (record + int(roller), field) for key, (record, field, _, _) in _CONDITIONS.items()}
+
+
+def _effective_conditions(document, targets: dict) -> dict:
+    effective = {key: float(document.value(*target)) for key, target in targets.items()}
+    effective["free_clearance_mm"] = float(document.value(10, "freeIntCls")) * 1000
+    if (any(not low <= effective[key] <= high for key, (_, _, low, high) in _CONDITIONS.items())
+            or not 0 <= effective["free_clearance_mm"] <= 10):
+        raise AnalysisError(503, "ANALYSIS_PROFILE_INVALID", "/profile_id", "Effective conditions exceed analysis limits")
+    return effective
+
+
+def _check_profile_document(profile: ReferenceProfile, document) -> None:
+    if document.reference_data_sha256 != profile.sha256:
+        raise AnalysisError(503, "ANALYSIS_PROFILE_INVALID", "/profile_id", "Reference DATA does not match the pinned SHA-256")
+    if document.rows[3][1:] != tuple(f"'{name}'" for name in _OUTPUT_NAMES):
+        raise AnalysisError(503, "ANALYSIS_PROFILE_INVALID", "/profile_id", "Reference DATA specifies unsupported output filenames")
+
+
+def _check_reference(profile: ReferenceProfile) -> None:
+    roller = profile.bearing_type is BearingType.CYLINDRICAL
+    try:
+        info = inspect_static_input(profile.path, family="roller" if roller else "ball")
+    except (SolverProbeError, OSError) as exc:
+        raise AnalysisError(503, "ANALYSIS_PROFILE_INVALID", "/profile_id", "Reference DATA is missing or has an invalid protocol") from exc
+    if info["input_sha256"] != profile.sha256:
+        raise AnalysisError(503, "ANALYSIS_PROFILE_INVALID", "/profile_id", "Reference DATA does not match the pinned SHA-256")
+    try:
+        if roller:
+            document = update_roller_data(profile.path, None, reference_configuration=profile.configuration,
+                                          geometry_mode="legacy_data", operating_updates={})
+        else:
+            document = update_ball_data(profile.path, None, geometry_mode="legacy_data", operating_updates={})
+    except (BallDataError, RollerDataError, OSError, UnicodeError) as exc:
+        raise AnalysisError(503, "ANALYSIS_PROFILE_INVALID", "/profile_id", "Reference DATA cannot be used as a supported profile") from exc
+    _check_profile_document(profile, document)
+    _effective_conditions(document, _operating_targets(roller))
+
+
+def _check_storage(root: Path) -> Path:
+    store = root / "robas-analysis"
+    try:
+        if store.is_symlink() or (store.exists() and not store.is_dir()):
+            raise OSError("Analysis storage must be a real directory")
+        if store.is_dir() and sum(path.name.startswith("analysis-") for path in store.iterdir()) >= _MAX_RETAINED_RUNS:
+            raise AnalysisError(503, "ANALYSIS_STORAGE_LIMIT", "", "Analysis storage is full; archive completed runs locally")
+    except OSError as exc:
+        raise AnalysisError(500, "ANALYSIS_STORAGE_FAILED", "", "Cannot inspect local analysis storage") from exc
+    return store
+
+
+def analysis_status(resources: Path | None, profiles: dict[str, ReferenceProfile], *, root: Path) -> dict:
+    blocked = None
+    if not profiles or resources is None or platform.system() != "Windows":
+        blocked = "Windows, RoBAS resources or analysis profiles are unavailable"
+    else:
         try:
             inspect_executable(resources)
         except (SolverProbeError, OSError):
-            available = False
-    return {"available": available, "profiles": {key: _public_profile(p) for key, p in profiles.items()},
-            "timeout_s": _TIMEOUT_S}
+            blocked = "The verified RoBAS executable is unavailable"
+        if blocked is None:
+            try:
+                _check_storage(root)
+            except AnalysisError as error:
+                blocked = str(error)
+    statuses = {}
+    for key, profile in profiles.items():
+        entry = {**_public_profile(profile), "available": False}
+        if blocked is None:
+            try:
+                _check_reference(profile)
+            except AnalysisError as error:
+                entry["unavailable_reason"] = str(error)
+            else:
+                entry["available"] = True
+        else:
+            entry["unavailable_reason"] = blocked
+        statuses[key] = entry
+    return {"available": any(entry["available"] for entry in statuses.values()), "profiles": statuses,
+            "timeout_s": _TIMEOUT_S, **({"unavailable_reason": blocked} if blocked is not None else {})}
 
 
 def _fields(value, required: set[str], optional: set[str], path: str) -> dict:
@@ -118,7 +193,7 @@ def _number(value, path: str, low: float, high: float) -> float:
 
 
 def run_analysis(data, *, resources: Path | None, profiles: dict[str, ReferenceProfile], root: Path) -> dict:
-    """Run one confirmed design. The HTTP service serializes calls per process."""
+    """Run one supplied design snapshot. The HTTP service serializes calls per process."""
     body = _fields(data, {"design", "request_hash", "profile_id", "operating_conditions", "analysis_geometry"},
                    {"allow_reference_geometry_mismatch"}, "")
     try:
@@ -128,7 +203,7 @@ def run_analysis(data, *, resources: Path | None, profiles: dict[str, ReferenceP
     except OverflowError as exc:
         raise ContractError("PARAMETER_INVALID", "/design/parameters", "Design numeric value exceeds the supported range") from exc
     if body["request_hash"] != request.request_hash:
-        raise AnalysisError(409, "DESIGN_HASH_MISMATCH", "/request_hash", "Design does not match the confirmed request hash")
+        raise AnalysisError(409, "DESIGN_HASH_MISMATCH", "/request_hash", "Design snapshot does not match the supplied request hash")
     roller = request.bearing_type is BearingType.CYLINDRICAL
     acb = request.bearing_type is BearingType.ANGULAR_CONTACT
     if roller and request.parameters["configuration"] != "N":
@@ -137,9 +212,12 @@ def run_analysis(data, *, resources: Path | None, profiles: dict[str, ReferenceP
         for field, supported in (("roller_profile", "plain"), ("roller_end_chamfer_mm", 0), ("roller_crown_relief_mm", 0)):
             if request.parameters.get(field, supported) != supported:
                 raise ContractError("NOT_SUPPORTED", "/design/parameters/" + field, "Only plain CRB rollers are supported")
-    if not roller and (request.cage is not None or "cage_material" in request.parameters):
-        raise ContractError("NOT_SUPPORTED", "/design/cage" if request.cage else "/design/parameters/cage_material",
-                            "Ball analysis uses the original analysis cage and reference material profile")
+    if not roller and request.cage is not None:
+        raise ContractError("NOT_SUPPORTED", "/design/cage",
+                            "The explicit CAD cage is not mapped to the original RoBAS ball analysis cage")
+    if acb and "cage_material" in request.parameters:
+        raise ContractError("NOT_SUPPORTED", "/design/parameters/cage_material",
+                            "ACB CAD cage material is not mapped to the reference analysis material")
 
     geometry_fields = set() if roller else {"inner_race_od_mm"}
     if acb:
@@ -156,7 +234,7 @@ def run_analysis(data, *, resources: Path | None, profiles: dict[str, ReferenceP
             shoulders = {dotnet_round(p[f"{race}_shoulder_{side}_d_mm"], digits) for side in ("left", "right")}
             if dotnet_round(geometry[key], digits) not in shoulders:
                 raise ContractError("PARAMETER_INVALID", "/analysis_geometry/" + key,
-                                    "Select an explicit sidewall from the confirmed ACB design")
+                                    "Select an explicit sidewall from the supplied ACB design snapshot")
     override = body.get("allow_reference_geometry_mismatch", False)
     if type(override) is not bool:
         raise ContractError("PARAMETER_INVALID", "/allow_reference_geometry_mismatch", "Expected boolean")
@@ -176,15 +254,10 @@ def run_analysis(data, *, resources: Path | None, profiles: dict[str, ReferenceP
     if profile is None or profile.bearing_type is not request.bearing_type:
         raise ContractError("ANALYSIS_PROFILE_INVALID", "/profile_id", "Select a configured profile for this bearing type")
     family = "roller" if roller else "ball"
-    indices = {key: (record + int(roller), field) for key, (record, field, _, _) in _CONDITIONS.items()}
+    _check_reference(profile)
+    indices = _operating_targets(roller)
     updates = {indices[key]: value for key, value in conditions.items() if key in indices}
     clearance = conditions.get("free_clearance_mm")
-    try:
-        info = inspect_static_input(profile.path, family=family)
-    except (SolverProbeError, OSError) as exc:
-        raise AnalysisError(503, "ANALYSIS_PROFILE_INVALID", "/profile_id", "Reference DATA is missing or has an invalid protocol") from exc
-    if info["input_sha256"] != profile.sha256:
-        raise AnalysisError(503, "ANALYSIS_PROFILE_INVALID", "/profile_id", "Reference DATA does not match the pinned SHA-256")
     common = {"geometry_mode": "cad_geometry", "operating_updates": updates,
               "allow_reference_geometry_mismatch": override}
     try:
@@ -203,30 +276,22 @@ def run_analysis(data, *, resources: Path | None, profiles: dict[str, ReferenceP
         raise ContractError("ANALYSIS_INPUT_INVALID", field, str(exc)) from exc
     except (OSError, UnicodeError) as exc:
         raise AnalysisError(503, "ANALYSIS_PROFILE_INVALID", "/profile_id", "Reference DATA cannot be read") from exc
-    if document.reference_data_sha256 != profile.sha256 or document.rows[3][1:] != tuple(f"'{name}'" for name in _OUTPUT_NAMES):
-        raise AnalysisError(503, "ANALYSIS_PROFILE_INVALID", "/profile_id", "Reference changed or specifies unsupported output filenames")
+    _check_profile_document(profile, document)
 
     payload = document.render().encode("utf-8")
     data_sha = sha256(payload).hexdigest()
-    effective = {key: float(document.value(*target)) for key, target in indices.items()}
-    effective["free_clearance_mm"] = float(document.value(10, "freeIntCls")) * 1000
-    if (any(not low <= effective[key] <= high for key, (_, _, low, high) in _CONDITIONS.items())
-            or not 0 <= effective["free_clearance_mm"] <= 10):
-        raise AnalysisError(503, "ANALYSIS_PROFILE_INVALID", "/profile_id", "Effective conditions exceed analysis limits")
+    effective = _effective_conditions(document, indices)
+    inherited = {key: value for key, value in effective.items() if key not in conditions}
     run_id = uuid4().hex
-    store = root / "robas-analysis"
+    store = _check_storage(root)
     folder = store / ("analysis-" + run_id)
     record = {"schema_version": "bearing-cad.robas-analysis.v1", "run_id": run_id,
               "request_hash": request.request_hash, "design": json.loads(request.canonical_json()),
               "profile": {"id": profile_id, **_public_profile(profile)}, "analysis_geometry": geometry,
               "allow_reference_geometry_mismatch": override, "generated_data_sha256": data_sha,
-              "operating_conditions": {"requested": conditions, "effective": effective}}
+              "operating_conditions": {"requested": conditions, "inherited": inherited, "effective": effective}}
     try:
-        if store.is_symlink():
-            raise OSError("Analysis storage must be a real directory")
         store.mkdir(exist_ok=True)
-        if sum(path.name.startswith("analysis-") for path in store.iterdir()) >= _MAX_RETAINED_RUNS:
-            raise AnalysisError(503, "ANALYSIS_STORAGE_LIMIT", "", "Analysis storage is full; archive completed runs locally")
         folder.mkdir(mode=0o700)
         data_path = folder / "DATA.txt"
         data_path.write_bytes(payload)

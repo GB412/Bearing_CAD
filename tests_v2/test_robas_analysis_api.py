@@ -5,7 +5,8 @@ import json
 import os
 from pathlib import Path
 import platform
-from subprocess import CompletedProcess, TimeoutExpired
+import shutil
+from subprocess import CompletedProcess, TimeoutExpired, run as run_command
 from threading import Event, Thread
 from types import SimpleNamespace
 
@@ -107,6 +108,7 @@ def test_http_uses_bound_result_and_persists_distinct_input_versions(tmp_path, p
         status, available = _request(server, "GET", ROUTE + "/status")
         assert status == 200 and available["available"]
         assert available["profiles"]["reviewed"]["sha256"] == reference_hash
+        assert available["profiles"]["reviewed"]["available"]
         assert "data_file" not in available["profiles"]["reviewed"]
         first_status, first = _request(server, "POST", ROUTE, body)
         second_status, second = _request(server, "POST", ROUTE, {
@@ -122,6 +124,15 @@ def test_http_uses_bound_result_and_persists_distinct_input_versions(tmp_path, p
     assert second["result"]["execution"] == {"status": "EXITED_ZERO", "exit_code": 0}
     assert second["result"]["convergence"] == {"status": "UNKNOWN"}
     assert second["result"]["contacts"][0]["outer"]["load"]["value"] == 126
+    assert second["operating_conditions"]["requested"] == {
+        "load_x_n": 1200, "inner_speed_rpm": 4000, "free_clearance_mm": 0.02,
+    }
+    assert second["operating_conditions"]["inherited"] == {
+        "load_y_n": 1, "load_z_n": 1, "outer_speed_rpm": 1,
+    }
+    assert second["operating_conditions"]["effective"] == {
+        **second["operating_conditions"]["requested"], **second["operating_conditions"]["inherited"],
+    }
     folder = tmp_path / "artifacts" / "robas-analysis" / ("analysis-" + second["run_id"])
     doc = BallDataDocument.read(folder / "DATA.txt")
     assert doc.value(29, "appLoadX") == "1200.0"
@@ -162,6 +173,9 @@ def test_http_closed_fields_design_hash_and_profile_integrity(tmp_path, portable
         status, _ = _request(server, "POST", ROUTE, body, origin="http://elsewhere.example")
         assert status == 403
         reference.write_bytes(reference.read_bytes().replace(b"'test-run'", b"'altered'"))
+        status, readiness = _request(server, "GET", ROUTE + "/status")
+        assert status == 200 and not readiness["available"]
+        assert "pinned SHA-256" in readiness["profiles"]["reviewed"]["unavailable_reason"]
         status, reply = _request(server, "POST", ROUTE, body)
         assert status == 503 and "pinned SHA-256" in reply["error"]["message"]
     assert not (tmp_path / "artifacts" / "robas-analysis").exists()
@@ -177,6 +191,80 @@ def test_reference_manifest_refuses_escape(tmp_path):
     manifest.write_text(json.dumps(entries), encoding="utf-8")
     with pytest.raises(ValueError, match="under the manifest directory"):
         robas_analysis.load_analysis_profiles(manifest)
+    manifest.write_text("{invalid", encoding="utf-8")
+    with pytest.raises(ValueError, match="profile manifest contains invalid JSON"):
+        robas_analysis.load_analysis_profiles(manifest)
+
+
+def test_windows_launchers_forward_optional_profile_path(tmp_path):
+    shell = shutil.which("powershell.exe") or shutil.which("pwsh.exe")
+    if platform.system() != "Windows" or not shell:
+        pytest.skip("requires Windows PowerShell for the local launcher")
+    source = Path(__file__).resolve().parents[1] / "scripts"
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    for name in ("run_bearing_cad_with_robas.ps1", "start_bearing_cad_with_robas.ps1"):
+        shutil.copyfile(source / name, scripts / name)
+    (scripts / "check_robas_environment.ps1").write_text(
+        "param($ResourcesPath, $CadImportDllPath)\n$global:LASTEXITCODE = 0\n", encoding="utf-8",
+    )
+    for name in ("resources/Data/DGBData.db", "resources/CADImport.dll",
+                 "bridge/cadimport/bin/Release/CadImportBridge.exe", "dist/rolling.html"):
+        file = tmp_path / name
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_text("fixture", encoding="utf-8")
+    profiles = tmp_path / "config" / "cases" / "reviewed profiles.json"
+    profiles.parent.mkdir(parents=True)
+    profiles.write_text("{}", encoding="utf-8")
+    smoke = tmp_path / "smoke.ps1"
+    smoke.write_text(r"""
+$ErrorActionPreference = 'Stop'
+function Capture-RobasPython {
+    $global:LASTEXITCODE = 0
+    if ($args[0] -eq '-m') {
+        $global:solver05Argv = @($args)
+        if ($global:rejectManifest) { $global:LASTEXITCODE = 2 }
+    }
+}
+$profiles = Join-Path $PSScriptRoot 'config\cases\reviewed profiles.json'
+$config = Join-Path $PSScriptRoot 'config\test.local.json'
+$cfg = [ordered]@{resources_path=(Join-Path $PSScriptRoot 'resources'); cadimport_dll_path=(Join-Path $PSScriptRoot 'resources\CADImport.dll'); python='Capture-RobasPython'}
+foreach ($mode in 'omitted','null','relative','absolute') {
+    switch ($mode) {
+        'null' { $cfg.analysis_profiles_path = $null }
+        'relative' { $cfg.analysis_profiles_path = 'cases/reviewed profiles.json' }
+        'absolute' { $cfg.analysis_profiles_path = $profiles }
+    }
+    $cfg | ConvertTo-Json | Set-Content -LiteralPath $config -Encoding UTF8
+    $global:solver05Argv = @()
+    & (Join-Path $PSScriptRoot 'scripts\run_bearing_cad_with_robas.ps1') -ConfigPath $config -SkipBuild
+    if ($global:solver05Argv[1] -ne 'bearing_cad.api') { throw 'API command not forwarded' }
+    $i = [Array]::IndexOf($global:solver05Argv, '--robas-analysis-profiles')
+    if ($mode -in @('relative','absolute')) {
+        if ($i -lt 0 -or $global:solver05Argv[$i + 1] -ne $profiles) { throw "Invalid path for $mode" }
+    } elseif ($i -ne -1) { throw "Unexpected flag for $mode" }
+}
+$cfg.analysis_profiles_path = 'missing.json'
+$cfg | ConvertTo-Json | Set-Content -LiteralPath $config -Encoding UTF8
+try {
+    & (Join-Path $PSScriptRoot 'scripts\run_bearing_cad_with_robas.ps1') -ConfigPath $config -SkipBuild
+    throw 'Missing manifest was accepted'
+} catch {
+    if ($_.Exception.Message -notmatch 'analysis profile manifest not found') { throw }
+}
+$cfg.analysis_profiles_path = $profiles
+$cfg | ConvertTo-Json | Set-Content -LiteralPath $config -Encoding UTF8
+$global:rejectManifest = $true
+try {
+    & (Join-Path $PSScriptRoot 'scripts\run_bearing_cad_with_robas.ps1') -ConfigPath $config -SkipBuild
+    throw 'API failure was accepted'
+} catch {
+    if ($_.Exception.Message -notmatch 'API exited with code 2') { throw }
+}
+""", encoding="utf-8")
+    result = run_command([shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(smoke)],
+                         capture_output=True, text=True, errors="replace", timeout=30)
+    assert result.returncode == 0, (result.stdout, result.stderr)
 
 
 def test_pinned_reference_cannot_redirect_solver_output(tmp_path, portable):
@@ -185,9 +273,43 @@ def test_pinned_reference_cannot_redirect_solver_output(tmp_path, portable):
     raw = original.with_updates({(3, "finName"): "'../OUT.txt'"}).render().encode()
     manifest, _ = _profile(tmp_path, raw, parse_request(body["design"]))
     with _server(tmp_path, resources, manifest) as server:
+        _, readiness = _request(server, "GET", ROUTE + "/status")
+        assert not readiness["available"]
+        assert "unsupported output filenames" in readiness["profiles"]["reviewed"]["unavailable_reason"]
         status, error = _request(server, "POST", ROUTE, body)
     assert status == 503 and "unsupported output filenames" in error["error"]["message"]
     assert not (tmp_path / "artifacts" / "robas-analysis").exists()
+
+
+def test_status_checks_each_profile_without_disabling_cad(tmp_path, portable):
+    resources, manifest, _, _, _ = portable
+    entries = json.loads(manifest.read_bytes())
+    entries["missing"] = {**entries["reviewed"], "data_file": "missing.txt"}
+    manifest.write_text(json.dumps(entries), encoding="utf-8")
+    with _server(tmp_path, resources, manifest) as server:
+        status, readiness = _request(server, "GET", ROUTE + "/status")
+        assert status == 200 and readiness["available"]
+        assert readiness["profiles"]["reviewed"]["available"]
+        assert not readiness["profiles"]["missing"]["available"]
+        status, cad = _request(server, "GET", "/api/v2/cad/status")
+        assert status == 200 and cad["available"]
+
+
+@pytest.mark.parametrize("kind", ["DGB", "ACB", "ACB-material"])
+def test_ball_cad_cage_and_material_are_explicitly_rejected(tmp_path, kind):
+    request, geometry = _golden_design("DGB" if kind == "DGB" else "ACB")
+    design = json.loads(request.canonical_json())
+    if kind == "ACB-material":
+        design["parameters"]["cage_material"] = "phenolic"
+        field = "/design/parameters/cage_material"
+    else:
+        design["cage"] = {"kind": "simplified_annular" if kind == "DGB" else "straight_pocket",
+                          "inner_d_mm": 50, "outside_d_mm": 55, "width_mm": 10, "pocket_clearance_mm": 0.1}
+        field = "/design/cage"
+    with _server(tmp_path) as server:
+        status, error = _request(server, "POST", ROUTE, _body(parse_request(design), geometry))
+    assert status == 422 and error["error"]["error_code"] == "NOT_SUPPORTED"
+    assert error["error"]["field_path"] == field
 
 
 def test_unsupported_and_unconfigured_http(tmp_path):
@@ -225,6 +347,10 @@ def test_one_active_analysis_and_retention_budget(tmp_path, portable, monkeypatc
             release.set()
             request.join(timeout=8)
         assert replies[0][0] == 201
+        status, readiness = _request(server, "GET", ROUTE + "/status")
+        assert status == 200 and not readiness["available"]
+        assert not readiness["profiles"]["reviewed"]["available"]
+        assert "storage is full" in readiness["unavailable_reason"]
         status, error = _request(server, "POST", ROUTE, body)
         assert status == 503 and error["error"]["error_code"] == "ANALYSIS_STORAGE_LIMIT"
 
@@ -283,3 +409,47 @@ def test_windows_original_exe_full_http_chain(tmp_path, kind, source, digest, ou
     if kind == "N222":
         assert parsed["files"] == baseline["files"]
     assert sha256(reference.read_bytes()).hexdigest() == sha256(original.read_bytes()).hexdigest() == digest
+
+
+def test_windows_original_exe_reruns_dgb_with_changed_load_z(tmp_path):
+    resources = Path(os.environ.get("ROBAS_WINDOWS_RESOURCES", r"C:\RollBearing"))
+    matches = sorted(DGB.rglob("DATA.txt"))
+    if platform.system() != "Windows" or not matches or not (resources / "exe" / "RoBAS_v2.exe").is_file():
+        pytest.skip("requires local Windows RoBAS EXE and private original DGB DATA")
+    original = matches[0]
+    original_hashes = {name: sha256((original.parent / name).read_bytes()).hexdigest()
+                       for name in ("DATA.txt", "OUT.txt", "a0_Final")}
+    request, geometry = _golden_design("DGB")
+    manifest, reference = _profile(tmp_path, original.read_bytes(), request, DGB_SHA256)
+    with _server(tmp_path, resources, manifest) as server:
+        baseline_status, baseline = _request(server, "POST", ROUTE, _body(request, geometry))
+        changed_status, changed = _request(server, "POST", ROUTE, _body(request, geometry, {"load_z_n": 2400}))
+    assert baseline_status == changed_status == 201, (baseline, changed)
+    assert baseline["run_id"] != changed["run_id"]
+    assert baseline["request_hash"] == changed["request_hash"] == request.request_hash
+    assert changed["operating_conditions"]["requested"] == {"load_z_n": 2400}
+    assert changed["operating_conditions"]["inherited"]["inner_speed_rpm"] == 20000
+    store = tmp_path / "artifacts" / "robas-analysis"
+    base_folder = store / ("analysis-" + baseline["run_id"])
+    changed_folder = store / ("analysis-" + changed["run_id"])
+    base_doc, changed_doc = (BallDataDocument.read(folder / "DATA.txt") for folder in (base_folder, changed_folder))
+    assert base_doc.value(29, "appLoadZ") == "2000"
+    assert changed_doc.value(29, "appLoadZ") == "2400.0"
+    assert base_doc.with_updates({(29, "appLoadZ"): 2400.0}).rows == changed_doc.rows
+    assert baseline["generated_data_sha256"] != changed["generated_data_sha256"]
+    probe_report, = changed_folder.glob("run-*/solver_probe_report.json")
+    probe = json.loads(probe_report.read_bytes())
+    assert probe["solver_executed"] is True and probe["process_exit_code"] == 0
+    assert probe["exe"]["verified_source_archive_binary"] is True
+    parsed = changed["result"]
+    assert parsed["files"]["DATA.txt"]["sha256"] == changed["generated_data_sha256"] == probe["input"]["input_sha256"]
+    assert parsed["files"]["OUT.txt"]["sha256"] == sha256((probe_report.parent / "OUT.txt").read_bytes()).hexdigest()
+    assert parsed["files"]["OUT.txt"]["sha256"] != baseline["result"]["files"]["OUT.txt"]["sha256"]
+    assert parsed["source_binding"]["status"] == "HASH_VERIFIED"
+    assert parsed["output_status"] == "PARSED_SUPPORTED_SECTIONS" and parsed["convergence"]["status"] == "UNKNOWN"
+    # The altered Windows OUT prints 2.330E+03 for RE #1 outer contact load.
+    assert parsed["contacts"][0]["outer"]["load"]["value"] == pytest.approx(2330)
+    assert all(item["value"] is None and item["status"] == "INVALID" for item in parsed["nonfinite_evidence"])
+    assert sha256(reference.read_bytes()).hexdigest() == original_hashes["DATA.txt"] == DGB_SHA256
+    for name, digest in original_hashes.items():
+        assert sha256((original.parent / name).read_bytes()).hexdigest() == digest

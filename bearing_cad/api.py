@@ -373,7 +373,7 @@ def make_server(*, port: int = 0, artifacts_root: Path = Path("artifacts/cad-v2"
             if route == "/api/v2/cad/drawings/status":
                 return drawing_status(self, robas_resources, cadimport_bridge)
             if route == "/api/v2/cad/analyses/status":
-                return self._respond(200, analysis_status(robas_resources, analysis_profiles))
+                return self._respond(200, analysis_status(robas_resources, analysis_profiles, root=root))
             if serve_drawing(self, route, root):
                 return
             match = _JOB_ROUTE.fullmatch(route or "")
