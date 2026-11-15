@@ -14,7 +14,7 @@
       <div>
         <span class="kicker">BEARINGCAD · ROLLING BEARING CAD</span>
         <h1>滚动轴承 CAD 工作台</h1>
-        <p>参数化三维建模 · 原版二维工程图 · STEP / DXF</p>
+        <p>参数设计 · 优化选型 · 二维出图 · 拟静力学分析</p>
       </div>
     </div>
     <div class="pill" id="connection" data-state="connecting" role="status">正在连接本地 CAD 引擎</div>
@@ -22,7 +22,7 @@
   <main class="workspace">
     <aside class="side" aria-label="轴承设计控制区">
       <section class="panel" id="modelParametersPanel" aria-label="结构参数">
-        <div class="panel-header"><h2>模型参数</h2><span>单位 mm</span></div>
+        <div class="panel-header"><h2>设计参数</h2><span>单位 mm</span></div>
         <div class="panel-body">
           <label class="field">轴承类型
             <select id="bearingType">
@@ -232,6 +232,18 @@
         </div>
         <div class="stage" id="viewport">
           <div class="stage-overlay" id="emptyStage">
+            <svg class="empty-bearing" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+              <circle cx="60" cy="60" r="51" stroke="currentColor" stroke-width="2"/>
+              <circle cx="60" cy="60" r="43" stroke="currentColor" stroke-width="1"/>
+              <circle cx="60" cy="60" r="27" stroke="currentColor" stroke-width="1"/>
+              <circle cx="60" cy="60" r="19" stroke="currentColor" stroke-width="2"/>
+              <g fill="currentColor" opacity=".65">
+                <circle cx="60" cy="25" r="6"/><circle cx="84.75" cy="35.25" r="6"/>
+                <circle cx="95" cy="60" r="6"/><circle cx="84.75" cy="84.75" r="6"/>
+                <circle cx="60" cy="95" r="6"/><circle cx="35.25" cy="84.75" r="6"/>
+                <circle cx="25" cy="60" r="6"/><circle cx="35.25" cy="35.25" r="6"/>
+              </g>
+            </svg>
             模型将在此显示
             <span>选择轴承类型和尺寸后，点击“生成三维模型”</span>
           </div>
