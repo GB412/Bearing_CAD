@@ -971,6 +971,9 @@ body[data-cad-view="2d"] #parameters { grid-template-columns: repeat(2,minmax(0,
 .analysis-table th { min-width: 7rem; }
 .analysis-card svg { display: block; width: 100%; max-width: 52rem; color: #415368; font-size: 13px; }
 .analysis-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .88rem; }
+#analysisResult pre { max-height: 32rem; max-width: 100%; overflow: auto; padding: 12px;
+  background: #f4f7f8; border: 1px solid #d9e4ea; border-radius: 6px; font-size: .78rem;
+  white-space: pre; tab-size: 4; }
 
 /* The canvas should use the viewport, not the height of a long form. */
 @media (min-width: 761px) {

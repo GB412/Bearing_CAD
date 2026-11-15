@@ -97,6 +97,21 @@ for (const spec of cases) {
     expect(baseline.data.analysis_geometry).toEqual(spec.geometry);
     expect(baseline.data.result.contacts[0].outer.load.value).toBe(spec.firstLoad);
     expect(baseline.data.result.nonfinite_evidence).toHaveLength(spec.nonfinite);
+    expect(Object.values(baseline.data.result.additional_sections)).toEqual(Array(6).fill('PARSED'));
+    expect(baseline.data.result.model_tables).toHaveLength(4);
+    const selection = page.getByLabel('接触结果曲线指标', {exact:true});
+    await selection.selectOption('film_temperature');
+    if (spec.name === 'N222') {
+      expect(baseline.data.result.contacts[0].outer.film_temperature).toMatchObject({
+        value:null, status:'INVALID', reason:'NONPOSITIVE_ABSOLUTE_TEMPERATURE', raw:'0.000E+00',
+      });
+      await expect(page.locator('#analysisResult')).toContainText('原版部分绝对温度输出为 0 K');
+    } else {
+      expect(baseline.data.result.contacts[0].outer.film_temperature.value).toBe(spec.name === 'DGB' ? 105.05 : 54.75);
+      await expect(page.getByRole('img', {name:'油膜温度 (°C) / 滚动体编号',exact:true})).toBeVisible();
+    }
+    await page.getByLabel('滚动体运动曲线指标', {exact:true}).selectOption('orbit_speed');
+    await expect(page.getByRole('img', {name:'公转速度 (rpm) / 滚动体编号',exact:true})).toBeVisible();
     await page.getByText('内外圈接触数据', {exact:true}).click();
     await expect(page.getByRole('cell', {name:String(spec.firstLoad),exact:true}).first()).toBeVisible();
     await page.getByText('非有限输出 · ' + spec.nonfinite + ' 项').click();

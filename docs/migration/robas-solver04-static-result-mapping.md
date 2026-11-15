@@ -14,27 +14,67 @@ bearing model or flange arrangement.
 |---|---|---|---|
 | `OUT.txt`, echoed `rec 1` and `rec 3.2` | Check `Mode=-1`, unit code, bearing family code and `nRe` against the paired `DATA.txt`. This limited echo leaves the source binding unverified. The same-run probe report provides file hashes for verification. | codes / count | Yes |
 | `OUT.txt`, `RE ... Contact Angle ... Contact Deflection ... Contact Load ... Contact Stress ... Race Flexing` | Both C# `processAnalysisResultDataTxt` implementations read the first matching table. Columns 1–8 after the RE index are angle, deflection, load and stress, each outer then inner. Require both unit and race headers and exactly `nRe` indexed rows. | deg; mm (`m × 1000`, round to 5 decimals as C#); N; MPa (`Pa × 1e-6`) | Yes |
-| Same contact table, final two columns | `Race Flexing` is printed in metres. C# does not map these columns in the contact reader. Retain the source file and row location. | m as printed | Evidence only |
+| Same contact table, final two columns | `Race Flexing` is printed in metres. C# does not map these columns in the contact reader. Now exposed as `race_flexing` using the printed units. | m as printed | Yes |
 | `OUT.txt`, `Race Angular Velocities / Relative Race Displacements / Stiffness` | Units and axes come directly from the three printed table headings. Rows are sweep points with both ring speeds, x/y/z relative displacements and XX/YY/ZZ stiffness. The audited C# result reader does not extract this table. Do not collapse sweep rows into a single operating point or infer axial/radial axes. | rpm, m, N/m | Yes |
 | `OUT.txt`, `Total Power Loss (W)` and `Internal Clearance (m)` | Both C# readers select the last token of the matching line. Report the printed values. Keep the sign on clearance. | W, m | Yes |
 | `OUT.txt`, `Time Average Parameters` footer | Use the observed terminal data row to detect truncated reports. The footer provides structural evidence. | — | Yes |
-| `OUT.txt`, life tables | Use the printed section, model and fixed-column headings to locate nonfinite tokens. Neither audited C# parser reads these life tables. The explanation and physical usability of the values remain unresolved. | h for modified life; dimensionless for modification factors | Evidence only |
+| `OUT.txt`, life tables | Fixed-width model tables now retain finite, nonfinite and blank cells independently. Neither audited C# parser reads these life tables. Model applicability remains unverified; these are printed model outputs, not accepted life predictions. | h for basic / modified life; dimensionless for modification factors | Printed values only |
 | `a0_Final` | `BaseSolver.finName` assigns this name and `rec 2.3` serializes it. Both C# `DeleteFile` implementations remove old copies. The audited result readers take their engineering fields from OUT. Observed `a0_Final` is whitespace-delimited numeric text, with a two-token first line and packed numeric rows. Its vector ordering, units and purpose beyond the configured final output are unverified. Preserve file evidence when present. | Unknown | Evidence only |
 
-### Deferred engineering fields
+### Extended engineering fields (2026-11-15)
 
 Both C# `processAnalysisResultDataTxt` implementations read the following
-fields. The Python parser keeps the original OUT and its hash as evidence.
-The field order and applicability still require verification before these
-fields become typed results.
+fields. Their columns and units have now been checked against all three local
+goldens. These results are added to the existing v1 response without changing
+input generation or solver execution. All contact fields have selectable
+curves and tables in the workbench. New paired metrics retain their OUT line.
 
-| Deferred field | OUT section and C# assignment |
+| Added field | OUT section and C# assignment |
 |---|---|
 | Contact dimensions | `Major Half Width` and `Minor Half Width` in m, assigned to `cMajorHalf` and `cMinorHalf` for both races. |
 | Rolling velocity and spin/roll ratio | `Rolling Velocity` in m/s and `Spin/Roll` as a ratio, assigned to `cVelocity` and `cOuterRaceSpinRollRatio` / `cInnerRaceSpinRollRatio`. |
 | Film thickness, maximum slip and traction | `Max Slip Velocity / Trac Coeff / Lubricant Film`, assigned to `cMaxSlipVelocity`, `cTracCoeff` and the two `FilmThickness` properties. C# multiplies the film thickness in m by `1e6` and rounds to four decimals in µm. The adjacent isothermal film table is a separate quantity. |
 | Contact loss, temperature rise and film temperature | `Contact Loss` (W), `Contact Temp Rise` (K) and `Lub Film Temp` (K). C# reads the rise directly and converts absolute film temperature to °C with `K - 273.15` and two decimal places. |
-| Computed stress and load capacities | `Computed Dynamic Capacities at Heaviest Loaded Rolling Element`. The table prints Pa and N; C# selects `StressCapacities` and `LoadCapacities` from the matching result row. Sparse columns and model-specific applicability need a separate audit. |
+| Computed stress and load capacities | `Computed Dynamic Capacities at Heaviest Loaded Rolling Element`. All eight fixed-width slots are retained per model, four Pa columns then four N columns. Blank cells are `NOT_REPORTED`, not zero. Applicability stays unverified; these are not CAD optimizer Cr or maximum contact stress. |
+
+The two orbital tables also populate `rolling_elements`: angular position in
+degrees, axial position in metres, relative orbital position in radians,
+Mis/Skew angles, spin amplitude in rpm, Theta/Phi in degrees, orbit rpm,
+centrifugal and moving-frame forces, wear rate, bulk temperature and HTC.
+The C# property name `cRadicalPosition` is misleading for the printed relative
+orbital position column: we retain the OUT unit `rad`, not an invented radius.
+
+Other paired columns are retained using their printed meanings: contact edge
+depth / chordal distance, isothermal film (separate from net lubricant film),
+film reduction factor, stress-slip product / normalized position, contact
+temperature and load-slip integral. Absolute contact / film temperatures are
+converted from K to °C, with two decimals. Temperature rises remain K.
+N222 prints 0 K for lubricant film temperature. It is `INVALID`, `value=null`,
+with raw zero and reason `NONPOSITIVE_ABSOLUTE_TEMPERATURE`; its cause is unknown.
+It must not be presented as a real -273.15°C oil temperature.
+
+`additional_sections` reports each of six extended sections as `PARSED` or
+`NOT_PRESENT`. Absent optional sections preserve compatibility with older /
+limited outputs; present malformed tables raise a line-specific error. This
+does not change `PARSED_SUPPORTED_SECTIONS` into a convergence claim.
+`model_tables` retains the four capacity / life tables with explicit
+`UNVERIFIED_MODEL_APPLICABILITY`. `VALID` means the printed numeric value is
+finite, not that a model is applicable or an engineering check passed.
+
+`raw_report` contains the original text from Rolling Element Parameters to
+the end, with its starting physical line. This makes supplemental slip and
+traction curves, race/cage and applied-parameter tables inspectable, without
+guessing typed meanings for every column. DATA echo is excluded. Text is
+rendered as text, never HTML; original files and their hashes remain untouched.
+`a0_Final` vector ordering and auxiliary-file column meanings remain unverified.
+
+**Original summary-column defect:** `FindId(..., 5, 1)` selects the `Original LP`
+capacity row. `StringLineToStrings` removes blank fields and splits the model
+name into `Original`, `LP`. C# assigns tokens 2/3 to `StressCapacities` and
+`LoadCapacities`; in the checked output these are the two printed **load**
+capacities, e.g. DGB 12420 / 5629 N. We do not reproduce this unit / label
+mismatch or claim a maximum contact stress from it. All models and columns
+are shown with their actual printed units instead.
 
 ## N222 nonfinite evidence
 

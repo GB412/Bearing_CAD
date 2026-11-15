@@ -42,6 +42,8 @@ async function setup(page, state) {
       const data = digest(JSON.stringify(body.operating_conditions));
       const caseHash = state.wrongHash ? '0'.repeat(64) : body.request_hash;
       const contact = {load:valid(2251), stress:valid(3402), angle:valid(2), deflection:invalid('NaN')};
+      if (state.extended) Object.assign(contact, {spin_roll_ratio:valid(.06329), film_thickness:valid(.2983),
+        film_temperature:invalid('NaN'), rolling_velocity:valid(27.65), major_half_width:valid(.00176)});
       return route.fulfill({status:201,json:{
         ...body, request_hash:caseHash, profile:{id:'reviewed', ...profile},
         run_id:String(state.posts.length).padStart(32,'0'), generated_data_sha256:data, solver_exe_sha256:digest('exe'),
@@ -53,7 +55,15 @@ async function setup(page, state) {
           output_status:'PARSED_SUPPORTED_SECTIONS', convergence:{status:'UNKNOWN'},
           summary:{total_power_loss:valid(3092),internal_clearance:invalid('Infinity')},
           contacts:[{rolling_element:1,outer:contact,inner:contact}],
-          stiffness_sweep:[{point:1,inner_speed:valid(20000),stiffness_xx:valid(2000)}],
+          ...(state.extended ? {
+            rolling_elements:[{rolling_element:1,spin_speed:valid(63390),orbit_speed:valid(8495),centrifugal_force:valid(50.99)}],
+            model_tables:[{id:'basic_life', columns:['outer','inner','element','bearing'],
+              rows:[{model:'Original LP',metrics:{outer:{...valid(0),unit:'h'},inner:{...valid(2.099),unit:'h'},
+                element:{value:null,status:'NOT_REPORTED',unit:'h'},bearing:{...invalid('Infinity'),unit:'h'}}}]}],
+            raw_report:{line:349,text:'1. Rolling Element Parameters\n<script>window.injected=true</script>\nNaN Infinity'},
+          } : {}),
+          stiffness_sweep:[{point:1,inner_speed:valid(20000),stiffness_xx:valid(2000),
+            displacement_x:valid(.0001),displacement_y:valid(0),displacement_z:valid(.000001)}],
           nonfinite_evidence:[{file:'OUT.txt',line:9,raw:'NaN',section:'Modified Life with Various Life Models',
             model:'IH',method:'Tallian',component:'Outer Race'},{file:'OUT.txt',line:12,raw:'Infinity'}],
           files:{'DATA.txt':{sha256:data},'OUT.txt':{sha256:digest('output')}},
@@ -99,6 +109,46 @@ test('workbench gates analysis on explicit confirmation and successful CAD', asy
   await page.locator('#cageEnabled').uncheck();
   await expect(page.locator('#analysisDesign')).toContainText('CAD 保持架材料');
   expect(state.posts).toHaveLength(0);
+});
+
+test('expanded original results can be selected, inspected and retained across runs', async ({page}, info) => {
+  const state = {posts:[], extended:true};
+  await setup(page, state);
+  await page.locator('#cageEnabled').uncheck();
+  await page.locator('#confirmDesign').click();
+  await cad(page);
+  await selectAnalysis(page);
+  await page.locator('#analysis-inner_race_od_mm').fill('49');
+  await page.locator('#runAnalysis').click();
+  const result = page.locator('#analysisResult');
+  await expect(result).toBeVisible();
+  const choice = page.getByLabel('接触结果曲线指标', {exact:true});
+  await choice.selectOption('film_thickness');
+  await expect(result.getByRole('img', {name:'油膜厚度 (μm) / 滚动体编号',exact:true})).toBeVisible();
+  await choice.selectOption('film_temperature');
+  await expect(result).toContainText('当前曲线没有有效数据');
+  await choice.selectOption('angle');
+  await expect(result.getByRole('img', {name:'接触角 (°) / 滚动体编号',exact:true})).toBeVisible();
+  await choice.selectOption('spin_roll_ratio');
+  await page.getByLabel('滚动体运动曲线指标', {exact:true}).selectOption('orbit_speed');
+  await expect(result.getByRole('img', {name:'公转速度 (rpm) / 滚动体编号',exact:true})).toBeVisible();
+  await page.getByLabel('扫速结果曲线指标', {exact:true}).selectOption('displacement');
+  await expect(result.getByRole('img', {name:'相对位移 (m) / 扫速工况点（转速未变化）',exact:true})).toBeVisible();
+  await result.getByText('寿命与承载能力模型', {exact:true}).click();
+  await result.getByText('基本寿命', {exact:true}).click();
+  await expect(result.getByRole('cell', {name:'未报告',exact:true})).toBeVisible();
+  await expect(result.getByRole('cell', {name:'不可用 (Infinity)',exact:true})).toBeVisible();
+  await result.getByText('原版完整结果文本（含补充输出）', {exact:true}).click();
+  await expect(result.locator('pre')).toContainText('<script>window.injected=true</script>');
+  expect(await page.evaluate(() => window.injected)).toBeUndefined();
+  await result.getByText('原版完整结果文本（含补充输出）', {exact:true}).click();
+  await page.screenshot({path:info.outputPath('extended-results.png'),fullPage:true});
+  await page.locator('#analysis-load_z_n').fill('2400');
+  await expect(page.locator('#analysisResultVersion')).toContainText('历史结果');
+  await page.locator('#runAnalysis').click();
+  await expect(page.locator('#analysisResultVersion')).toHaveText('当前设计与工况的结果');
+  await expect(choice).toHaveCount(1);
+  expect(state.posts).toHaveLength(2);
 });
 
 test('unconfigured and invalid profiles remain unavailable', async ({page}) => {
