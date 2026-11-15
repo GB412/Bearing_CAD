@@ -162,6 +162,11 @@ export function geometryIssues(request){
    add('/parameters/bore_d_mm','内径、内挡边顶径、节圆、外挡边顶径和外径必须依次增大。',['/parameters/inner_rib_tip_d_mm','/parameters/pitch_d_mm','/parameters/outer_rib_tip_d_mm']);
  }
  if(c){
+  if(kind==='rolling.deep_groove_ball'&&c.kind==='simplified_annular'&&
+     !(p.inner_shoulder_d_mm<c.inner_d_mm&&c.inner_d_mm<c.outside_d_mm&&c.outside_d_mm<p.outer_shoulder_d_mm))
+   add('/cage/inner_d_mm','保持架与套圈尺寸冲突。保持架内径须大于内圈肩径 '+p.inner_shoulder_d_mm+
+       ' mm，外径须小于外圈肩径 '+p.outer_shoulder_d_mm+' mm。',
+       ['/cage/outside_d_mm','/parameters/inner_shoulder_d_mm','/parameters/outer_shoulder_d_mm']);
   if(c.width_mm>B)
    add('/cage/width_mm','保持架总宽度不能大于轴承宽度。',['/parameters/width_mm']);
   if(c.inner_d_mm>=c.outside_d_mm)
@@ -262,6 +267,8 @@ export function describeCadError(payload,status){
    '内外滚道、挡边和内外径的径向尺寸顺序不成立。'],
   [/Cage width cannot exceed bearing axial width|Cage exceeds bearing width|Stamped assembly exceeds bearing width/,
    '保持架宽度不能大于轴承宽度。'],
+  [/Cage must lie radially between shoulders/,
+   '保持架与套圈尺寸冲突，请增大保持架内径、减小保持架外径，使其位于内外圈肩径之间。'],
   [/Adjacent balls overlap|Adjacent rollers overlap/,
    '滚动体数量过多或直径过大，相邻滚动体发生重叠。'],
   [/Exceeds local geometry budget|resource budget exceeded|numeric budget exceeded|Exceeds CAD builder instance budget/i,

@@ -159,7 +159,14 @@ export function renderAnalysisResult(container, reply, jobId, conditions) {
         operating.effective[key]]))),
     element('h4', '滚动体接触分布'), contactChart(contactRows), details('内外圈接触数据', contactTable),
     element('h4', '扫速刚度'), stiffnessChart(sweep), details('转速、位移与刚度数据', sweepTable),
-    details('非有限输出 · ' + invalid.length + ' 项', table(['文件', '行', '原始内容', '状态'],
-      invalid.map(item => [item.file, item.line, item.raw, '不可用']))),
+    details('非有限输出 · ' + invalid.length + ' 项',
+      element('p', '以下 NaN / Infinity 来自原版输出，对应指标不可用，具体原因尚待核实。'),
+      table(['文件', '行', '结果段', '模型', '方法', '部件', '原始内容', '状态'],
+        invalid.map(item => [item.file, item.line,
+          ({'Modified Life with Various Life Models':'修正寿命',
+            'Life Modification Factors with Various Life Models':'寿命修正系数'}[item.section] ?? item.section ?? '未映射'),
+          item.model ?? '未映射', item.method ?? '未映射',
+          ({'Outer Race':'外圈','Inner Race':'内圈','Roll Elem':'滚动体','Bearing':'轴承'}[item.component] ?? item.component ?? '未映射'),
+          item.raw, '不可用']))),
     evidence);
 }

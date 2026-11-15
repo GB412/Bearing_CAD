@@ -74,3 +74,24 @@ test('backend-only rolling collision rejects job with field-specific Chinese err
  await expect(page.locator('#param-ball_count')).toHaveAttribute('aria-invalid','true');
  expect(postCount).toBe(1);
 });
+
+test('DGB cage shoulder conflict highlights actual dimensions before submission',async({page})=>{
+ let calls=0;
+ await page.route('**/api/v2/cad/**',route=>{
+  if(new URL(route.request().url()).pathname==='/api/v2/cad/status')
+   return route.fulfill({json:{available:true,supported_bearings:['rolling.deep_groove_ball']}});
+  if(route.request().method()==='POST')calls++;
+  return route.fulfill({status:404,json:{}});
+ });
+ await page.goto('/rolling.html');
+ await page.locator('#param-inner_shoulder_d_mm').fill('49');
+ await page.locator('#param-outer_shoulder_d_mm').fill('59.02');
+ await expect(page.locator('#validation')).toContainText('内圈肩径 49 mm');
+ await expect(page.locator('#cage-inner_d_mm')).toHaveAttribute('aria-invalid','true');
+ await expect(page.locator('#cage-outside_d_mm')).toHaveAttribute('aria-invalid','true');
+ await page.locator('#generate').click();
+ expect(calls).toBe(0);
+ await page.locator('#cage-inner_d_mm').fill('50');
+ await page.locator('#cage-outside_d_mm').fill('58');
+ await expect(page.locator('#validation')).toBeHidden();
+});

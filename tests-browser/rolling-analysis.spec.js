@@ -54,7 +54,8 @@ async function setup(page, state) {
           summary:{total_power_loss:valid(3092),internal_clearance:invalid('Infinity')},
           contacts:[{rolling_element:1,outer:contact,inner:contact}],
           stiffness_sweep:[{point:1,inner_speed:valid(20000),stiffness_xx:valid(2000)}],
-          nonfinite_evidence:[{file:'OUT.txt',line:9,raw:'NaN'},{file:'OUT.txt',line:12,raw:'Infinity'}],
+          nonfinite_evidence:[{file:'OUT.txt',line:9,raw:'NaN',section:'Modified Life with Various Life Models',
+            model:'IH',method:'Tallian',component:'Outer Race'},{file:'OUT.txt',line:12,raw:'Infinity'}],
           files:{'DATA.txt':{sha256:data},'OUT.txt':{sha256:digest('output')}},
         },
       }});
@@ -158,6 +159,10 @@ test('analysis form reports errors and keeps late results tied to their submitte
   await expect(page.locator('#analysisResultBody')).toContainText('不可用 (Infinity)');
   await page.getByText('非有限输出 · 2 项').click();
   await expect(page.getByRole('cell', {name:'NaN', exact:true})).toBeVisible();
+  const invalidRow=page.getByRole('row').filter({has:page.getByRole('cell',{name:'NaN',exact:true})});
+  await expect(invalidRow).toContainText('修正寿命');
+  await expect(invalidRow).toContainText('IH');
+  await expect(invalidRow).toContainText('外圈');
   state.pending = null;
   await run.click();
   await expect(page.locator('#analysisResultVersion')).toHaveText('当前设计与工况的结果');
