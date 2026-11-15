@@ -970,7 +970,34 @@ body[data-cad-view="2d"] #parameters { grid-template-columns: repeat(2,minmax(0,
 .analysis-table td { overflow-wrap: anywhere; }
 .analysis-table th { min-width: 7rem; }
 .analysis-card svg { display: block; width: 100%; max-width: 52rem; color: #415368; font-size: 13px; }
-.analysis-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .88rem; }
+.analysis-chart { position: relative; max-width: 64rem; margin-block: 14px 22px;
+  padding: 18px 18px 10px; background: #fff; border: 1px solid #d9e4ea; border-radius: 10px; }
+.analysis-chart h5 { margin: 0 0 12px; font-size: 1rem; color: #24313b; overflow-wrap: anywhere; }
+.analysis-chart-control { display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+  font-size: .9rem; font-weight: 600; color: #405d63; margin-block: 10px; }
+.analysis-chart-control select { min-height: 38px; width: min(100%, 30rem); max-width: 100%;
+  padding: 7px 34px 7px 10px; border: 1px solid #bdced5; border-radius: 6px; background: #fff; color: #24313b; font: inherit; }
+.analysis-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.analysis-legend button { display: inline-flex; align-items: center; gap: 7px; min-height: 36px;
+  padding: 6px 10px; border: 1px solid #d9e4ea; border-radius: 6px; background: #f7fafb;
+  color: #24313b; font: inherit; font-size: .88rem; cursor: pointer; text-align: left; }
+.analysis-legend button[aria-pressed="false"] { opacity: .5; background: #fff; text-decoration: line-through; }
+.analysis-legend button:hover { border-color: var(--series-color); }
+.analysis-legend svg { width: 32px; height: 14px; flex: 0 0 32px; }
+.analysis-chart-symbol { color: var(--series-color); font-size: .75rem; }
+.analysis-chart-frame { overflow-x: auto; }
+.analysis-chart-frame > svg { width: 100%; max-width: none; font-family: inherit; }
+.analysis-chart-grid { fill: none; stroke: #dfe7eb; stroke-width: 1; }
+.analysis-chart-grid-x { stroke-dasharray: 3 5; }
+.analysis-chart-axis { fill: none; stroke: #596c78; stroke-width: 1.2; }
+.analysis-chart-tick { fill: #526774; font-size: 12px; font-variant-numeric: tabular-nums; }
+.analysis-chart-axis-label { fill: #24313b; font-size: 13px; font-weight: 600; }
+.analysis-chart-hint { font-size: .8rem; color: #61727d; margin: 8px 0; }
+.analysis-chart-tooltip { position: absolute; z-index: 2; right: 18px; top: 18px; max-width: min(28rem, 90%);
+  padding: 10px 12px; border: 1px solid #bdced5; border-radius: 7px; background: #fff;
+  box-shadow: 0 4px 16px #24313b1a; font-size: .85rem; pointer-events: none; }
+.analysis-chart-tooltip:not([hidden]) { display: grid; gap: 5px; }
+.analysis-chart-point:focus { outline: none; stroke: #24313b; stroke-width: 2; }
 #analysisResult pre { max-height: 32rem; max-width: 100%; overflow: auto; padding: 12px;
   background: #f4f7f8; border: 1px solid #d9e4ea; border-radius: 6px; font-size: .78rem;
   white-space: pre; tab-size: 4; }

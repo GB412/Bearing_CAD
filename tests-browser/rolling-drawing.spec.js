@@ -177,7 +177,7 @@ test('2D drawing generation opens the large preview workspace and supports sheet
   await page.locator('#drawingAccuracy').selectOption('P6');
   await expect(page.locator('#drawingPreviewEmpty')).toBeVisible();
   await expect(page.locator('#drawingDownloadCurrent')).toBeHidden();
-  await expect(page.locator('#drawingTabCount')).toHaveText('等待生成');
+  await expect(page.locator('#drawingTabCount')).toHaveText('尚未生成');
   await expect(page.locator('#drawingSheetDiagnostics')).toHaveText('');
 
   expect(errors).toEqual([]);

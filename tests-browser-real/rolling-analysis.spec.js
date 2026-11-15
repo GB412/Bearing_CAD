@@ -112,6 +112,10 @@ for (const spec of cases) {
     }
     await page.getByLabel('滚动体运动曲线指标', {exact:true}).selectOption('orbit_speed');
     await expect(page.getByRole('img', {name:'公转速度 (rpm) / 滚动体编号',exact:true})).toBeVisible();
+    const stiffness=page.locator('.analysis-chart').filter({has:page.getByRole('heading',{name:'刚度 (N/m)',exact:true})});
+    await stiffness.screenshot({path:info.outputPath(spec.name+'-stiffness-chart.png')});
+    const thermal=page.locator('.analysis-chart').filter({has:page.getByRole('heading',{name:'油膜温度 (°C)',exact:true})});
+    await thermal.screenshot({path:info.outputPath(spec.name+'-film-temperature-chart.png')});
     await page.getByText('内外圈接触数据', {exact:true}).click();
     await expect(page.getByRole('cell', {name:String(spec.firstLoad),exact:true}).first()).toBeVisible();
     await page.getByText('非有限输出 · ' + spec.nonfinite + ' 项').click();

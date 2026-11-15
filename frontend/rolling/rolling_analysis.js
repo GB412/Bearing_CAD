@@ -96,7 +96,7 @@ export function initAnalysisWorkbench({getType, getDesign, getConfirmedKey, getC
     const matched = confirmed && cad?.key === getConfirmedKey();
     const incompatible = design ? compatibility(design) : '';
     $('analysisDesign').textContent = incompatible || (!confirmed ? '先确认当前设计。' :
-      !matched ? '当前设计已确认，等待成功生成三维模型。' :
+      !matched ? '当前设计已确认。请点击“生成三维模型”，成功后即可分析。' :
       '设计已确认 · 三维作业 ' + cad.jobId + ' · SHA-256 ' + cad.hash);
     const profile = profiles()[picker.value];
     $('analysisProfileSource').textContent = profile ? profile.source + ' · DATA SHA-256 ' + profile.sha256 : '';
@@ -277,7 +277,7 @@ export function initAnalysisWorkbench({getType, getDesign, getConfirmedKey, getC
       notice(started === revision ? '已取得可展示的结果段，收敛状态见下方。' : '先前请求已返回，结果归入历史。');
     } catch (error) {
       if (started === revision) notice(error.name === 'TimeoutError' ?
-        '等待本机服务响应超时。请确认求解器已结束后再试。' : error.message, true);
+        '本机计算服务响应超时。请确认求解器已结束后再试。' : error.message, true);
       else notice('先前请求已结束，请按当前输入重新计算。');
     } finally {
       busy = false;

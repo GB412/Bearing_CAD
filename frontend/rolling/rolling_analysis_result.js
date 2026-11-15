@@ -29,7 +29,8 @@ const SWEEP = [
   ['displacement_x', 'X 位移 (m)'], ['displacement_y', 'Y 位移 (m)'], ['displacement_z', 'Z 位移 (m)'],
   ['stiffness_xx', 'Kxx (N/m)'], ['stiffness_yy', 'Kyy (N/m)'], ['stiffness_zz', 'Kzz (N/m)'],
 ];
-const COLORS = ['#2479b0', '#c05e29', '#5960b2'];
+const COLORS = ['#236a9f', '#bc541e', '#7253a2'];
+const DASHES = ['', '8 4', '2 4'];
 const valid = metric => metric?.status === 'VALID' && Number.isFinite(metric.value);
 const number = value => String(Number(value.toPrecision(8)));
 const metricText = metric => valid(metric) ? number(metric.value) :
@@ -68,45 +69,115 @@ function svgElement(tag, attributes) {
 
 function chart(series, xLabel, yLabel) {
   const box = element('div');
-  const points = series.flatMap(({points}) => points.filter(Boolean));
-  if (!points.length) {
-    box.append(element('p', '当前曲线没有有效数据。'));
-    return box;
-  }
-  let [xmin, ymin] = points[0], xmax = xmin, ymax = ymin;
-  for (const [px, py] of points) {
-    xmin = Math.min(xmin, px); xmax = Math.max(xmax, px);
-    ymin = Math.min(ymin, py); ymax = Math.max(ymax, py);
-  }
-  const x = v => xmin === xmax ? 351 : 80 + 542 * (v - xmin) / (xmax - xmin);
-  const y = v => ymin === ymax ? 96 : 164 - 136 * (v - ymin) / (ymax - ymin);
-  const svg = svgElement('svg', {viewBox: '0 0 650 212', role: 'img', 'aria-label': yLabel + ' / ' + xLabel});
-  for (const [tx, ty, text, anchor] of [[75,32,number(ymax),'end'], [75,ymin === ymax ? 96 : 164,number(ymin),'end'],
-    [80,184,number(xmin),'middle'], [622,184,number(xmax),'middle'], [351,204,xLabel,'middle'], [80,16,yLabel,'start']]) {
-    const label = svgElement('text', {x:tx, y:ty, 'text-anchor':anchor, fill:'currentColor'});
-    label.textContent = text;
-    svg.append(label);
-  }
-  svg.append(svgElement('path', {d:'M80 26V164H622', stroke:'currentColor', fill:'none'}));
-  const legend = element('p');
+  box.className = 'analysis-chart';
+  const heading = element('h5', yLabel);
+  const legend = element('div');
   legend.className = 'analysis-legend';
-  series.forEach(({label, points}, index) => {
-    const color = COLORS[index];
-    const path = points.map((point, i) => point ? (points[i - 1] ? 'L' : 'M') + x(point[0]) + ' ' + y(point[1]) : '').join(' ');
-    svg.append(svgElement('path', {d:path, fill:'none', stroke:color, 'stroke-width':2}));
-    for (const point of points.filter(Boolean)) {
-      const [vx, vy] = point;
-      const dot = svgElement('circle', {cx:x(vx), cy:y(vy), r:3.5, fill:color});
-      const title = svgElement('title', {});
-      title.textContent = label + ' · ' + number(vx) + ' / ' + number(vy);
-      dot.append(title);
-      svg.append(dot);
+  legend.setAttribute('aria-label', yLabel + '图例');
+  const frame = element('div');
+  frame.className = 'analysis-chart-frame';
+  const tooltip = element('div');
+  tooltip.className = 'analysis-chart-tooltip';
+  tooltip.setAttribute('role', 'tooltip');
+  tooltip.hidden = true;
+  const hidden = new Set();
+  const finite = point => point && point.every(Number.isFinite);
+  const tick = value => {
+    if (value === 0) return '0';
+    return Math.abs(value) >= 1e5 || Math.abs(value) < .001 ? value.toExponential(2).replace(/\.00e/, 'e').replace('e+', 'e') :
+      Number(value.toPrecision(5)).toLocaleString('en-US', {maximumFractionDigits:8});
+  };
+  function draw() {
+    tooltip.hidden = true;
+    const points = series.flatMap(({points}, i) => hidden.has(i) ? [] : points.filter(finite));
+    if (!points.length) {
+      frame.replaceChildren(element('p', hidden.size === series.length ? '已隐藏全部曲线，请点击图例重新显示。' : '当前曲线没有有效数据。'));
+      return;
     }
-    const key = element('span', '● ' + label);
-    key.style.color = color;
-    legend.append(key);
+    const xs = [...new Set(points.map(p => p[0]))].sort((a,b) => a-b);
+    const values = points.map(p => p[1]);
+    let ymin = Math.min(...values), ymax = Math.max(...values);
+    const padding = ymax === ymin ? Math.abs(ymax) * .05 || 1 : (ymax - ymin) * .06;
+    const span = ymax - ymin + 2 * padding;
+    const power = 10 ** Math.floor(Math.log10(span / 5));
+    if (!Number.isFinite(span) || !Number.isFinite(power) || power <= 0) {
+      frame.replaceChildren(element('p','数值范围超出绘图精度，请查看下方原始数据表。')); return;
+    }
+    const step = [1, 2, 2.5, 5, 10].find(v => v * power >= span / 5) * power;
+    ymin = Math.floor((ymin - padding) / step) * step;
+    ymax = Math.ceil((ymax + padding) / step) * step;
+    const width=Math.max(280,Math.min(740,frame.clientWidth || 740));
+    const left = width < 480 ? 82 : 112, right = width-40, top = 24, bottom = 278;
+    const x = v => xs.length === 1 ? (left + right) / 2 : left + (right-left) * (v-xs[0]) / (xs.at(-1)-xs[0]);
+    const y = v => bottom - (bottom-top) * (v-ymin) / (ymax-ymin);
+    const svg = svgElement('svg', {viewBox:`0 0 ${width} 354`, role:'img', 'aria-label':yLabel + ' / ' + xLabel});
+    const text = (tx,ty,value,anchor='middle',cls='analysis-chart-tick') => {
+      const node = svgElement('text', {x:tx,y:ty,'text-anchor':anchor,class:cls}); node.textContent=value; svg.append(node); return node;
+    };
+    for (let i = 0; i <= Math.round((ymax-ymin)/step); i++) {
+      const v = ymin + i * step, py = y(v);
+      svg.append(svgElement('path', {d:`M${left} ${py}H${right}`,class:'analysis-chart-grid'}));
+      text(left-12,py+4,tick(Math.abs(v) < step*1e-10 ? 0 : v),'end');
+    }
+    const tickCount=width < 480 ? 4 : 8;
+    const xticks = xs.filter((_,i) => xs.length <= tickCount || Array.from({length:tickCount}, (_,j) => Math.round(j*(xs.length-1)/(tickCount-1))).includes(i));
+    for (const v of xticks) {
+      const px=x(v);
+      svg.append(svgElement('path', {d:`M${px} ${top}V${bottom}`,class:'analysis-chart-grid analysis-chart-grid-x'}));
+      svg.append(svgElement('path', {d:`M${px} ${bottom}v5`,class:'analysis-chart-axis'}));
+      text(px,bottom+23,tick(v));
+    }
+    svg.append(svgElement('path', {d:`M${left} ${top}V${bottom}H${right}`,class:'analysis-chart-axis'}));
+    // Long metric names remain in the heading; the ordinate then shows its
+    // unit so the complete label never runs outside the chart.
+    const ordinate = yLabel.length > 24 ? '数值 ' + (yLabel.match(/\([^()]*\)$/)?.[0] ?? '') : yLabel;
+    const ylabel = text(22,(top+bottom)/2,ordinate,'middle','analysis-chart-axis-label');
+    ylabel.setAttribute('transform', `rotate(-90 22 ${(top+bottom)/2})`);
+    text((left+right)/2,337,xLabel,'middle','analysis-chart-axis-label');
+    series.forEach(({label,points}, index) => {
+      if (hidden.has(index)) return;
+      const color=COLORS[index % COLORS.length], dash=DASHES[index % DASHES.length];
+      const path = points.map((p,i) => finite(p) ? (finite(points[i-1]) ? 'L' : 'M') + x(p[0]) + ' ' + y(p[1]) : '').join(' ');
+      svg.append(svgElement('path', {d:path,fill:'none',stroke:color,'stroke-width':2.2,'stroke-dasharray':dash,'data-series':label}));
+      for (const [vx,vy] of points.filter(finite)) {
+        const px=x(vx), py=y(vy);
+        const marker = index % 3 === 1 ? svgElement('rect',{x:px-3.5,y:py-3.5,width:7,height:7}) :
+          index % 3 === 2 ? svgElement('path',{d:`M${px} ${py-4.5}l4.5 8h-9Z`}) : svgElement('circle',{cx:px,cy:py,r:3.5});
+        marker.setAttribute('fill',color); svg.append(marker);
+        const description = label + '；' + xLabel + '：' + number(vx) + '；' + yLabel + '：' + number(vy);
+        const target=svgElement('circle',{cx:px,cy:py,r:9,fill:'transparent',tabindex:0,'aria-label':description,class:'analysis-chart-point'});
+        const title=svgElement('title',{}); title.textContent=description; target.append(title);
+        const show=() => {
+          tooltip.replaceChildren(element('strong',label),element('span',xLabel + '：' + number(vx)),element('span',yLabel + '：' + number(vy)));
+          tooltip.hidden=false;
+        };
+        target.addEventListener('pointerenter',show); target.addEventListener('focus',show);
+        target.addEventListener('pointerleave',() => {tooltip.hidden=true;});
+        target.addEventListener('blur',() => {tooltip.hidden=true;}); svg.append(target);
+      }
+    });
+    frame.replaceChildren(svg);
+  }
+  series.forEach(({label,points},i) => {
+    const key=element('button'); key.type='button'; key.setAttribute('aria-pressed','true');
+    key.style.setProperty('--series-color',COLORS[i % COLORS.length]);
+    const swatch=svgElement('svg',{viewBox:'0 0 40 14','aria-hidden':'true'});
+    swatch.append(svgElement('path',{d:'M1 7H39',fill:'none',stroke:COLORS[i % COLORS.length],'stroke-width':2,'stroke-dasharray':DASHES[i % DASHES.length]}));
+    const shape=element('span',['●','■','▲'][i % 3]); shape.className='analysis-chart-symbol'; shape.setAttribute('aria-hidden','true');
+    key.append(swatch,shape,element('span',label + (points.some(finite) ? '' : '（无有效数据）')));
+    key.addEventListener('click',() => {
+      hidden.has(i) ? hidden.delete(i) : hidden.add(i);
+      key.setAttribute('aria-pressed',String(!hidden.has(i))); draw();
+    }); legend.append(key);
   });
-  box.append(svg, legend);
+  const hint=element('p','点击图例可显示或隐藏曲线；悬停或聚焦数据点查看数值。'); hint.className='analysis-chart-hint';
+  box.append(heading,legend,frame,tooltip,hint); draw();
+  let lastWidth=0;
+  const observer=new ResizeObserver(([entry]) => {
+    if (!box.isConnected) { observer.disconnect(); return; }
+    if (Math.abs(entry.contentRect.width-lastWidth) > .5) { lastWidth=entry.contentRect.width; draw(); }
+  });
+  observer.observe(frame);
   return box;
 }
 
@@ -117,18 +188,30 @@ function details(label, ...children) {
 }
 
 function distributionChart(rows, fields, paired = true) {
-  const label = element('label', '曲线指标 ');
+  const label = element('label', '选择结果指标');
+  label.className='analysis-chart-control';
   const select = element('select');
   select.setAttribute('aria-label', paired ? '接触结果曲线指标' : '滚动体运动曲线指标');
-  for (const [key, title] of fields) {
-    const item = element('option', title);
-    item.value = key;
-    select.append(item);
+  const groups = paired ? [
+    ['接触与受力', ['load','stress','deflection','angle','race_flexing']],
+    ['运动与摩擦', ['spin_roll_ratio','rolling_velocity','max_slip_velocity','traction_coefficient']],
+    ['润滑与温度', ['film_thickness','film_temperature','isothermal_film_thickness','film_reduction_factor','contact_temperature','contact_temperature_rise','contact_loss']],
+    ['接触尺寸与补充结果', fields.map(([key]) => key)],
+  ] : [['转速与受力', ['spin_speed','orbit_speed','centrifugal_force','moving_radial_force','moving_orbital_force','moving_axial_force']],
+    ['位置、方向与其他结果', fields.map(([key]) => key)]];
+  const added=new Set();
+  for (const [name, keys] of groups) {
+    const group=element('optgroup'); group.label=name;
+    for (const [key,title,unit] of fields.filter(([key]) => keys.includes(key) && !added.has(key))) {
+      const item=element('option',title + '（' + (unit === '1' ? '无量纲' : unit) + '）');
+      item.value=key; group.append(item); added.add(key);
+    }
+    if (group.children.length) select.append(group);
   }
   const frame = element('div');
   function plot() {
     const [field, title, unit] = fields.find(([key]) => key === select.value);
-    frame.replaceChildren(chart((paired ? [['outer','外圈'],['inner','内圈']] : [[null, title]]).map(([race, name]) => ({
+    frame.replaceChildren(chart((paired ? [['outer','外滚道'],['inner','内滚道']] : [[null, title]]).map(([race, name]) => ({
       label:name, points: rows.map(row => {
         const metric = race ? row[race]?.[field] : row[field];
         return valid(metric) ? [row.rolling_element, metric.value] : null;
@@ -176,17 +259,24 @@ function stiffnessChart(rows) {
     const item = element('option', name); item.value = value; select.append(item);
   }
   const frame = element('div');
+  const descriptions = {stiffness_xx:'Kxx · X 向平移刚度',stiffness_yy:'Kyy · Y 向平移刚度',stiffness_zz:'Kzz · Z 向平移刚度',
+    displacement_x:'X 向相对位移',displacement_y:'Y 向相对位移',displacement_z:'Z 向相对位移',
+    outer_speed:'外圈转速',inner_speed:'内圈转速'};
   const plot = () => {
     const [fields, unit] = select.value === 'displacement' ? [SWEEP.slice(2,5), '相对位移 (m)'] :
       select.value === 'speed' ? [SWEEP.slice(0,2), '转速 (rpm)'] : [SWEEP.slice(5), '刚度 (N/m)'];
     frame.replaceChildren(chart(fields.map(([field, name]) => ({
-      label:name,
+      label:descriptions[field] ?? name,
       points:rows.map(row => valid(row[field]) && (!speed || valid(row[speed])) ?
         [speed ? row[speed].value : row.point, row[field].value] : null),
     })), label, unit));
   };
-  const box = element('div'), control = element('label', '曲线指标 ');
+  const box = element('div'), control = element('label', '选择扫速结果');
+  control.className='analysis-chart-control';
   select.addEventListener('change', plot); plot(); control.append(select); box.append(control, frame);
+  const note=element('p',speed ? '横轴采用实际' + (speed === 'inner_speed' ? '内圈' : '外圈') + '转速。' :
+    '本次各工况转速相同，横轴使用工况点编号，不代表时间。');
+  note.className='analysis-chart-hint'; box.append(note);
   return box;
 }
 

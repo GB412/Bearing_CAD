@@ -144,7 +144,7 @@ export function initDrawingWorkbench(getDesign, getCadHash) {
     previewImage.onerror = null;
     previewImage.removeAttribute('src');
     setPreviewEmpty('暂无二维图纸', '请在左侧填写轴承图纸参数，然后生成原版模板二维图纸。');
-    $('drawingTabCount').textContent = '等待生成';
+    $('drawingTabCount').textContent = '尚未生成';
     $('drawingWorkspaceSubtitle').textContent = '生成图纸后，在这里查看四张原版模板图纸。';
     $('drawingSheetTitle').textContent = '尚未选择图纸';
     $('drawingSheetFile').textContent = '生成后显示 DXF 文件名';
@@ -322,7 +322,7 @@ export function initDrawingWorkbench(getDesign, getCadHash) {
 
   function updateVersion() {
     const cadHash = getCadHash();
-    const relation = !cadHash ? '等待当前三维作业比对' : cadHash === drawingHash ? '与当前三维作业使用同一设计快照' : '与当前三维作业设计版本不同';
+    const relation = !cadHash ? '尚无成功的三维作业可比对' : cadHash === drawingHash ? '与当前三维作业使用同一设计快照' : '与当前三维作业设计版本不同';
     $('drawingDesignVersion').textContent = drawingHash ? relation + ' · SHA-256 ' + drawingHash : '';
   }
 
