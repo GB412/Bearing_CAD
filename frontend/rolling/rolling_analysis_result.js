@@ -1,3 +1,5 @@
+import {settingsRows} from './rolling_analysis_settings.js';
+
 const CONTACTS = [
   ['load', '接触载荷', 'N'], ['stress', '接触应力', 'MPa'],
   ['deflection', '接触变形', 'mm'], ['angle', '接触角', '°'],
@@ -302,6 +304,7 @@ export function renderAnalysisResult(container, reply, jobId, conditions) {
       ...Object.entries(result.files).map(([file, info]) => [file + ' SHA-256', info.sha256 ?? info.status]),
     ]));
   const invalid = result.nonfinite_evidence;
+  const settings = settingsRows(reply.advanced_settings);
   const contactFields = CONTACTS.filter(([key]) => contactRows.some(row => row.outer?.[key] || row.inner?.[key]));
   // Keep each table narrow enough to compare the two races without 40 columns.
   const contactTables = [];
@@ -332,6 +335,7 @@ export function renderAnalysisResult(container, reply, jobId, conditions) {
     details('本次运行工况', table(['工况', '来源', '生效值'],
       conditions.map(([key, label]) => [label, Object.hasOwn(operating.requested, key) ? '用户输入' : '参考 DATA',
         operating.effective[key]]))),
+    ...(settings.length ? [details('本次材料、润滑与求解设置', table(['部件或设置', '字段', '来源', '生效值'], settings))] : []),
     element('h4', '接触、润滑与温度分布'), contactChart(contactRows), details('内外圈接触数据', ...contactTables),
     element('h4', '扫速刚度、位移与转速'), stiffnessChart(sweep), details('转速、位移与刚度数据', sweepTable),
     ...more,

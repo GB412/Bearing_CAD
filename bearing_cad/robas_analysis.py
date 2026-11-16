@@ -34,6 +34,28 @@ _CONDITIONS = {
     "outer_speed_rpm": (30, "rpm1", -1e5, 1e5),
     "inner_speed_rpm": (30, "rpm2", -1e5, 1e5),
 }
+_MATERIAL_RECORDS = {
+    "rolling_elements": ("rec 8.1", "rec 3.3", "kReMat"),
+    "outer_race": ("rec 8.2.1", "rec 3.3", "kRaceMat1"),
+    "inner_race": ("rec 8.2.2", "rec 3.3", "kRaceMat2"),
+    "shaft": ("rec 8.3", "rec 3.3", "kShftMat"),
+    "housing": ("rec 8.4", "rec 3.3", "kHsngMat"),
+    "cage": ("rec 8.5", "rec 7.0", "kCageMat"),
+}
+# API units, DATA field, conversion multiplier, and local service limits.
+_MATERIAL_VALUES = {
+    "density_kg_m3": ("density", 1, 1, 100000),
+    "elastic_modulus_gpa": ("elasticModules", 1e9, 0.001, 2000),
+    "poisson_ratio": ("poissonRatio", 1, -0.99, 0.499999),
+    "thermal_expansion_per_k": ("thermalExpansion", 1, -0.01, 0.01),
+    "specific_heat_j_kg_k": ("specificHeat", 1, 1, 100000),
+    "conductivity_w_m_k": ("conductivity", 1, 0.001, 10000),
+}
+# rec 7.0 code 2 is reported as "Arbitrary" in the OUT cage hydrodynamics table.
+_CAGE_VISCOSITIES = {
+    "pocket_viscosity_pa_s": ("kPocHydro", "pocVis"),
+    "guide_viscosity_pa_s": ("kGsHydro", "gsVis"),
+}
 
 
 @dataclass(frozen=True)
@@ -113,7 +135,7 @@ def _check_profile_document(profile: ReferenceProfile, document) -> None:
         raise AnalysisError(503, "ANALYSIS_PROFILE_INVALID", "/profile_id", "Reference DATA specifies unsupported output filenames")
 
 
-def _check_reference(profile: ReferenceProfile) -> None:
+def _check_reference(profile: ReferenceProfile):
     roller = profile.bearing_type is BearingType.CYLINDRICAL
     try:
         info = inspect_static_input(profile.path, family="roller" if roller else "ball")
@@ -131,6 +153,7 @@ def _check_reference(profile: ReferenceProfile) -> None:
         raise AnalysisError(503, "ANALYSIS_PROFILE_INVALID", "/profile_id", "Reference DATA cannot be used as a supported profile") from exc
     _check_profile_document(profile, document)
     _effective_conditions(document, _operating_targets(roller))
+    return document
 
 
 def _check_storage(root: Path) -> Path:
@@ -164,11 +187,12 @@ def analysis_status(resources: Path | None, profiles: dict[str, ReferenceProfile
         entry = {**_public_profile(profile), "available": False}
         if blocked is None:
             try:
-                _check_reference(profile)
+                reference = _check_reference(profile)
             except AnalysisError as error:
                 entry["unavailable_reason"] = str(error)
             else:
                 entry["available"] = True
+                entry["advanced_settings"] = _settings_values(reference)
         else:
             entry["unavailable_reason"] = blocked
         statuses[key] = entry
@@ -192,10 +216,68 @@ def _number(value, path: str, low: float, high: float) -> float:
     return float(value)
 
 
+def _settings_targets(document) -> dict:
+    records = {label: (index, fields) for index, (label, fields) in enumerate(document._fields)}
+    materials = {}
+    for role, (label, mode_record, mode) in _MATERIAL_RECORDS.items():
+        if float(document.value(records[mode_record][0], mode)) != 1:
+            continue
+        index, fields = records[label]
+        materials[role] = {name: (index, field, scale, low, high)
+                           for name, (field, scale, low, high) in _MATERIAL_VALUES.items() if field in fields}
+    hydrodynamics = records["rec 7.0"][0]
+    lubrication = {name: (records["rec 10.6"][0], field, 1, 1e-6, 10)
+                   for name, (mode, field) in _CAGE_VISCOSITIES.items()
+                   if float(document.value(hydrodynamics, mode)) == 2}
+    return {"materials": materials, "lubrication": lubrication,
+            "solver": {"load_steps": (0, "nStps", 1, 1, 100)}}
+
+
+def _settings_values(document) -> dict:
+    targets = _settings_targets(document)
+
+    def values(fields):
+        return {name: float(document.value(index, field)) / scale
+                for name, (index, field, scale, _, _) in fields.items()}
+
+    return {"materials": {role: values(fields) for role, fields in targets["materials"].items()},
+            "lubrication": values(targets["lubrication"]), "solver": values(targets["solver"])}
+
+
+def _settings_updates(raw, document) -> tuple[dict, dict]:
+    path = "/advanced_settings"
+    targets = _settings_targets(document)
+    groups = _fields(raw, set(), set(targets), path)
+
+    def collect(raw_fields, allowed, field_path, output):
+        requested = {}
+        for name, value in _fields(raw_fields, set(), set(allowed), field_path).items():
+            index, field, scale, low, high = allowed[name]
+            value = _number(value, f"{field_path}/{name}", low, high)
+            if name == "load_steps":
+                if not value.is_integer():
+                    raise ContractError("PARAMETER_INVALID", f"{field_path}/{name}", "Expected an integer load step count")
+                value = int(value)
+            requested[name] = value
+            output[index, field] = value * scale
+        return requested
+
+    updates = {"material_updates": {}, "lubricant_updates": {}, "solver_updates": {}}
+    requested = {}
+    if "materials" in groups:
+        materials = _fields(groups["materials"], set(), set(targets["materials"]), path + "/materials")
+        requested["materials"] = {role: collect(fields, targets["materials"][role], f"{path}/materials/{role}",
+                                                 updates["material_updates"]) for role, fields in materials.items()}
+    for group, output in (("lubrication", "lubricant_updates"), ("solver", "solver_updates")):
+        if group in groups:
+            requested[group] = collect(groups[group], targets[group], f"{path}/{group}", updates[output])
+    return requested, updates
+
+
 def run_analysis(data, *, resources: Path | None, profiles: dict[str, ReferenceProfile], root: Path) -> dict:
     """Run one supplied design snapshot. The HTTP service serializes calls per process."""
     body = _fields(data, {"design", "request_hash", "profile_id", "operating_conditions", "analysis_geometry"},
-                   {"allow_reference_geometry_mismatch"}, "")
+                   {"allow_reference_geometry_mismatch", "advanced_settings"}, "")
     try:
         request = parse_request(body["design"])
     except ContractError as exc:
@@ -254,11 +336,12 @@ def run_analysis(data, *, resources: Path | None, profiles: dict[str, ReferenceP
     if profile is None or profile.bearing_type is not request.bearing_type:
         raise ContractError("ANALYSIS_PROFILE_INVALID", "/profile_id", "Select a configured profile for this bearing type")
     family = "roller" if roller else "ball"
-    _check_reference(profile)
+    reference = _check_reference(profile)
+    requested_settings, settings_updates = _settings_updates(body.get("advanced_settings", {}), reference)
     indices = _operating_targets(roller)
     updates = {indices[key]: value for key, value in conditions.items() if key in indices}
     clearance = conditions.get("free_clearance_mm")
-    common = {"geometry_mode": "cad_geometry", "operating_updates": updates,
+    common = {"geometry_mode": "cad_geometry", "operating_updates": updates, **settings_updates,
               "allow_reference_geometry_mismatch": override}
     try:
         if roller:
@@ -289,7 +372,8 @@ def run_analysis(data, *, resources: Path | None, profiles: dict[str, ReferenceP
               "request_hash": request.request_hash, "design": json.loads(request.canonical_json()),
               "profile": {"id": profile_id, **_public_profile(profile)}, "analysis_geometry": geometry,
               "allow_reference_geometry_mismatch": override, "generated_data_sha256": data_sha,
-              "operating_conditions": {"requested": conditions, "inherited": inherited, "effective": effective}}
+              "operating_conditions": {"requested": conditions, "inherited": inherited, "effective": effective},
+              "advanced_settings": {"requested": requested_settings, "effective": _settings_values(document)}}
     try:
         store.mkdir(exist_ok=True)
         folder.mkdir(mode=0o700)

@@ -1,4 +1,4 @@
-import {readFile} from 'node:fs/promises';
+import {readFile, readdir} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {test, expect} from '@playwright/test';
 
@@ -138,6 +138,34 @@ for (const spec of cases) {
       const changes = original.split(/\r?\n/).map((line,i) => [line,updated.split(/\r?\n/)[i]]).filter(([a,b]) => a !== b);
       expect(changes).toHaveLength(1);
       expect(changes[0][0].replace(/,2000(?=,|$)/, ',2400.0')).toBe(changes[0][1]);
+      await page.getByText('材料、润滑与求解设置', {exact:true}).click();
+      await page.locator('#analysisAdvanced summary').filter({hasText:/^滚动体$/}).click();
+      await page.locator('#analysisAdvanced summary').filter({hasText:/^保持架润滑$/}).click();
+      await page.locator('#analysisAdvanced summary').filter({hasText:/^求解控制$/}).click();
+      const modulus = page.locator('#analysis-materials-rolling_elements-elastic_modulus_gpa');
+      await expect(modulus).toHaveAttribute('placeholder', '190');
+      await modulus.fill('200');
+      await page.locator('#analysis-lubrication-pocket_viscosity_pa_s').fill('0.015');
+      await page.locator('#analysis-solver-load_steps').fill('6');
+      await expect(page.locator('#analysisResultVersion')).toContainText('历史结果');
+      const advanced = await run(page);
+      expect(advanced.submitted.advanced_settings).toEqual({
+        materials:{rolling_elements:{elastic_modulus_gpa:200}},
+        lubrication:{pocket_viscosity_pa_s:0.015}, solver:{load_steps:6},
+      });
+      expect(advanced.data.generated_data_sha256).not.toBe(changed.data.generated_data_sha256);
+      const folder = root + '/robas-analysis/analysis-' + advanced.data.run_id;
+      const prepared = await readFile(folder + '/DATA.txt', 'utf8');
+      const records = prepared.split(/\r?\n/);
+      expect(records[0].split(',')[13]).toBe('6');
+      expect(Number(records[15].split(',')[2])).toBe(200e9);
+      expect(Number(records[41].split(',')[1])).toBe(0.015);
+      const solverFolder = (await readdir(folder)).find(name => name.startsWith('run-'));
+      const out = await readFile(folder + '/' + solverFolder + '/OUT.txt', 'utf8');
+      expect(out).toMatch(/ELASTIC MODULUS\s+\(Pa\)\s+2\.0000E\+11/);
+      expect(out).toMatch(/Cage Pocket\s+2\s+Arbitrary\s+1\.50000E-02/);
+      await page.getByText('本次材料、润滑与求解设置', {exact:true}).click();
+      await expect(page.getByRole('row').filter({hasText:'弹性模量 (GPa)'}).filter({hasText:'用户输入'})).toContainText('200');
       await page.locator('#param-width_mm').fill('16');
       await expect(page.locator('#analysisResultVersion')).toContainText('历史结果');
       await expect(page.locator('#runAnalysis')).toBeDisabled();

@@ -63,6 +63,7 @@ def portable(tmp_path, monkeypatch, result_fixture):
     base = BallDataDocument.parse(_synthetic_data()).with_updates({
         **geometry_updates(request, analysis_inner_race_outside_diameter_mm=49),
         (10, "freeIntCls"): 0,
+        (11, "kPocHydro"): 2,
         **{(3, name): f"'{filename}'" for name, filename in zip(
             ("finName", *(f"pltNames{i}" for i in range(1, 10))), robas_analysis._OUTPUT_NAMES)},
     })
@@ -139,6 +140,45 @@ def test_http_uses_bound_result_and_persists_distinct_input_versions(tmp_path, p
     assert doc.value(32, "rpmRange12") == "4000.0"
     assert float(doc.value(10, "freeIntCls")) == pytest.approx(0.00002)
     assert json.loads((folder / "analysis_result.json").read_bytes()) == second
+
+
+def test_http_writes_only_requested_advanced_settings(tmp_path, portable):
+    resources, manifest, reference, body, _ = portable
+    raw = reference.read_bytes()
+    settings = {"materials": {"rolling_elements": {"elastic_modulus_gpa": 200},
+                               "shaft": {"density_kg_m3": 7800}},
+                "lubrication": {"pocket_viscosity_pa_s": 0.015}, "solver": {"load_steps": 6}}
+    with _server(tmp_path, resources, manifest) as server:
+        _, readiness = _request(server, "GET", ROUTE + "/status")
+        defaults = readiness["profiles"]["reviewed"]["advanced_settings"]
+        assert defaults["lubrication"] == {"pocket_viscosity_pa_s": 1}
+        assert "specific_heat_j_kg_k" not in defaults["materials"]["shaft"]
+        status, baseline = _request(server, "POST", ROUTE, body)
+        assert status == 201
+        status, result = _request(server, "POST", ROUTE, {**body, "advanced_settings": settings})
+        assert status == 201, result
+        for invalid, field in [
+            ({"solver": {"load_steps": 6.5}}, "solver/load_steps"),
+            ({"solver": {"load_steps": 101}}, "solver/load_steps"),
+            ({"solver": {"Mode": 1}}, "solver/Mode"),
+            ({"materials": {"shaft": {"specific_heat_j_kg_k": 500}}}, "materials/shaft/specific_heat_j_kg_k"),
+            ({"materials": {"rolling_elements": {"poisson_ratio": 0.5}}}, "materials/rolling_elements/poisson_ratio"),
+            ({"lubrication": {"guide_viscosity_pa_s": 0.01}}, "lubrication/guide_viscosity_pa_s"),
+        ]:
+            status, error = _request(server, "POST", ROUTE, {**body, "advanced_settings": invalid})
+            assert status == 422 and error["error"]["field_path"] == "/advanced_settings/" + field
+
+    root = tmp_path / "artifacts" / "robas-analysis"
+    original, updated = (BallDataDocument.read(root / ("analysis-" + reply["run_id"]) / "DATA.txt")
+                         for reply in (baseline, result))
+    assert updated.rows == original.with_updates({
+        (0, "nStps"): 6, (15, "elasticModules"): 200e9, (18, "density"): 7800.0, (41, "pocVis"): 0.015,
+    }).rows
+    assert result["advanced_settings"]["requested"] == settings
+    assert result["advanced_settings"]["effective"]["materials"]["rolling_elements"]["elastic_modulus_gpa"] == 200
+    assert result["advanced_settings"]["effective"]["solver"]["load_steps"] == 6
+    assert result["result"]["source_binding"]["status"] == "HASH_VERIFIED"
+    assert reference.read_bytes() == raw
 
 
 @pytest.mark.parametrize(("case", "http", "code"), [
