@@ -193,6 +193,39 @@ test('engineering charts identify every line and expose units, ticks and accessi
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1)).toBe(true);
 });
 
+for (const count of [11,60]) {
+  test(`horizontal labels fit the chart width and retain endpoints · ${count} elements`, async ({page},info) => {
+    const contactRows=Array.from({length:count},(_,i)=>({rolling_element:i+1,
+      outer:{load:valid(2200+100*Math.cos(i*2*Math.PI/count))},inner:{load:valid(2150+100*Math.cos(i*2*Math.PI/count))}}));
+    await page.setViewportSize({width:1440,height:1000});
+    await setup(page,{posts:[],contactRows});
+    await page.locator('#cageEnabled').uncheck(); await page.locator('#confirmDesign').click();
+    await cad(page); await selectAnalysis(page);
+    await page.locator('#analysis-inner_race_od_mm').fill('49'); await page.locator('#runAnalysis').click();
+    const chart=page.locator('.analysis-chart').filter({has:page.getByRole('heading',{name:'接触载荷 (N)',exact:true})});
+    const ticks=chart.locator('.analysis-chart-x-tick');
+    if (count===11) await expect(ticks).toHaveText(Array.from({length:count},(_,i)=>String(i+1)));
+    else await expect.poll(()=>ticks.count()).toBeLessThan(count);
+    const wideCount=await ticks.count();
+    const checkSpacing=async()=>{
+      const boxes=await ticks.evaluateAll(nodes=>nodes.map(node=>{
+        const box=node.getBoundingClientRect(); return {left:box.left,right:box.right};
+      }));
+      for (let i=1;i<boxes.length;i++) expect(boxes[i].left-boxes[i-1].right).toBeGreaterThanOrEqual(11);
+      await expect(ticks.first()).toHaveText('1'); await expect(ticks.last()).toHaveText(String(count));
+      await expect(chart.locator('.analysis-chart-point')).toHaveCount(count*2);
+    };
+    await checkSpacing();
+    await chart.screenshot({path:info.outputPath('axis-desktop.png')});
+    await page.setViewportSize({width:390,height:844});
+    await expect.poll(()=>ticks.count()).toBeLessThan(wideCount);
+    await checkSpacing();
+    await chart.screenshot({path:info.outputPath('axis-mobile.png')});
+    await page.setViewportSize({width:1440,height:1000});
+    await expect(ticks).toHaveCount(wideCount);
+  });
+}
+
 test('invalid contact points leave gaps without drawing NaN or joining across missing samples', async ({page}) => {
   const contactRows=[1,2,3].map(i=>({rolling_element:i,outer:{load:i===2 ? invalid('NaN') : valid(2200+i)},
     inner:{load:invalid('Infinity')}}));

@@ -121,13 +121,24 @@ function chart(series, xLabel, yLabel) {
       svg.append(svgElement('path', {d:`M${left} ${py}H${right}`,class:'analysis-chart-grid'}));
       text(left-12,py+4,tick(Math.abs(v) < step*1e-10 ? 0 : v),'end');
     }
-    const tickCount=width < 480 ? 4 : 8;
-    const xticks = xs.filter((_,i) => xs.length <= tickCount || Array.from({length:tickCount}, (_,j) => Math.round(j*(xs.length-1)/(tickCount-1))).includes(i));
-    for (const v of xticks) {
+    // Measure labels in the rendered SVG instead of imposing a fixed tick count.
+    frame.replaceChildren(svg);
+    const labels = xs.map(v => text(x(v),bottom+23,tick(v),'middle','analysis-chart-tick analysis-chart-x-tick'));
+    const labelWidths = labels.map(node => node.getComputedTextLength() || node.textContent.length * 7.2);
+    const gap = 12 * width / (frame.clientWidth || width);
+    let indices = xs.map((_,i) => i);
+    for (let count = xs.length; count >= 2; count--) {
+      indices = Array.from({length:count}, (_,j) => Math.round(j*(xs.length-1)/(count-1)));
+      if (indices.every((index,j) => j === 0 ||
+        x(xs[index])-x(xs[indices[j-1]]) >= (labelWidths[index]+labelWidths[indices[j-1]])/2 + gap)) break;
+    }
+    const visibleTicks = new Set(indices);
+    labels.forEach((node,i) => { if (!visibleTicks.has(i)) node.remove(); });
+    for (const index of indices) {
+      const v=xs[index];
       const px=x(v);
       svg.append(svgElement('path', {d:`M${px} ${top}V${bottom}`,class:'analysis-chart-grid analysis-chart-grid-x'}));
       svg.append(svgElement('path', {d:`M${px} ${bottom}v5`,class:'analysis-chart-axis'}));
-      text(px,bottom+23,tick(v));
     }
     svg.append(svgElement('path', {d:`M${left} ${top}V${bottom}H${right}`,class:'analysis-chart-axis'}));
     // Long metric names remain in the heading; the ordinate then shows its
