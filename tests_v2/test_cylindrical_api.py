@@ -1,4 +1,5 @@
 """HTTP API must route cylindrical configurations without misparsing text fields."""
+from hashlib import sha256
 import http.client
 import json
 from pathlib import Path
@@ -76,6 +77,15 @@ class CylindricalApiTests(unittest.TestCase):
                 step_response = conn.getresponse()
                 self.assertEqual(step_response.status, 200)
                 self.assertGreater(len(step_response.read()), 1000)
+                conn.close()
+                conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=90)
+                conn.request("GET", artifact["file_urls"]["design_snapshot.json"])
+                snapshot_response = conn.getresponse()
+                snapshot = snapshot_response.read()
+                self.assertEqual(snapshot_response.status, 200)
+                self.assertEqual(sha256(snapshot).hexdigest(), body["request_hash"])
+                self.assertEqual(manifest["request_hash"], body["request_hash"])
+                self.assertEqual(json.loads(snapshot)["parameters"]["configuration"], "NUP")
                 conn.close()
             finally:
                 server.shutdown()

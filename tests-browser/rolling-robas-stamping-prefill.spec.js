@@ -36,6 +36,7 @@ test('source RoBAS stamped-cage prefill is opt-in, separate from drawing model',
  await page.goto('/rolling.html');
  const button=page.locator('#applyRoBASStamping');
  await expect(page.locator('#robasStampingActions')).toBeHidden();
+ await page.locator('#cageEnabled').check();
  await page.locator('#cageKind').selectOption('stamping_double_half');
  await expect(page.locator('#robasStampingActions')).toBeVisible();
  await expect(button).toBeEnabled();
@@ -58,8 +59,9 @@ test('source RoBAS stamped-cage prefill is opt-in, separate from drawing model',
   rivet_hole_clearance_mm:.05
  }]);
  await expect(page.locator('#status')).toContainText('冲压双半笼已预填');
- await page.locator('#cageKind').selectOption('simplified_annular');
+ await page.locator('#cageEnabled').uncheck();
  await expect(page.locator('#robasStampingActions')).toBeHidden();
+ await page.locator('#cageEnabled').check();
  await page.locator('#cageKind').selectOption('stamping_double_half');
  await page.locator('#bearingType').selectOption('rolling.angular_contact_ball');
  await expect(page.locator('#robasStampingActions')).toBeHidden();
@@ -71,6 +73,7 @@ test('stale stamped cage result cannot overwrite user changes',async({page})=>{
  const pending=new Promise(resolve=>{release=resolve;});
  await intercept(page,async route=>{await pending;return route.fulfill({json:profile});});
  await page.goto('/rolling.html');
+ await page.locator('#cageEnabled').check();
  await page.locator('#cageKind').selectOption('stamping_double_half');
  const button=page.locator('#applyRoBASStamping');
  await expect(button).toBeEnabled();

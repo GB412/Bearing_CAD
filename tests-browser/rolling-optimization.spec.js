@@ -22,11 +22,6 @@ const optimized = {
         inner_groove_radius_mm: 4.335, outer_groove_radius_mm: 4.505,
         inner_shoulder_d_mm: 49.975, outer_shoulder_d_mm: 61.038,
       },
-      cage: {
-        kind: 'simplified_annular', inner_d_mm: 50.9745,
-        outside_d_mm: 59.81724, width_mm: 14.25,
-        pocket_clearance_mm: .25,
-      },
     },
   }],
 };
@@ -49,7 +44,9 @@ async function setup(page, observed) {
     }
     if (path === '/api/v2/cad/optimization/dgb') {
       observed.initial = request.postDataJSON();
-      return route.fulfill({json: optimized});
+      const reply=observed.returnLegacy ? {...optimized,candidates:optimized.candidates.map(row=>({...row,
+        design:{...row.design,cage:{kind:'simplified_annular',inner_d_mm:51,outside_d_mm:59,width_mm:14,pocket_clearance_mm:.25}}}))} : optimized;
+      return route.fulfill({json: reply});
     }
     if (path === '/api/v2/cad/jobs') {
       observed.cad = request.postDataJSON();
@@ -83,7 +80,7 @@ test('DGB search uses minimal initial input and never writes CAD until candidate
   expect(observed.initial.initial).toEqual({
     bearing_type: 'rolling.deep_groove_ball',
     bore_d_mm: 40, outside_d_mm: 68, width_mm: 15,
-    cage: {kind: 'simplified_annular', pocket_clearance_mm: .25},
+    cage: null,
   });
   expect(observed.initial.optimization.weights).toEqual({
     dynamic_load: .8, radial_stiffness: .2,
@@ -96,12 +93,13 @@ test('DGB search uses minimal initial input and never writes CAD until candidate
   expect(observed.drawing).toBeUndefined();
 
   await page.getByRole('button', {name: '确认并应用此设计'}).click();
+  await expect(page.locator('#designConfirmation')).toContainText('当前设计已确认');
   await expect(page.locator('#param-ball_d_mm')).toHaveValue('8.5');
   await expect(page.locator('#param-pitch_d_mm')).toHaveValue('55.5');
   await expect(page.locator('#param-ball_count')).toHaveValue('12');
   await expect(page.locator('#param-inner_groove_radius_mm')).toHaveValue('4.335');
   await expect(page.locator('#param-outer_shoulder_d_mm')).toHaveValue('61.038');
-  await expect(page.locator('#cage-width_mm')).toHaveValue('14.25');
+  await expect(page.locator('#cageEnabled')).not.toBeChecked();
   await expect(page.locator('#optimizationResults')).toBeHidden();
 
   await page.locator('#generate').click();
@@ -111,6 +109,16 @@ test('DGB search uses minimal initial input and never writes CAD until candidate
   await page.locator('#generate2d').click();
   await expect.poll(() => observed.drawing?.design?.parameters?.ball_count).toBe(12);
   expect(observed.drawing.design.parameters.pitch_d_mm).toBe(55.5);
+});
+
+test('a legacy optimizer response cannot silently restore the retired preview cage',async({page})=>{
+  const observed={returnLegacy:true}; await setup(page,observed);
+  const before=await page.locator('#param-ball_d_mm').inputValue();
+  await page.locator('#runRoBASOptimizer').click();
+  await page.getByRole('button',{name:'确认并应用此设计'}).click();
+  await expect(page.locator('#optimizationHint')).toContainText('已移除的简化环缘保持架');
+  await expect(page.locator('#param-ball_d_mm')).toHaveValue(before);
+  await expect(page.locator('#cageEnabled')).not.toBeChecked();
 });
 
 test('stale candidate suggestions are invalidated when design weights change', async ({page}) => {
@@ -130,6 +138,6 @@ test('optimizer rejects missing source clearance instead of assuming C0', async 
   await page.locator('#drawingClearance').selectOption('');
   await page.locator('#workspace3dTab').click();
   await page.locator('#runRoBASOptimizer').click();
-  await expect(page.locator('#status')).toContainText('选择径向游隙组');
+  await expect(page.locator('#optimizationHint')).toContainText('选择径向游隙组');
   expect(observed.initial).toBeUndefined();
 });

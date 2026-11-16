@@ -39,12 +39,11 @@ test('RoBAS DGBGeometry preset fills only source-backed dimensions',async({page}
  await expect(page.locator('#param-outer_groove_radius_mm')).toHaveValue('4.4172214');
  await expect(page.locator('#param-inner_shoulder_d_mm')).toHaveValue('48.999372');
  await expect(page.locator('#param-outer_shoulder_d_mm')).toHaveValue('59.013628');
- await expect(page.locator('#cage-inner_d_mm')).toHaveValue('49.97935944');
- await expect(page.locator('#cage-outside_d_mm')).toHaveValue('57.83335544');
- await expect(page.locator('#cage-width_mm')).toHaveValue('14.25');
- await expect(page.locator('#cage-pocket_clearance_mm')).toHaveValue('0.25');
+ await expect(page.locator('#cageKind option[value="simplified_annular"]')).toHaveCount(0);
+ await expect(page.locator('#cageEnabled')).not.toBeChecked();
  expect(requests).toEqual([{bearing_type:'rolling.deep_groove_ball',bore_d_mm:40,outside_d_mm:68,width_mm:15}]);
  await expect(page.locator('#status')).toContainText('未运行 DGBOptimizer');
+ await page.locator('#cageEnabled').check();
  await page.locator('#cageKind').selectOption('stamping_double_half');
  await expect(page.locator('#cage-board_thickness_mm')).toHaveValue('0.7');
  await expect(page.locator('#cage-rivet_head_d_mm')).toHaveValue('1.6');

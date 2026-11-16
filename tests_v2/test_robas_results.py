@@ -208,6 +208,213 @@ def test_invalid_numbers_keep_tokens_and_never_serialize_nonstandard_json(run):
     assert json.loads(json.dumps(result, allow_nan=False)) == result
 
 
+@pytest.fixture
+def extended_run(run):
+    # Independently transcribed output headers / RE #1 values, plus a zero
+    # row. Expected conversions below are literal C# reference results.
+    extra = """
+RE ...Orbital .....Axial ...Rel Orb ...RE Ang Position...........Angular Velocity........
+no Position Position Position Mis Skew Amplitude Theta Phi
+(deg) (m) (rad) (deg) (deg) (rpm) (deg) (deg)
+
+1 0 4.056E-05 -3.331E-16 0 0 6.339E+04 1.691E+02 0
+2 0 0 0 0 0 0 0 0
+
+RE ...Orbital Centrifugal ......Moving Frame Forces...... ..Time Ave ......Bulk Convec HTC
+no Velocity Force (n) Wear Rate Temp
+(rpm) (n) Radial Orbital Axial (m**3/s) (K) (W/m**2/K)
+
+1 8.495E+03 5.099E+01 0 0 0 4.512E-13 3.230E+02 0
+2 0 0 0 0 0 0 0 0
+
+RE ..Major Half Width... ..Minor Half Width... .Outer Contact Edge.. ..Chordal Distance...
+no (m) (m) Depth from Shoulder of Inner Contact Edge
+(m) (m)
+Outer Race Inner Race Outer Race Inner Race Outer Race Inner Race Outer Race Inner Race
+
+1 1.760E-03 1.363E-03 2.356E-04 2.267E-04 8.348E-04 1.035E-03 -8.062E-04 3.544E-04
+2 0 0 0 0 0 0 0 0
+
+RE ...Rolling Velocity.. ......Spin/Roll...... Isothermal Lub Film.. ..Reduction Factor...
+no (m/s) (m)
+Outer Race Inner Race Outer Race Inner Race Outer Race Inner Race Outer Race Inner Race
+
+1 2.765E+01 2.764E+01 0 6.329E-02 4.582E-07 3.967E-07 6.509E-01 6.048E-01
+2 0 0 0 0 0 0 0 0
+
+RE ..Max Slip Velocity.. .....Trac Coeff...... ...Lubricant Film.... ...Max Stress*Slip... ..Normalized Position
+no (m/s) (m) (Pa.m/s) of Max Stress*Slip
+Outer Race Inner Race Outer Race Inner Race Outer Race Inner Race Outer Race Inner Race Outer Race Inner Race
+
+1 1.893E+00 2.110E+00 3.104E-02 5.959E-02 2.983E-07 2.399E-07 1.852E+09 3.061E+09 -6.700E-01 6.700E-01
+2 0 0 0 0 0 0 0 0 0 0
+
+RE ....Contact Loss..... ..Contact Temp Rise.. .....Contact Temp.... ....Lub Film Temp.... ....Load*Slip Int....
+no (W) (K) (K) (K) (W)
+Outer Race Inner Race Outer Race Inner Race Outer Race Inner Race Outer Race Inner Race Outer Race Inner Race
+
+1 1.406E+02 2.481E+02 1.048E+01 2.384E+01 3.230E+02 3.230E+02 3.782E+02 4.238E+02 9.645E+02 8.056E+02
+2 0 0 0 0 0 0 0 0 0 0
+
+"""
+    path = run / "OUT.txt"
+    raw = path.read_bytes()
+    path.write_bytes(raw.replace(b"    Internal Clearance", extra.replace("\n", "\r\n").encode() + b"    Internal Clearance"))
+    return run
+
+
+def test_extended_sections_use_csharp_units_and_rounding(extended_run):
+    result = parse_static_results(extended_run, family="ball")
+    assert set(result["additional_sections"].values()) == {"PARSED"}
+    outer, inner = result["contacts"][0]["outer"], result["contacts"][0]["inner"]
+    for field, unit, value in (("major_half_width", "m", .00176), ("minor_half_width", "m", .0002356),
+                               ("rolling_velocity", "m/s", 27.65), ("spin_roll_ratio", "1", 0),
+                               ("film_thickness", "um", .2983), ("isothermal_film_thickness", "um", .4582),
+                               ("film_temperature", "degC", 105.05), ("contact_temperature", "degC", 49.85),
+                               ("contact_temperature_rise", "K", 10.48), ("contact_loss", "W", 140.6)):
+        assert outer[field]["value"] == pytest.approx(value, rel=1e-12)
+        assert outer[field]["unit"] == unit
+    assert inner["film_temperature"]["value"] == 150.65
+    assert inner["film_thickness"]["value"] == .2399
+    assert inner["spin_roll_ratio"]["value"] == .06329
+    # Literal values cover the remaining paired columns, so equal row counts
+    # alone cannot hide a shifted source column.
+    for field, expected in {
+        "major_half_width": (.00176, .001363), "minor_half_width": (.0002356, .0002267),
+        "outer_contact_edge_depth": (.0008348, .001035), "inner_contact_edge_chord": (-.0008062, .0003544),
+        "rolling_velocity": (27.65, 27.64), "film_reduction_factor": (.6509, .6048),
+        "max_slip_velocity": (1.893, 2.11), "traction_coefficient": (.03104, .05959),
+        "max_stress_slip": (1.852e9, 3.061e9), "max_stress_slip_position": (-.67, .67),
+        "contact_loss": (140.6, 248.1), "contact_temperature_rise": (10.48, 23.84),
+        "contact_temperature": (49.85, 49.85), "load_slip_integral": (964.5, 805.6),
+    }.items():
+        assert (outer[field]["value"], inner[field]["value"]) == pytest.approx(expected, rel=1e-12)
+    motion = result["rolling_elements"][0]
+    assert motion["spin_speed"]["value"] == 63390
+    assert motion["orbit_speed"]["value"] == 8495
+    assert motion["centrifugal_force"]["value"] == 50.99
+    assert motion["relative_orbital_position"]["unit"] == "rad"
+    # N222 prints zero kelvin for film temperature: retain zero as raw
+    # evidence, not a usable -273.15°C lubricant temperature.
+    zero = result["contacts"][1]["outer"]["film_temperature"]
+    assert zero == {"line": zero["line"], "value": None, "unit": "degC", "status": "INVALID", "raw": "0",
+                    "reason": "NONPOSITIVE_ABSOLUTE_TEMPERATURE"}
+
+
+@pytest.mark.parametrize(("old", "new", "message"), [
+    ("no (m/s) (m)", "no (rpm) (m)", "unexpected units"),
+    ("1 2.765E+01 2.764E+01 0", "1 2.765E+01 bad 0", "invalid numeric"),
+    ("2 0 0 0 0 0 0 0 0", "2 0 0 0", "row width"),
+])
+def test_extended_tables_reject_wrong_units_numbers_and_truncation(extended_run, old, new, message):
+    _replace_out(extended_run, old, new)
+    with pytest.raises(ResultParseError, match=message):
+        parse_static_results(extended_run, family="ball")
+
+
+def test_extended_nonfinite_values_are_json_safe(extended_run):
+    _replace_out(extended_run, "3.782E+02 4.238E+02", "NaN Infinity")
+    result = parse_static_results(extended_run, family="ball")
+    assert result["contacts"][0]["outer"]["film_temperature"]["value"] is None
+    assert result["contacts"][0]["inner"]["film_temperature"]["raw"] == "Infinity"
+    json.dumps(result, allow_nan=False)
+
+
+def test_old_reports_mark_extended_sections_absent(run):
+    result = parse_static_results(run, family="ball")
+    assert set(result["additional_sections"].values()) == {"NOT_PRESENT"}
+    assert result["model_tables"] == []
+    assert result["raw_report"]["status"] == "PRINTED_EVIDENCE_ONLY"
+
+
+@pytest.fixture
+def model_run(run):
+    printed = """
+     Computed Dynamic Capacities at Heaviest Loaded Rolling Element on Primary Race Segments ***
+             Model .............Stress Capacities............. ..............Load Capacities..............
+                                       (Pa)                                         (n)
+                   Outer Race Inner Race ...Rolling Element... Outer Race Inner Race ...Rolling Element...
+                                         Outer Race Inner Race                       Outer Race Inner Race
+
+       Original LP                                              1.242E+04  5.629E+03
+        Current LP  1.043E+12  1.585E+12  1.007E+10  1.531E+10  1.463E+11  2.225E+11  1.319E+05  2.005E+05
+                GZ  3.659E+11  5.561E+11  3.534E+09  5.372E+09  6.323E+09  9.614E+09  5.701E+03  8.665E+03
+                IH  0.000E+00  0.000E+00  0.000E+00  0.000E+00  0.000E+00  0.000E+00  0.000E+00  0.000E+00
+
+     Basic Life (Hours) with Various Life Models
+             Model Outer Race Inner Race  Roll Elem    Bearing
+
+       Original LP  0.000E+00  2.099E+00             0.000E+00
+        Current LP  1.388E+04  1.868E+04  5.495E-01  9.608E-02
+                GZ  1.709E+03  2.300E+03  4.487E-01  9.608E-02
+                IH  0.000E+00  0.000E+00  0.000E+00  0.000E+00
+
+"""
+    path = run / "OUT.txt"
+    raw = path.read_bytes()
+    path.write_bytes(raw.replace(b"    Internal Clearance", printed.replace("\n", "\r\n").encode() + b"    Internal Clearance"))
+    return run
+
+
+def test_model_tables_preserve_sparse_columns_without_claiming_applicability(model_run):
+    tables = parse_static_results(model_run, family="ball")["model_tables"]
+    capacity, life = tables
+    metrics = capacity["rows"][0]["metrics"]
+    assert metrics["stress_outer"]["status"] == "NOT_REPORTED"
+    assert metrics["load_outer"]["value"] == 12420
+    assert metrics["load_inner"]["value"] == 5629
+    assert metrics["load_outer"]["unit"] == "N"
+    assert metrics["stress_outer"]["unit"] == "Pa"
+    assert life["rows"][0]["metrics"]["element"]["value"] is None
+    assert life["rows"][0]["metrics"]["bearing"]["value"] == 0
+    assert all(table["interpretation"] == "UNVERIFIED_MODEL_APPLICABILITY" for table in tables)
+
+
+@pytest.mark.parametrize(("old", "new", "message"), [
+    ("(Pa)                                         (n)", "(MPa)                                        (n)", "capacities units"),
+    ("Model Outer Race Inner Race  Roll Elem    Bearing", "Model Inner Race Outer Race  Roll Elem    Bearing", "basic_life columns"),
+    ("  1.242E+04", "        NaN", None),
+    ("  5.629E+03", "bad!", "invalid numeric"),
+    ("                GZ  3.659E+11", "                ZZ  3.659E+11", "unsupported capacities"),
+])
+def test_model_tables_diagnose_invalid_values_and_headers(model_run, old, new, message):
+    _replace_out(model_run, old, new)
+    if message:
+        with pytest.raises(ResultParseError, match=message):
+            parse_static_results(model_run, family="ball")
+    else:
+        result = parse_static_results(model_run, family="ball")
+        metric = result["model_tables"][0]["rows"][0]["metrics"]["load_outer"]
+        assert metric["value"] is None and metric["status"] == "INVALID"
+        json.dumps(result, allow_nan=False)
+
+
+@pytest.mark.parametrize(("folder", "family", "film", "temperature", "ratio", "spin", "orbit"), [
+    ("real-DGB", "ball", (.2983, .2399), (105.05, 150.65), .06329, 63390, 8495),
+    ("user-run-2304", "ball", (.425, .3657), (54.75, 81.55), .1586, 74340, 8793),
+    ("real-CRB", "roller", (.7051, .6221), (None, None), 0, 53560, 8194),
+])
+def test_extended_real_windows_goldens(folder, family, film, temperature, ratio, spin, orbit):
+    matches = sorted((EVIDENCE / folder).glob("*/OUT.txt"))
+    if not matches:
+        pytest.skip("local RoBAS golden output is not part of the public repository")
+    path = matches[0]
+    before = _hash(path)
+    result = parse_static_results(path.parent, family=family,
+                                  probe_report=json.loads((path.parent / "solver_probe_report.json").read_bytes()))
+    assert set(result["additional_sections"].values()) == {"PARSED"}
+    for side, thickness, temp in zip(("outer", "inner"), film, temperature):
+        row = result["contacts"][0][side]
+        assert row["film_thickness"]["value"] == thickness
+        assert row["film_temperature"]["value"] == temp
+    assert result["contacts"][0]["inner"]["spin_roll_ratio"]["value"] == ratio
+    assert result["rolling_elements"][0]["spin_speed"]["value"] == spin
+    assert result["rolling_elements"][0]["orbit_speed"]["value"] == orbit
+    assert len(result["model_tables"]) == 4
+    assert result["raw_report"]["text"].startswith("     1. Rolling Element Parameters")
+    assert result["files"]["OUT.txt"]["sha256"] == before == _hash(path)
+
+
 # Hand-transcribed printed rows and C# conversions. These values are independent
 # of the parser, including signed clearance and the final point of the sweep.
 @pytest.mark.parametrize(("folder", "family", "digest", "count", "line", "outer", "inner", "sweep", "summary"), [

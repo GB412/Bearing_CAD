@@ -25,6 +25,7 @@ _CONTACT_FIELDS = (
     ("deflection", "mm", 1e3, 5),
     ("load", "N", 1.0, None),
     ("stress", "MPa", 1e-6, None),
+    ("race_flexing", "m", 1.0, None),
 )
 _SWEEP_FIELDS = (
     ("outer_speed", "rpm"), ("inner_speed", "rpm"),
@@ -91,6 +92,16 @@ def _metric(raw: str, unit: str, line: int, scale: float = 1.0, digits: int | No
     return {"value": value, "unit": unit, "status": "VALID", "raw": raw}
 
 
+def _temperature(raw: str, line: int) -> dict:
+    metric = _metric(raw, "degC", line)
+    if metric["status"] == "VALID":
+        if metric["value"] <= 0:
+            metric.update(value=None, status="INVALID", reason="NONPOSITIVE_ABSOLUTE_TEMPERATURE")
+        else:
+            metric["value"] = dotnet_round(metric["value"] - 273.15, 2)
+    return metric
+
+
 def _header(lines: list[str], heading: str) -> int:
     for index, line in enumerate(lines):
         if " ".join(line.split()) == heading:
@@ -138,6 +149,140 @@ def _contacts(lines: list[str], expected_count: int) -> list[dict]:
         }}
         for index, (line, tokens) in enumerate(rows, 1)
     ]
+
+
+# OUT headings and units, independently checked against the three Windows
+# archives and both C# processAnalysisResultDataTxt implementations. All
+# columns remain outer then inner. Missing optional sections are explicit;
+# a present but malformed section must never masquerade as missing data.
+_PAIRED_SECTIONS = (
+    ("contact_dimensions", "RE ..Major Half Width... ..Minor Half Width... .Outer Contact Edge.. ..Chordal Distance...",
+     ["no (m) (m) Depth from Shoulder of Inner Contact Edge", "(m) (m)", "Outer Race Inner Race " * 4],
+     (("major_half_width", "m", 1, None), ("minor_half_width", "m", 1, None),
+      ("outer_contact_edge_depth", "m", 1, None), ("inner_contact_edge_chord", "m", 1, None))),
+    ("rolling_and_film", "RE ...Rolling Velocity.. ......Spin/Roll...... Isothermal Lub Film.. ..Reduction Factor...",
+     ["no (m/s) (m)", "Outer Race Inner Race " * 4],
+     (("rolling_velocity", "m/s", 1, None), ("spin_roll_ratio", "1", 1, None),
+      ("isothermal_film_thickness", "um", 1e6, None), ("film_reduction_factor", "1", 1, None))),
+    ("slip_and_film", "RE ..Max Slip Velocity.. .....Trac Coeff...... ...Lubricant Film.... ...Max Stress*Slip... ..Normalized Position",
+     ["no (m/s) (m) (Pa.m/s) of Max Stress*Slip", "Outer Race Inner Race " * 5],
+     (("max_slip_velocity", "m/s", 1, None), ("traction_coefficient", "1", 1, None),
+      ("film_thickness", "um", 1e6, 4), ("max_stress_slip", "Pa.m/s", 1, None),
+      ("max_stress_slip_position", "1", 1, None))),
+    ("contact_thermal", "RE ....Contact Loss..... ..Contact Temp Rise.. .....Contact Temp.... ....Lub Film Temp.... ....Load*Slip Int....",
+     ["no (W) (K) (K) (K) (W)", "Outer Race Inner Race " * 5],
+     (("contact_loss", "W", 1, None), ("contact_temperature_rise", "K", 1, None),
+      ("contact_temperature", "degC", 1, None), ("film_temperature", "degC", 1, None),
+      ("load_slip_integral", "W", 1, None))),
+)
+_KINEMATIC_SECTIONS = (
+    ("positions_and_spin", "RE ...Orbital .....Axial ...Rel Orb ...RE Ang Position...........Angular Velocity........",
+     ["no Position Position Position Mis Skew Amplitude Theta Phi", "(deg) (m) (rad) (deg) (deg) (rpm) (deg) (deg)"],
+     (("orbital_position", "deg"), ("axial_position", "m"), ("relative_orbital_position", "rad"),
+      ("misalignment", "deg"), ("skew", "deg"), ("spin_speed", "rpm"),
+      ("spin_theta", "deg"), ("spin_phi", "deg"))),
+    ("orbit_and_forces", "RE ...Orbital Centrifugal ......Moving Frame Forces...... ..Time Ave ......Bulk Convec HTC",
+     ["no Velocity Force (n) Wear Rate Temp", "(rpm) (n) Radial Orbital Axial (m**3/s) (K) (W/m**2/K)"],
+     (("orbit_speed", "rpm"), ("centrifugal_force", "N"), ("moving_radial_force", "N"),
+      ("moving_orbital_force", "N"), ("moving_axial_force", "N"), ("wear_rate", "m3/s"),
+      ("bulk_temperature", "K"), ("bulk_convection_htc", "W/m2/K"))),
+)
+
+
+def _optional_rows(lines, heading, headings, columns, count):
+    if not any(" ".join(line.split()) == heading for line in lines):
+        return None
+    header = _header(lines, heading)
+    if [line.split() for line in lines[header + 1:header + 1 + len(headings)]] != [line.split() for line in headings]:
+        raise ResultParseError("OUT.txt", f"unexpected units or columns for {heading}", line=header + 1)
+    rows = _table(lines, header + 1 + len(headings), columns, heading)
+    if len(rows) != count:
+        raise ResultParseError("OUT.txt", f"expected {count} rows for {heading}, found {len(rows)}", line=header + 1)
+    return rows
+
+
+def _additional_results(lines, contacts, count):
+    sections = {}
+    for name, heading, headings, fields in _PAIRED_SECTIONS:
+        rows = _optional_rows(lines, heading, headings, 2 * len(fields), count)
+        sections[name] = "NOT_PRESENT" if rows is None else "PARSED"
+        for row, (line, tokens) in zip(contacts, rows or []):
+            for column, (field, unit, scale, digits) in enumerate(fields):
+                for side, race in enumerate(("outer", "inner")):
+                    raw = tokens[2 * column + side]
+                    row[race][field] = {"line": line, **(_temperature(raw, line) if unit == "degC"
+                                                        else _metric(raw, unit, line, scale, digits))}
+    elements = [{"rolling_element": i} for i in range(1, count + 1)]
+    for name, heading, headings, fields in _KINEMATIC_SECTIONS:
+        rows = _optional_rows(lines, heading, headings, len(fields), count)
+        sections[name] = "NOT_PRESENT" if rows is None else "PARSED"
+        for row, (line, tokens) in zip(elements, rows or []):
+            row[name + "_line"] = line
+            row.update({field: _metric(raw, unit, line) for (field, unit), raw in zip(fields, tokens)})
+    return sections, elements
+
+
+def _model_tables(lines):
+    """Printed model outputs, with blank cells preserved by fixed columns.
+
+    Numerical finiteness does not establish model applicability. In particular,
+    capacity values are not re-labelled as maximum contact stress or CAD Cr.
+    """
+    specs = (
+        ("capacities", "Computed Dynamic Capacities at Heaviest Loaded Rolling Element on Primary Race Segments ***", 5,
+         ["stress_outer", "stress_inner", "stress_element_outer", "stress_element_inner",
+          "load_outer", "load_inner", "load_element_outer", "load_element_inner"], ["Pa"] * 4 + ["N"] * 4),
+        ("basic_life", "Basic Life (Hours) with Various Life Models", 2,
+         ["outer", "inner", "element", "bearing"], ["h"] * 4),
+        ("modified_life", "Modified Life with Various Life Models", 3,
+         [method + "_" + part for method in ("tallian", "stle") for part in ("outer", "inner", "element", "bearing")], ["h"] * 8),
+        ("life_factors", "Life Modification Factors with Various Life Models", 3,
+         [method + "_" + part for method in ("tallian", "stle") for part in ("outer", "inner", "element", "bearing")], ["1"] * 8),
+    )
+    result = []
+    for name, heading, offset, fields, units in specs:
+        if not any(line.strip() == heading for line in lines):
+            continue
+        header = _header(lines, heading)
+        column_header = lines[header + (3 if name == "capacities" else offset - 1)]
+        columns = list(re.finditer(r"Outer Race|Inner Race|Roll Elem|Bearing|\.\.\.Rolling Element\.\.\.", column_header))
+        # A capacity group contains two RE columns; printed numeric slots are
+        # uniformly 11 characters wide, starting at the first race column.
+        expected_columns = (["Outer Race", "Inner Race", "...Rolling Element..."] * 2 if name == "capacities"
+                            else ["Outer Race", "Inner Race", "Roll Elem", "Bearing"] * (len(fields) // 4))
+        if [column[0] for column in columns] != expected_columns or column_header[:columns[0].start()].strip() not in ("", "Model"):
+            raise ResultParseError("OUT.txt", f"invalid {name} columns", line=header + 1)
+        start = columns[0].end() - 10
+        expected_positions = ([0, 1, 3, 4, 5, 7] if name == "capacities" else range(len(fields)))
+        if any(col.end() != start + 10 + 11 * pos for col, pos in zip(columns, expected_positions)):
+            raise ResultParseError("OUT.txt", f"invalid {name} fixed columns", line=header + 1)
+        if name == "capacities":
+            if (lines[header + 2].split() != ["(Pa)", "(n)"] or
+                    lines[header + 4].split() != ["Outer", "Race", "Inner", "Race"] * 2):
+                raise ResultParseError("OUT.txt", "unexpected capacities units or element columns", line=header + 1)
+        if name in ("modified_life", "life_factors"):
+            method_header = lines[header + 1]
+            if not ("Tallian" in method_header and "STLE" in method_header and
+                    method_header.index("Tallian") < method_header.index("STLE")):
+                raise ResultParseError("OUT.txt", f"unexpected {name} method order", line=header + 1)
+        rows = []
+        for line, text in _block(lines, header + offset):
+            if len(text) > start + 11 * len(fields) and text[start + 11 * len(fields):].strip():
+                raise ResultParseError("OUT.txt", f"unexpected {name} trailing columns", line=line)
+            model = text[:start].strip()
+            if model not in ("Original LP", "Current LP", "GZ", "IH"):
+                raise ResultParseError("OUT.txt", f"unsupported {name} model row", line=line)
+            metrics = {}
+            for i, (field, unit) in enumerate(zip(fields, units)):
+                raw = text[start + 11 * i:start + 11 * (i + 1)].strip()
+                metrics[field] = (_metric(raw, unit, line) if raw else
+                                  {"value": None, "unit": unit, "raw": "", "status": "NOT_REPORTED"})
+            rows.append({"model": model, "line": line, "metrics": metrics})
+        if [row["model"] for row in rows] != ["Original LP", "Current LP", "GZ", "IH"]:
+            raise ResultParseError("OUT.txt", f"incomplete {name} model rows", line=header + 1)
+        result.append({"id": name, "heading": heading, "interpretation": "UNVERIFIED_MODEL_APPLICABILITY",
+                       "columns": fields, "rows": rows})
+    return result
 
 
 def _sweep(lines: list[str]) -> list[dict]:
@@ -298,6 +443,18 @@ def parse_static_results(
     evidence = _nonfinite(lines, "OUT.txt")
     if final:
         evidence.extend(_nonfinite(_lines(_decode(final, "a0_Final")), "a0_Final"))
+    contacts = _contacts(lines, count)
+    sections, elements = _additional_results(lines, contacts, count)
+    summary = {
+        "total_power_loss": _scalar(lines, "Total Power Loss", "W", "W"),
+        "internal_clearance": _scalar(lines, "Internal Clearance", "m", "m"),
+    }
+    for key, label in (("outer_race_fit", "Outer Race Fit"), ("inner_race_fit", "Inner Race Fit")):
+        if any(label in line for line in lines):
+            summary[key] = _scalar(lines, label + r"\*?", "m", "m")
+    # Exclude the DATA echo. Supplemental solver tables remain inspectable as
+    # printed evidence even when their engineering interpretation is unaudited.
+    report_start = next((i for i, line in enumerate(lines) if line.strip() == "1. Rolling Element Parameters"), version)
     return {
         "schema_version": "bearing-cad.robas-static-results.v1", "family": family,
         "files": files, "execution": execution, "convergence": {"status": "UNKNOWN"},
@@ -306,10 +463,10 @@ def parse_static_results(
             else {"status": "HASH_VERIFIED", "evidence": "PROBE_REPORT_SHA256"}
         ),
         "output_status": "PARSED_SUPPORTED_SECTIONS", "rolling_element_count": count,
-        "contacts": _contacts(lines, count), "stiffness_sweep": _sweep(lines),
-        "summary": {
-            "total_power_loss": _scalar(lines, "Total Power Loss", "W", "W"),
-            "internal_clearance": _scalar(lines, "Internal Clearance", "m", "m"),
-        },
+        "contacts": contacts, "stiffness_sweep": _sweep(lines), "summary": summary,
+        "additional_sections": sections, "rolling_elements": elements,
+        "model_tables": _model_tables(lines),
+        "raw_report": {"file": "OUT.txt", "line": report_start + 1,
+                       "status": "PRINTED_EVIDENCE_ONLY", "text": "\n".join(lines[report_start:])},
         "nonfinite_evidence": evidence,
     }

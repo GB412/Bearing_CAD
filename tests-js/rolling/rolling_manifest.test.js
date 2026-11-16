@@ -45,6 +45,16 @@ test('cylinder configurations are constrained and numeric fields are validated',
  assert.throws(()=>requestFromFields(values(angular),{},angular),/保持架/);
  assert.throws(()=>requestFromFields(values(deep),null,'rolling.unknown'),/未支持/);
 });
+test('straight roller zeros and explicit ACB material omission survive request serialization',()=>{
+ const plain={...values(cylindrical),configuration:'N',roller_profile:'plain',
+  roller_end_chamfer_mm:'0',roller_crown_relief_mm:'0'};
+ const roller=requestFromFields(plain,null,cylindrical);
+ assert.equal(roller.parameters.roller_end_chamfer_mm,0);
+ assert.equal(roller.parameters.roller_crown_relief_mm,0);
+ const ball=requestFromFields({...values(angular),cage_material:''},null,angular);
+ assert.equal(Object.hasOwn(ball.parameters,'cage_material'),false);
+ assert.equal(requestFromFields(values(angular),null,angular).parameters.cage_material,'engineering_plastic');
+});
 test('prototype STL is expanded to unique instances',()=>{
  const parts=buildAssemblyIndex(def());
  assert.equal(parts.length,3);
@@ -78,12 +88,13 @@ test('all four geometry cage modes match their explicit backend parameter contra
   assert.equal(Object.keys(result.cage).length,expected);
   assert.equal(result.cage.inner_d_mm,Number(fixture(kind).inner_d_mm));
   assert.ok(result.cage.outside_d_mm>result.cage.inner_d_mm);
-  assert.ok(cageChoices[type].includes(kind));
+  assert.ok(kind==='simplified_annular'||cageChoices[type].includes(kind));
  }
  const stamped=requestFromFields(values(deep),{kind:'stamping_double_half',...fixture('stamping_double_half')},deep);
  assert.equal(stamped.cage.rivet_shaft_d_mm,1);
  assert.equal(stamped.cage.board_thickness_mm,.7);
- assert.deepEqual([defaultCageEnabled[deep],defaultCageEnabled[cylindrical],defaultCageEnabled[angular]],[true,false,false]);
+ assert.deepEqual([defaultCageEnabled[deep],defaultCageEnabled[cylindrical],defaultCageEnabled[angular]],[false,false,false]);
+ assert.deepEqual(cageChoices[deep],['stamping_double_half']);
 });
 test('unsupported and incomplete cages fail rather than silently changing geometry',()=>{
  const fixture=kind=>Object.fromEntries(cageForms[kind].fields.map(([name,,val])=>[name,String(val)]));

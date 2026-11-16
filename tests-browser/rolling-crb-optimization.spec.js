@@ -135,6 +135,6 @@ test('CRB existing window cage is rejected before sending optimization',async ({
   await setup(page,observed);
   await page.locator('#cageEnabled').check();
   await page.locator('#runRoBASCRBOptimizer').click();
-  await expect(page.locator('#status')).toContainText('先取消原有窗孔保持架');
+  await expect(page.locator('#crbOptimizationHint')).toContainText('先取消原有窗孔保持架');
   expect(observed.optimizer).toBeUndefined();
 });

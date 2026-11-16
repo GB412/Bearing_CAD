@@ -35,7 +35,7 @@ export const bearingForms = Object.freeze({
       ['ball_count','钢球数量',11], ['inner_groove_radius_mm','内沟曲率半径',4.3],
       ['outer_groove_radius_mm','外沟曲率半径',4.5],
       ['contact_angle_deg','名义接触角 (°)',25],
-      ['cage_material','球数计算使用的保持架材料','engineering_plastic',['engineering_plastic','phenolic']],
+      ['cage_material','球数计算使用的保持架材料','engineering_plastic',['engineering_plastic','phenolic','']],
       ['inner_shoulder_left_d_mm','内圈左肩直径',49],
       ['inner_shoulder_right_d_mm','内圈右肩直径',47],
       ['outer_shoulder_left_d_mm','外圈左肩直径',61],
@@ -80,14 +80,13 @@ export const cageForms = Object.freeze({
   }
 });
 export const cageChoices = Object.freeze({
-  'rolling.deep_groove_ball':['simplified_annular','stamping_double_half'],
+  'rolling.deep_groove_ball':['stamping_double_half'],
   'rolling.cylindrical_roller':['cylindrical_window'],
   'rolling.angular_contact_ball':['straight_pocket']
 });
-// Keep existing deep-groove simplified cage as the initial page default.
-// Previously unsupported types default to *no cage* until explicitly enabled.
+// Select cages explicitly; the legacy preview cage is no longer offered.
 export const defaultCageEnabled = Object.freeze({
-  'rolling.deep_groove_ball':true,
+  'rolling.deep_groove_ball':false,
   'rolling.cylindrical_roller':false,
   'rolling.angular_contact_ball':false
 });
@@ -95,7 +94,7 @@ export const defaultCageEnabled = Object.freeze({
 // These numbers bound interactive CAD execution, not bearing design standards.
 export const MAX_ROLLERS = 64;
 export const MAX_DIMENSION_MM = 1000;
-const NONNEGATIVE = new Set(['radial_clearance_mm','axial_clearance_mm']);
+const NONNEGATIVE = new Set(['radial_clearance_mm','axial_clearance_mm','roller_end_chamfer_mm','roller_crown_relief_mm']);
 export class ParameterInputError extends Error {
  constructor(message,fieldPath){super(message);this.name='ParameterInputError';this.fieldPath=fieldPath;}
 }
@@ -162,6 +161,11 @@ export function geometryIssues(request){
    add('/parameters/bore_d_mm','内径、内挡边顶径、节圆、外挡边顶径和外径必须依次增大。',['/parameters/inner_rib_tip_d_mm','/parameters/pitch_d_mm','/parameters/outer_rib_tip_d_mm']);
  }
  if(c){
+  if(kind==='rolling.deep_groove_ball'&&c.kind==='simplified_annular'&&
+     !(p.inner_shoulder_d_mm<c.inner_d_mm&&c.inner_d_mm<c.outside_d_mm&&c.outside_d_mm<p.outer_shoulder_d_mm))
+   add('/cage/inner_d_mm','保持架与套圈尺寸冲突。保持架内径须大于内圈肩径 '+p.inner_shoulder_d_mm+
+       ' mm，外径须小于外圈肩径 '+p.outer_shoulder_d_mm+' mm。',
+       ['/cage/outside_d_mm','/parameters/inner_shoulder_d_mm','/parameters/outer_shoulder_d_mm']);
   if(c.width_mm>B)
    add('/cage/width_mm','保持架总宽度不能大于轴承宽度。',['/parameters/width_mm']);
   if(c.inner_d_mm>=c.outside_d_mm)
@@ -177,7 +181,7 @@ export function requestFromFields(values, cage, bearingType='rolling.deep_groove
   for(const [key,, ,options] of form.fields) {
     if (options) {
       if (!options.includes(values[key])) throw Error('不支持的构型：'+String(values[key]));
-      params[key]=values[key];
+      if(key!=='cage_material'||values[key]!=='')params[key]=values[key];
     } else {
       params[key]=numeric(values[key],key,key.endsWith('_count'));
       if(key==='contact_angle_deg'&&!(params[key]>0&&params[key]<90))throw new ParameterInputError('接触角必须介于 0° 和 90° 之间','/parameters/contact_angle_deg');
@@ -189,7 +193,8 @@ export function requestFromFields(values, cage, bearingType='rolling.deep_groove
     // Only old deep-groove callers may omit the kind; other types must
     // explicitly state it. This preserves older simplified cage requests.
     const kind=cage.kind??(bearingType==='rolling.deep_groove_ball'?'simplified_annular':null);
-    if(!cageChoices[bearingType]?.includes(kind))throw Error('不支持的保持架类型：'+String(kind));
+    const legacy = bearingType==='rolling.deep_groove_ball' && kind==='simplified_annular';
+    if(!legacy&&!cageChoices[bearingType]?.includes(kind))throw Error('不支持的保持架类型：'+String(kind));
     const spec=cageForms[kind];
     const expected=new Set(['kind',...spec.fields.map(([key])=>key)]);
     for(const key of Object.keys(cage))if(!expected.has(key))throw Error('不支持的保持架参数：'+key);
@@ -262,6 +267,8 @@ export function describeCadError(payload,status){
    '内外滚道、挡边和内外径的径向尺寸顺序不成立。'],
   [/Cage width cannot exceed bearing axial width|Cage exceeds bearing width|Stamped assembly exceeds bearing width/,
    '保持架宽度不能大于轴承宽度。'],
+  [/Cage must lie radially between shoulders/,
+   '保持架与套圈尺寸冲突，请增大保持架内径、减小保持架外径，使其位于内外圈肩径之间。'],
   [/Adjacent balls overlap|Adjacent rollers overlap/,
    '滚动体数量过多或直径过大，相邻滚动体发生重叠。'],
   [/Exceeds local geometry budget|resource budget exceeded|numeric budget exceeded|Exceeds CAD builder instance budget/i,

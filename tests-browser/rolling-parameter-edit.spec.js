@@ -23,6 +23,7 @@ test('editing bore reports related fields; scaling preserves explicit geometry',
  expect(jobCalls).toBe(0);
 
  await page.locator('#resetParams').click();
+ await page.locator('.size-tools summary').click();
  await page.locator('#scaleTarget').fill('50');
  await page.locator('#scaleApply').click();
  await expect(page.locator('#param-bore_d_mm')).toHaveValue('50');
@@ -72,4 +73,22 @@ test('backend-only rolling collision rejects job with field-specific Chinese err
  await expect(page.locator('#status')).toContainText('相邻滚动体发生重叠');
  await expect(page.locator('#param-ball_count')).toHaveAttribute('aria-invalid','true');
  expect(postCount).toBe(1);
+});
+
+test('retired simplified cage is absent and reset does not restore a cage',async({page})=>{
+ let calls=0;
+ await page.route('**/api/v2/cad/**',route=>{
+  if(new URL(route.request().url()).pathname==='/api/v2/cad/status')
+   return route.fulfill({json:{available:true,supported_bearings:['rolling.deep_groove_ball']}});
+  if(route.request().method()==='POST')calls++;
+  return route.fulfill({status:404,json:{}});
+ });
+ await page.goto('/rolling.html');
+ await expect(page.locator('#cageKind option[value="simplified_annular"]')).toHaveCount(0);
+ await expect(page.locator('#cageEnabled')).not.toBeChecked();
+ await page.locator('#cageEnabled').check();
+ await expect(page.locator('#cageKind')).toHaveValue('stamping_double_half');
+ await page.locator('#resetParams').click();
+ await expect(page.locator('#cageEnabled')).not.toBeChecked();
+ expect(calls).toBe(0);
 });
