@@ -75,7 +75,7 @@ test('backend-only rolling collision rejects job with field-specific Chinese err
  expect(postCount).toBe(1);
 });
 
-test('DGB cage shoulder conflict highlights actual dimensions before submission',async({page})=>{
+test('retired simplified cage is absent and reset does not restore a cage',async({page})=>{
  let calls=0;
  await page.route('**/api/v2/cad/**',route=>{
   if(new URL(route.request().url()).pathname==='/api/v2/cad/status')
@@ -84,14 +84,11 @@ test('DGB cage shoulder conflict highlights actual dimensions before submission'
   return route.fulfill({status:404,json:{}});
  });
  await page.goto('/rolling.html');
- await page.locator('#param-inner_shoulder_d_mm').fill('49');
- await page.locator('#param-outer_shoulder_d_mm').fill('59.02');
- await expect(page.locator('#validation')).toContainText('内圈肩径 49 mm');
- await expect(page.locator('#cage-inner_d_mm')).toHaveAttribute('aria-invalid','true');
- await expect(page.locator('#cage-outside_d_mm')).toHaveAttribute('aria-invalid','true');
- await page.locator('#generate').click();
+ await expect(page.locator('#cageKind option[value="simplified_annular"]')).toHaveCount(0);
+ await expect(page.locator('#cageEnabled')).not.toBeChecked();
+ await page.locator('#cageEnabled').check();
+ await expect(page.locator('#cageKind')).toHaveValue('stamping_double_half');
+ await page.locator('#resetParams').click();
+ await expect(page.locator('#cageEnabled')).not.toBeChecked();
  expect(calls).toBe(0);
- await page.locator('#cage-inner_d_mm').fill('50');
- await page.locator('#cage-outside_d_mm').fill('58');
- await expect(page.locator('#validation')).toBeHidden();
 });

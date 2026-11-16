@@ -9,7 +9,7 @@ import {bearingForms, cageForms, cageChoices, defaultCageEnabled, buildAssemblyI
 
 const $ = id => document.getElementById(id);
 let fields=bearingForms['rolling.deep_groove_ball'].fields;
-let cages=cageForms.simplified_annular.fields;
+let cages=cageForms.stamping_double_half.fields;
 function renderFields(container, prefix, data) {
  container.replaceChildren();
  for (const [key,label,value,choices] of data) {
@@ -383,10 +383,6 @@ async function applyRoBASGeometry(){
   // Keep the backend's source-calculated values as the request snapshot.
   for(const key of ['ball_count','inner_groove_radius_mm','outer_groove_radius_mm'])
    $('param-'+key).value=String(p[key]);
-  if($('cageEnabled').checked&&$('cageKind').value==='simplified_annular'){
-   for(const [key,value] of Object.entries(reply.simplified_cage_dimensions||{}))
-    if($('cage-'+key))$('cage-'+key).value=String(value);
-  }
   $('scaleTarget').value=String(p.bore_d_mm);
   invalidatePreview('已按 RoBAS DGBGeometry 预填候选参数，请检查后生成模型');
   appliedSizingEvidence=reply;
@@ -415,13 +411,9 @@ function currentOptimizationInput(){
  const clearance=$('drawingClearance').value;
  if(!model)throw Error('请在二维图纸设置中填写原版轴承型号');
  if(!clearance)throw Error('请在二维图纸设置中选择径向游隙组');
- let cage=null;
- if($('cageEnabled').checked){
-  if($('cageKind').value!=='simplified_annular')
-   throw Error('冲压保持架需要重新计算，请先选择简化环缘保持架或暂时取消保持架');
-  cage={kind:'simplified_annular',
-        pocket_clearance_mm:numberFrom('cage-pocket_clearance_mm','保持架球兜间隙')};
- }
+ if($('cageEnabled').checked)
+  throw Error('请先取消“包含保持架”再计算候选；应用设计后重新预填双半笼参数。');
+ const cage=null;
  return {
   initial:{
    bearing_type:selectedType(),
@@ -595,6 +587,8 @@ function renderOptimizationCandidates(reply,snapshot,version,kind){
       row=>row.candidate_id===item.candidate_id);
     if(!candidate)throw Error('候选已失效');
     const design=candidate.design;
+    if(design.cage?.kind==='simplified_annular')
+     throw Error('该候选包含已移除的简化环缘保持架，请取消保持架后重新计算候选。');
     const draft=rawDraft();
     const next={...draft.values,...design.parameters};
     const nextCage=design.cage??null;

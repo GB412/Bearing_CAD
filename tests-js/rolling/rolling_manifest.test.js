@@ -88,12 +88,13 @@ test('all four geometry cage modes match their explicit backend parameter contra
   assert.equal(Object.keys(result.cage).length,expected);
   assert.equal(result.cage.inner_d_mm,Number(fixture(kind).inner_d_mm));
   assert.ok(result.cage.outside_d_mm>result.cage.inner_d_mm);
-  assert.ok(cageChoices[type].includes(kind));
+  assert.ok(kind==='simplified_annular'||cageChoices[type].includes(kind));
  }
  const stamped=requestFromFields(values(deep),{kind:'stamping_double_half',...fixture('stamping_double_half')},deep);
  assert.equal(stamped.cage.rivet_shaft_d_mm,1);
  assert.equal(stamped.cage.board_thickness_mm,.7);
- assert.deepEqual([defaultCageEnabled[deep],defaultCageEnabled[cylindrical],defaultCageEnabled[angular]],[true,false,false]);
+ assert.deepEqual([defaultCageEnabled[deep],defaultCageEnabled[cylindrical],defaultCageEnabled[angular]],[false,false,false]);
+ assert.deepEqual(cageChoices[deep],['stamping_double_half']);
 });
 test('unsupported and incomplete cages fail rather than silently changing geometry',()=>{
  const fixture=kind=>Object.fromEntries(cageForms[kind].fields.map(([name,,val])=>[name,String(val)]));

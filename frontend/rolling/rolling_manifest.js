@@ -80,14 +80,13 @@ export const cageForms = Object.freeze({
   }
 });
 export const cageChoices = Object.freeze({
-  'rolling.deep_groove_ball':['simplified_annular','stamping_double_half'],
+  'rolling.deep_groove_ball':['stamping_double_half'],
   'rolling.cylindrical_roller':['cylindrical_window'],
   'rolling.angular_contact_ball':['straight_pocket']
 });
-// Keep existing deep-groove simplified cage as the initial page default.
-// Previously unsupported types default to *no cage* until explicitly enabled.
+// Select cages explicitly; the legacy preview cage is no longer offered.
 export const defaultCageEnabled = Object.freeze({
-  'rolling.deep_groove_ball':true,
+  'rolling.deep_groove_ball':false,
   'rolling.cylindrical_roller':false,
   'rolling.angular_contact_ball':false
 });
@@ -194,7 +193,8 @@ export function requestFromFields(values, cage, bearingType='rolling.deep_groove
     // Only old deep-groove callers may omit the kind; other types must
     // explicitly state it. This preserves older simplified cage requests.
     const kind=cage.kind??(bearingType==='rolling.deep_groove_ball'?'simplified_annular':null);
-    if(!cageChoices[bearingType]?.includes(kind))throw Error('不支持的保持架类型：'+String(kind));
+    const legacy = bearingType==='rolling.deep_groove_ball' && kind==='simplified_annular';
+    if(!legacy&&!cageChoices[bearingType]?.includes(kind))throw Error('不支持的保持架类型：'+String(kind));
     const spec=cageForms[kind];
     const expected=new Set(['kind',...spec.fields.map(([key])=>key)]);
     for(const key of Object.keys(cage))if(!expected.has(key))throw Error('不支持的保持架参数：'+key);

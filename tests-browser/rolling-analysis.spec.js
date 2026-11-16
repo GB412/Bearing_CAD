@@ -91,6 +91,7 @@ test('workbench gates analysis on explicit confirmation and successful CAD', asy
   const state = {posts:[]};
   await setup(page, state);
   await selectAnalysis(page);
+  await page.locator('#cageEnabled').check();
   await expect(page.locator('#analysisDesign')).toContainText('显式 CAD 保持架');
   await page.locator('#cageEnabled').uncheck();
   await expect(page.locator('#analysisDesign')).toContainText('先确认');
