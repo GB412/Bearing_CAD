@@ -42,6 +42,8 @@ async function setup(page, state) {
       const data = digest(JSON.stringify(body.operating_conditions));
       const caseHash = state.wrongHash ? '0'.repeat(64) : body.request_hash;
       const contact = {load:valid(2251), stress:valid(3402), angle:valid(2), deflection:invalid('NaN')};
+      if (state.extended) Object.assign(contact, {spin_roll_ratio:valid(.06329), film_thickness:valid(.2983),
+        film_temperature:invalid('NaN'), rolling_velocity:valid(27.65), major_half_width:valid(.00176)});
       return route.fulfill({status:201,json:{
         ...body, request_hash:caseHash, profile:{id:'reviewed', ...profile},
         run_id:String(state.posts.length).padStart(32,'0'), generated_data_sha256:data, solver_exe_sha256:digest('exe'),
@@ -52,9 +54,18 @@ async function setup(page, state) {
         result:{execution:{status:'EXITED_ZERO',exit_code:0}, source_binding:{status:state.unbound ? 'UNVERIFIED' : 'HASH_VERIFIED'},
           output_status:'PARSED_SUPPORTED_SECTIONS', convergence:{status:'UNKNOWN'},
           summary:{total_power_loss:valid(3092),internal_clearance:invalid('Infinity')},
-          contacts:[{rolling_element:1,outer:contact,inner:contact}],
-          stiffness_sweep:[{point:1,inner_speed:valid(20000),stiffness_xx:valid(2000)}],
-          nonfinite_evidence:[{file:'OUT.txt',line:9,raw:'NaN'},{file:'OUT.txt',line:12,raw:'Infinity'}],
+          contacts:state.contactRows ?? [{rolling_element:1,outer:contact,inner:contact}],
+          ...(state.extended ? {
+            rolling_elements:[{rolling_element:1,spin_speed:valid(63390),orbit_speed:valid(8495),centrifugal_force:valid(50.99)}],
+            model_tables:[{id:'basic_life', columns:['outer','inner','element','bearing'],
+              rows:[{model:'Original LP',metrics:{outer:{...valid(0),unit:'h'},inner:{...valid(2.099),unit:'h'},
+                element:{value:null,status:'NOT_REPORTED',unit:'h'},bearing:{...invalid('Infinity'),unit:'h'}}}]}],
+            raw_report:{line:349,text:'1. Rolling Element Parameters\n<script>window.injected=true</script>\nNaN Infinity'},
+          } : {}),
+          stiffness_sweep:[{point:1,inner_speed:valid(20000),stiffness_xx:valid(2e8),stiffness_yy:valid(4e8),stiffness_zz:valid(3e8),
+            displacement_x:valid(.0001),displacement_y:valid(0),displacement_z:valid(.000001)}],
+          nonfinite_evidence:[{file:'OUT.txt',line:9,raw:'NaN',section:'Modified Life with Various Life Models',
+            model:'IH',method:'Tallian',component:'Outer Race'},{file:'OUT.txt',line:12,raw:'Infinity'}],
           files:{'DATA.txt':{sha256:data},'OUT.txt':{sha256:digest('output')}},
         },
       }});
@@ -80,6 +91,7 @@ test('workbench gates analysis on explicit confirmation and successful CAD', asy
   const state = {posts:[]};
   await setup(page, state);
   await selectAnalysis(page);
+  await page.locator('#cageEnabled').check();
   await expect(page.locator('#analysisDesign')).toContainText('显式 CAD 保持架');
   await page.locator('#cageEnabled').uncheck();
   await expect(page.locator('#analysisDesign')).toContainText('先确认');
@@ -90,7 +102,7 @@ test('workbench gates analysis on explicit confirmation and successful CAD', asy
   state.cadFailure = true;
   await page.locator('#generate').click();
   await expect(page.locator('#status')).toContainText('CAD 生成失败');
-  await expect(page.locator('#analysisDesign')).toContainText('等待成功生成');
+  await expect(page.locator('#analysisDesign')).toContainText('请点击“生成三维模型”');
   await expect(page.locator('#runAnalysis')).toBeDisabled();
   await page.locator('#bearingType').selectOption(crb);
   await expect(page.locator('#analysisDesign')).toContainText('仅支持 N 型直滚子');
@@ -98,6 +110,101 @@ test('workbench gates analysis on explicit confirmation and successful CAD', asy
   await page.locator('#cageEnabled').uncheck();
   await expect(page.locator('#analysisDesign')).toContainText('CAD 保持架材料');
   expect(state.posts).toHaveLength(0);
+});
+
+test('expanded original results can be selected, inspected and retained across runs', async ({page}, info) => {
+  const state = {posts:[], extended:true};
+  await setup(page, state);
+  await page.locator('#cageEnabled').uncheck();
+  await page.locator('#confirmDesign').click();
+  await cad(page);
+  await selectAnalysis(page);
+  await page.locator('#analysis-inner_race_od_mm').fill('49');
+  await page.locator('#runAnalysis').click();
+  const result = page.locator('#analysisResult');
+  await expect(result).toBeVisible();
+  const choice = page.getByLabel('接触结果曲线指标', {exact:true});
+  await choice.selectOption('film_thickness');
+  await expect(result.getByRole('img', {name:'油膜厚度 (μm) / 滚动体编号',exact:true})).toBeVisible();
+  await choice.selectOption('film_temperature');
+  await expect(result).toContainText('当前曲线没有有效数据');
+  await choice.selectOption('angle');
+  await expect(result.getByRole('img', {name:'接触角 (°) / 滚动体编号',exact:true})).toBeVisible();
+  await choice.selectOption('spin_roll_ratio');
+  await page.getByLabel('滚动体运动曲线指标', {exact:true}).selectOption('orbit_speed');
+  await expect(result.getByRole('img', {name:'公转速度 (rpm) / 滚动体编号',exact:true})).toBeVisible();
+  await page.getByLabel('扫速结果曲线指标', {exact:true}).selectOption('displacement');
+  await expect(result.getByRole('img', {name:'相对位移 (m) / 扫速工况点（转速未变化）',exact:true})).toBeVisible();
+  await result.getByText('寿命与承载能力模型', {exact:true}).click();
+  await result.getByText('基本寿命', {exact:true}).click();
+  await expect(result.getByRole('cell', {name:'未报告',exact:true})).toBeVisible();
+  await expect(result.getByRole('cell', {name:'不可用 (Infinity)',exact:true})).toBeVisible();
+  await result.getByText('原版完整结果文本（含补充输出）', {exact:true}).click();
+  await expect(result.locator('pre')).toContainText('<script>window.injected=true</script>');
+  expect(await page.evaluate(() => window.injected)).toBeUndefined();
+  await result.getByText('原版完整结果文本（含补充输出）', {exact:true}).click();
+  await page.screenshot({path:info.outputPath('extended-results.png'),fullPage:true});
+  await page.locator('#analysis-load_z_n').fill('2400');
+  await expect(page.locator('#analysisResultVersion')).toContainText('历史结果');
+  await page.locator('#runAnalysis').click();
+  await expect(page.locator('#analysisResultVersion')).toHaveText('当前设计与工况的结果');
+  await expect(choice).toHaveCount(1);
+  expect(state.posts).toHaveLength(2);
+});
+
+test('engineering charts identify every line and expose units, ticks and accessible point values', async ({page}, info) => {
+  await setup(page, {posts:[],extended:true});
+  await page.locator('#cageEnabled').uncheck();
+  await page.locator('#confirmDesign').click();
+  await cad(page); await selectAnalysis(page);
+  await page.locator('#analysis-inner_race_od_mm').fill('49');
+  await page.locator('#runAnalysis').click();
+  const contact=page.locator('.analysis-chart').filter({has:page.getByRole('heading',{name:'接触载荷 (N)',exact:true})});
+  await expect(contact.getByRole('button',{name:'内滚道',exact:true})).toHaveAttribute('aria-pressed','true');
+  await contact.getByRole('button',{name:'内滚道',exact:true}).click();
+  await expect(contact.getByRole('button',{name:'内滚道',exact:true})).toHaveAttribute('aria-pressed','false');
+  const point=contact.locator('.analysis-chart-point').first();
+  await point.focus();
+  await expect(contact.getByRole('tooltip')).toContainText('外滚道');
+  await expect(contact.getByRole('tooltip')).toContainText('滚动体编号：1');
+  await expect(contact.getByRole('tooltip')).toContainText('接触载荷 (N)：2251');
+  await point.blur();
+  await contact.getByRole('button',{name:'内滚道',exact:true}).click();
+  const sweep=page.locator('.analysis-chart').filter({has:page.getByRole('heading',{name:'刚度 (N/m)',exact:true})});
+  for (const name of ['Kxx · X 向平移刚度','Kyy · Y 向平移刚度','Kzz · Z 向平移刚度']) {
+    await expect(sweep.getByRole('button',{name,exact:true})).toBeVisible();
+  }
+  expect(await sweep.locator('.analysis-chart-tick').count()).toBeGreaterThan(4);
+  await expect(sweep).toContainText('e8');
+  const styles=await sweep.locator('path[data-series]').evaluateAll(nodes => nodes.map(n=>n.getAttribute('stroke-dasharray')));
+  expect(new Set(styles).size).toBe(3);
+  await sweep.screenshot({path:info.outputPath('stiffness-chart-desktop.png')});
+  for (const button of await sweep.getByRole('button').all()) await button.click();
+  await expect(sweep).toContainText('已隐藏全部曲线');
+  await sweep.getByRole('button').first().click();
+  await expect(sweep.getByRole('img')).toBeVisible();
+  await page.getByLabel('滚动体运动曲线指标',{exact:true}).selectOption('orbit_speed');
+  const motion=page.locator('.analysis-chart').filter({has:page.getByRole('heading',{name:'公转速度 (rpm)',exact:true})});
+  const ticks=await motion.locator('.analysis-chart-tick').allTextContents();
+  expect(new Set(ticks.slice(0,-1)).size).toBe(ticks.length-1);
+  await expect(page.getByLabel('接触结果曲线指标').locator('optgroup')).toHaveCount(4);
+  await page.setViewportSize({width:390,height:844});
+  await contact.screenshot({path:info.outputPath('contact-chart-mobile.png')});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1)).toBe(true);
+});
+
+test('invalid contact points leave gaps without drawing NaN or joining across missing samples', async ({page}) => {
+  const contactRows=[1,2,3].map(i=>({rolling_element:i,outer:{load:i===2 ? invalid('NaN') : valid(2200+i)},
+    inner:{load:invalid('Infinity')}}));
+  await setup(page,{posts:[],contactRows});
+  await page.locator('#cageEnabled').uncheck(); await page.locator('#confirmDesign').click();
+  await cad(page); await selectAnalysis(page);
+  await page.locator('#analysis-inner_race_od_mm').fill('49'); await page.locator('#runAnalysis').click();
+  const contact=page.locator('.analysis-chart').filter({has:page.getByRole('heading',{name:'接触载荷 (N)',exact:true})});
+  const d=await contact.locator('path[data-series="外滚道"]').getAttribute('d');
+  expect(d.match(/M/g)).toHaveLength(2); expect(d).not.toContain('L');
+  expect(d).not.toMatch(/NaN|Infinity/);
+  await expect(contact.getByRole('button',{name:'内滚道（无有效数据）',exact:true})).toBeVisible();
 });
 
 test('unconfigured and invalid profiles remain unavailable', async ({page}) => {
@@ -158,6 +265,10 @@ test('analysis form reports errors and keeps late results tied to their submitte
   await expect(page.locator('#analysisResultBody')).toContainText('不可用 (Infinity)');
   await page.getByText('非有限输出 · 2 项').click();
   await expect(page.getByRole('cell', {name:'NaN', exact:true})).toBeVisible();
+  const invalidRow=page.getByRole('row').filter({has:page.getByRole('cell',{name:'NaN',exact:true})});
+  await expect(invalidRow).toContainText('修正寿命');
+  await expect(invalidRow).toContainText('IH');
+  await expect(invalidRow).toContainText('外圈');
   state.pending = null;
   await run.click();
   await expect(page.locator('#analysisResultVersion')).toHaveText('当前设计与工况的结果');

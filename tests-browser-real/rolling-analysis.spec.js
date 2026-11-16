@@ -1,4 +1,4 @@
-import {readFile} from 'node:fs/promises';
+import {readFile, readdir} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {test, expect} from '@playwright/test';
 
@@ -97,6 +97,25 @@ for (const spec of cases) {
     expect(baseline.data.analysis_geometry).toEqual(spec.geometry);
     expect(baseline.data.result.contacts[0].outer.load.value).toBe(spec.firstLoad);
     expect(baseline.data.result.nonfinite_evidence).toHaveLength(spec.nonfinite);
+    expect(Object.values(baseline.data.result.additional_sections)).toEqual(Array(6).fill('PARSED'));
+    expect(baseline.data.result.model_tables).toHaveLength(4);
+    const selection = page.getByLabel('接触结果曲线指标', {exact:true});
+    await selection.selectOption('film_temperature');
+    if (spec.name === 'N222') {
+      expect(baseline.data.result.contacts[0].outer.film_temperature).toMatchObject({
+        value:null, status:'INVALID', reason:'NONPOSITIVE_ABSOLUTE_TEMPERATURE', raw:'0.000E+00',
+      });
+      await expect(page.locator('#analysisResult')).toContainText('原版部分绝对温度输出为 0 K');
+    } else {
+      expect(baseline.data.result.contacts[0].outer.film_temperature.value).toBe(spec.name === 'DGB' ? 105.05 : 54.75);
+      await expect(page.getByRole('img', {name:'油膜温度 (°C) / 滚动体编号',exact:true})).toBeVisible();
+    }
+    await page.getByLabel('滚动体运动曲线指标', {exact:true}).selectOption('orbit_speed');
+    await expect(page.getByRole('img', {name:'公转速度 (rpm) / 滚动体编号',exact:true})).toBeVisible();
+    const stiffness=page.locator('.analysis-chart').filter({has:page.getByRole('heading',{name:'刚度 (N/m)',exact:true})});
+    await stiffness.screenshot({path:info.outputPath(spec.name+'-stiffness-chart.png')});
+    const thermal=page.locator('.analysis-chart').filter({has:page.getByRole('heading',{name:'油膜温度 (°C)',exact:true})});
+    await thermal.screenshot({path:info.outputPath(spec.name+'-film-temperature-chart.png')});
     await page.getByText('内外圈接触数据', {exact:true}).click();
     await expect(page.getByRole('cell', {name:String(spec.firstLoad),exact:true}).first()).toBeVisible();
     await page.getByText('非有限输出 · ' + spec.nonfinite + ' 项').click();
@@ -119,6 +138,34 @@ for (const spec of cases) {
       const changes = original.split(/\r?\n/).map((line,i) => [line,updated.split(/\r?\n/)[i]]).filter(([a,b]) => a !== b);
       expect(changes).toHaveLength(1);
       expect(changes[0][0].replace(/,2000(?=,|$)/, ',2400.0')).toBe(changes[0][1]);
+      await page.getByText('材料、润滑与求解设置', {exact:true}).click();
+      await page.locator('#analysisAdvanced summary').filter({hasText:/^滚动体$/}).click();
+      await page.locator('#analysisAdvanced summary').filter({hasText:/^保持架润滑$/}).click();
+      await page.locator('#analysisAdvanced summary').filter({hasText:/^求解控制$/}).click();
+      const modulus = page.locator('#analysis-materials-rolling_elements-elastic_modulus_gpa');
+      await expect(modulus).toHaveAttribute('placeholder', '190');
+      await modulus.fill('200');
+      await page.locator('#analysis-lubrication-pocket_viscosity_pa_s').fill('0.015');
+      await page.locator('#analysis-solver-load_steps').fill('6');
+      await expect(page.locator('#analysisResultVersion')).toContainText('历史结果');
+      const advanced = await run(page);
+      expect(advanced.submitted.advanced_settings).toEqual({
+        materials:{rolling_elements:{elastic_modulus_gpa:200}},
+        lubrication:{pocket_viscosity_pa_s:0.015}, solver:{load_steps:6},
+      });
+      expect(advanced.data.generated_data_sha256).not.toBe(changed.data.generated_data_sha256);
+      const folder = root + '/robas-analysis/analysis-' + advanced.data.run_id;
+      const prepared = await readFile(folder + '/DATA.txt', 'utf8');
+      const records = prepared.split(/\r?\n/);
+      expect(records[0].split(',')[13]).toBe('6');
+      expect(Number(records[15].split(',')[2])).toBe(200e9);
+      expect(Number(records[41].split(',')[1])).toBe(0.015);
+      const solverFolder = (await readdir(folder)).find(name => name.startsWith('run-'));
+      const out = await readFile(folder + '/' + solverFolder + '/OUT.txt', 'utf8');
+      expect(out).toMatch(/ELASTIC MODULUS\s+\(Pa\)\s+2\.0000E\+11/);
+      expect(out).toMatch(/Cage Pocket\s+2\s+Arbitrary\s+1\.50000E-02/);
+      await page.getByText('本次材料、润滑与求解设置', {exact:true}).click();
+      await expect(page.getByRole('row').filter({hasText:'弹性模量 (GPa)'}).filter({hasText:'用户输入'})).toContainText('200');
       await page.locator('#param-width_mm').fill('16');
       await expect(page.locator('#analysisResultVersion')).toContainText('历史结果');
       await expect(page.locator('#runAnalysis')).toBeDisabled();

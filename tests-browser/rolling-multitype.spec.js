@@ -70,8 +70,9 @@ test('one workbench drives cylindrical NUP and angular contact without stale res
  await page.locator('#bearingType').selectOption('rolling.deep_groove_ball');
  await expect(page.locator('#cagePanel')).toBeVisible();
  await page.locator('#generate').click();
- await expect.poll(()=>page.evaluate(()=>window.rollingViewerSnapshot().instances.length)).toBe(14);
- expect(requests.find(r=>r.bearing_type==='rolling.deep_groove_ball').cage?.kind).toBe('simplified_annular');
+ await expect.poll(()=>page.evaluate(()=>window.rollingViewerSnapshot().instances.length)).toBe(13);
+ expect(requests.find(r=>r.bearing_type==='rolling.deep_groove_ball').cage).toBeUndefined();
+ await page.locator('#cageEnabled').check();
  await page.locator('#cageKind').selectOption('stamping_double_half');
  await expect(page.locator('#cage-rivet_head_d_mm')).toBeVisible();
  await expect.poll(()=>page.evaluate(()=>window.rollingViewerSnapshot().instances.length)).toBe(0);

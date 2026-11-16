@@ -70,6 +70,7 @@ does not reserve solver capacity. POST reports if the solver is busy.
 | `analysis_geometry` | DGB requires `inner_race_od_mm`. ACB also requires `inner_sidewall_mm` and `outer_sidewall_mm`, each matching one of the CAD sidewalls at original getter precision. CRB uses `{}` because its existing DATA builder maps the CAD inputs directly. |
 | `operating_conditions` | Optional keys within this required object are `load_x_n`, `load_y_n`, `load_z_n`, `outer_speed_rpm`, `inner_speed_rpm`, and `free_clearance_mm`. An empty object deliberately inherits the selected profile's conditions. Speeds supplied by the caller use the original scan-endpoint linkage. Nonzero CRB CAD radial gap requires an explicit, independently sourced solver clearance. |
 | `allow_reference_geometry_mismatch` | Optional Boolean, default `false`. If the builder reports a geometry difference, the caller must review it before acknowledging an overlay. |
+| `advanced_settings` | Optional object containing `materials`, `lubrication`, or `solver`. Omitted fields retain their reference values. |
 
 The force components follow RoBAS DATA axes. No CAD-axis conversion is
 assumed. The signed load and speed limits are ±1,000,000 N and ±100,000 rpm,
@@ -78,8 +79,24 @@ reports `operating_conditions.requested`, `inherited` and `effective` for the
 six exposed fields. `inherited` lists the exposed values left to the profile.
 The existing `BaseBC` mapping derives `rpmRange21` from a supplied outer speed
 and `rpmRange12` from a supplied inner speed. Other scan fields, fit,
-temperatures, moments, material, lubrication and solver settings remain in
-the pinned profile. The six fields are a limited override interface.
+temperatures, and moments remain in the pinned profile. The six fields are a
+limited operating override interface.
+
+### Material, lubrication and solver settings
+
+The status endpoint lists the editable fields and their reference values in
+`profiles[id].advanced_settings`. POST accepts the same field layout and
+returns `advanced_settings.requested` and `advanced_settings.effective`.
+
+| Request group | Mapping and limits |
+|---|---|
+| `materials` | Per-part object keyed by `rolling_elements`, `outer_race`, `inner_race`, `shaft`, `housing`, or `cage`. The C# material serializer writes rec 8.1–8.5. Supported keys are `density_kg_m3`, `elastic_modulus_gpa` (converted to Pa), `poisson_ratio`, `thermal_expansion_per_k`, `specific_heat_j_kg_k`, and `conductivity_w_m_k`. Shaft and housing have no specific heat field in these records. Only the audited user-input material mode (code 1) can be overridden. |
+| `lubrication` | `pocket_viscosity_pa_s` and `guide_viscosity_pa_s` map to rec 10.6 `pocVis` and `gsVis`. The corresponding rec 7.0 mode must be 2 (Arbitrary in the original OUT). The service accepts 0.000001–10 Pa·s. The rolling-contact oil model stays with the pinned reference. The C# oil name, viscosity-temperature curve, and coolant rec 9.7 are distinct and are not exposed as oil changes. |
+| `solver` | `load_steps` maps to `BaseSolver.nStps` in rec 1 and accepts an integer from 1 to 100. The solver mode, output names, other flags and server timeout remain fixed or come from the pinned reference. |
+
+These bounds are service validation limits. The caller supplies verified
+engineering values. Material overrides affect the analysis only, and the
+runtime evidence retains both the reference SHA-256 and generated DATA SHA-256.
 
 ### Ball CAD and analysis cages
 

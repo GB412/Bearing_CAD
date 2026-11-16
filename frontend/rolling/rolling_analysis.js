@@ -1,4 +1,5 @@
 import {renderAnalysisResult} from './rolling_analysis_result.js';
+import {readSettingsFields, showSettingsFields} from './rolling_analysis_settings.js';
 
 const $ = id => document.getElementById(id);
 const ROUTE = '/api/v2/cad/analyses';
@@ -59,15 +60,17 @@ function compatibility(design) {
 
 function sameFields(actual, expected) {
   return actual && Object.keys(actual).length === Object.keys(expected).length &&
-    Object.entries(expected).every(([key, value]) => actual[key] === value);
+    Object.entries(expected).every(([key, value]) => value !== null && typeof value === 'object' ?
+      sameFields(actual[key], value) : actual[key] === value);
 }
 
 export function initAnalysisWorkbench({getType, getDesign, getConfirmedKey, getCad}) {
   const picker = $('analysisProfile');
   const submit = $('runAnalysis');
   const allowMismatch = $('analysisAllowMismatch');
+  const advanced = $('analysisAdvanced');
   let availability = null, refreshId = 0, busy = false, revision = 0;
-  let lastResult = null, geometryType = null;
+  let lastResult = null, geometryType = null, settingsProfile = null;
   for (const [key, label] of CONDITIONS) {
     const input = document.createElement('input');
     input.type = 'number';
@@ -96,7 +99,7 @@ export function initAnalysisWorkbench({getType, getDesign, getConfirmedKey, getC
     const matched = confirmed && cad?.key === getConfirmedKey();
     const incompatible = design ? compatibility(design) : '';
     $('analysisDesign').textContent = incompatible || (!confirmed ? '先确认当前设计。' :
-      !matched ? '当前设计已确认，等待成功生成三维模型。' :
+      !matched ? '当前设计已确认。请点击“生成三维模型”，成功后即可分析。' :
       '设计已确认 · 三维作业 ' + cad.jobId + ' · SHA-256 ' + cad.hash);
     const profile = profiles()[picker.value];
     $('analysisProfileSource').textContent = profile ? profile.source + ' · DATA SHA-256 ' + profile.sha256 : '';
@@ -107,6 +110,14 @@ export function initAnalysisWorkbench({getType, getDesign, getConfirmedKey, getC
         '历史结果 · 设计或工况已改变，请按当前输入重新计算。' : '当前设计与工况的结果';
       $('analysisResultVersion').classList.toggle('is-historical', historical);
     }
+  }
+
+  function syncSettings() {
+    const profile = profiles()[picker.value];
+    const key = profile?.available ? picker.value + '/' + profile.sha256 : '';
+    if (settingsProfile === key) return;
+    settingsProfile = key;
+    showSettingsFields(advanced, profile?.advanced_settings);
   }
 
   function rebuildGeometry() {
@@ -156,6 +167,7 @@ export function initAnalysisWorkbench({getType, getDesign, getConfirmedKey, getC
       available ? '本机分析配置可用' :
       '无可用参考配置。' + (matching.find(([, p]) => p.unavailable_reason)?.[1].unavailable_reason ||
         availability.unavailable_reason || '请核对所选轴承类型和服务端配置。');
+    syncSettings();
     syncDesign();
   }
 
@@ -214,8 +226,10 @@ export function initAnalysisWorkbench({getType, getDesign, getConfirmedKey, getC
         !Object.hasOwn(operating_conditions, 'free_clearance_mm')) {
       throw Error('当前 CAD 径向净距非零，须填写独立的分析游隙。');
     }
+    const advanced_settings = readSettingsFields(advanced);
     return {design, request_hash: hash, profile_id: picker.value, analysis_geometry,
-      operating_conditions, allow_reference_geometry_mismatch: allowMismatch.checked};
+      operating_conditions, allow_reference_geometry_mismatch: allowMismatch.checked,
+      ...(Object.keys(advanced_settings).length ? {advanced_settings} : {})};
   }
 
   $('analysisForm').addEventListener('input', event => {
@@ -224,7 +238,7 @@ export function initAnalysisWorkbench({getType, getDesign, getConfirmedKey, getC
       syncDesign();
     } else if (event.target !== picker) changeInputs();
   });
-  picker.addEventListener('change', changeInputs);
+  picker.addEventListener('change', () => { syncSettings(); changeInputs(); });
   $('workspaceAnalysisTab').addEventListener('click', refresh);
   $('analysisForm').addEventListener('submit', async event => {
     event.preventDefault();
@@ -263,6 +277,7 @@ export function initAnalysisWorkbench({getType, getDesign, getConfirmedKey, getC
           reply.profile?.sha256 !== profile.sha256 || !/^[a-f0-9]{32}$/.test(reply.run_id ?? '') ||
           !sameFields(reply.analysis_geometry, body.analysis_geometry) ||
           !sameFields(reply.operating_conditions?.requested, body.operating_conditions) ||
+          (body.advanced_settings && !sameFields(reply.advanced_settings?.requested, body.advanced_settings)) ||
           reply.allow_reference_geometry_mismatch !== body.allow_reference_geometry_mismatch ||
           result?.source_binding?.status !== 'HASH_VERIFIED' ||
           result?.output_status !== 'PARSED_SUPPORTED_SECTIONS' ||
@@ -277,7 +292,7 @@ export function initAnalysisWorkbench({getType, getDesign, getConfirmedKey, getC
       notice(started === revision ? '已取得可展示的结果段，收敛状态见下方。' : '先前请求已返回，结果归入历史。');
     } catch (error) {
       if (started === revision) notice(error.name === 'TimeoutError' ?
-        '等待本机服务响应超时。请确认求解器已结束后再试。' : error.message, true);
+        '本机计算服务响应超时。请确认求解器已结束后再试。' : error.message, true);
       else notice('先前请求已结束，请按当前输入重新计算。');
     } finally {
       busy = false;

@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 
 // Do not intercept /api/v2/cad; these are real OCCT-generated STEP/STL files.
-test('browser, real CAD API, STEP and STL complete all migrated cage assemblies',async({page})=>{
+test('browser, real CAD API, STEP and STL complete all migrated cage assemblies',async({page},info)=>{
  const errors=[];
  page.on('pageerror',error=>errors.push(error.message));
  await page.goto('/rolling.html');
@@ -48,10 +48,12 @@ test('browser, real CAD API, STEP and STL complete all migrated cage assemblies'
   expect(q.instance_count).toBe(expectedInstances);
   expect(q.step_roundtrip.solid_count).toBe(expectedInstances);
   expect(q.step_roundtrip.worst_part_centroid_error_mm).toBeLessThan(0.001);
+  await page.locator('#viewport').screenshot({path:info.outputPath(expectedKind+'.png')});
   return manifest;
  }
 
  // Deep-groove pressed halves: 11 balls + 11 rivets + 2 halves + 2 rings.
+ await page.locator('#cageEnabled').check();
  await page.locator('#cageKind').selectOption('stamping_double_half');
  const deep=await build(26,6,'STAMPING_DOUBLE_HALF');
  expect(deep.instances.filter(x=>x.part_id==='rivet')).toHaveLength(11);
@@ -83,6 +85,7 @@ test('real OCCT builds a rescaled 50 mm bore angular-contact assembly',async({pa
  await page.goto('/rolling.html');
  await expect(page.locator('#generate')).toBeEnabled();
  await page.locator('#bearingType').selectOption('rolling.angular_contact_ball');
+ await page.locator('.size-tools summary').click();
  await page.locator('#scaleTarget').fill('50');
  await page.locator('#scaleApply').click();
  await expect(page.locator('#validation')).toBeHidden();
