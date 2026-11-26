@@ -81,6 +81,25 @@ def _probe(run, *, executed=True, code=0, status="OUTPUT_PRESENT_UNPARSED_NOT_CO
     }
 
 
+def test_builtin_dgb_life_result_parser_accepts_39_rows(run):
+    data = run / "DATA.txt"
+    rows = data.read_bytes().splitlines()
+    rows = [row for row in rows if not any(
+        row.startswith(("'" + rec + "'").encode())
+        for rec in ("rec 8.6.0", "rec 8.6.1", "rec 8.6.2", "rec 8.6.3")
+    )]
+    rows[6] = rows[6].rsplit(b",", 1)[0] + b",0"
+    data.write_bytes(b"\r\n".join(rows) + b"\r\n")
+    result = parse_static_results(run, family="ball")
+    assert result["rolling_element_count"] == 2
+    assert result["summary"]["total_power_loss"]["value"] == 95
+
+    rows[6] = rows[6].rsplit(b",", 1)[0] + b",1"
+    data.write_bytes(b"\r\n".join(rows) + b"\r\n")
+    with pytest.raises(ResultParseError, match="kLifeCons must be 0"):
+        parse_static_results(run, family="ball")
+
+
 def test_parses_units_rounding_and_keeps_execution_independent(run):
     result = parse_static_results(run, family="ball")
     assert result["execution"] == {"status": "UNKNOWN", "exit_code": None}
