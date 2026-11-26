@@ -37,6 +37,15 @@ class BallDataDocument(DataDocument):
     _error = BallDataError
 
 
+# RoBAS 8.11's kLifeCons=0 path expects no custom life-constant records.
+# Keep the original 43-row document intact for historical source-data parsing.
+class BuiltinLifeBallDataDocument(BallDataDocument):
+    _fields = tuple(
+        row for row in _RECORD_FIELDS
+        if row[0] not in {"rec 8.6.0", "rec 8.6.1", "rec 8.6.2", "rec 8.6.3"}
+    )
+
+
 def _straight_pocket_reference(*, ball_d_mm: float, width_mm: float,
                                outer_sidewall_mm: float) -> dict[str, float]:
     """Reproduce the original property getter/setter chain in source order."""

@@ -74,6 +74,26 @@ def test_input_contract_matches_legacy_static_source(source, family, records):
     assert result["engineering_approved"] is False
 
 
+def test_builtin_dgb_39_records_require_k_life_cons_zero(source):
+    _, data, _ = source
+    _input_data(data, "ball")
+    lines = data.read_bytes().splitlines()
+    lines = [line for line in lines if not any(
+        line.startswith(("'" + label + "'").encode())
+        for label in ("rec 8.6.0", "rec 8.6.1", "rec 8.6.2", "rec 8.6.3")
+    )]
+    lines[6] = lines[6].rsplit(b",", 1)[0] + b",0"
+    data.write_bytes(b"\r\n".join(lines) + b"\r\n")
+    report = inspect_static_input(data, family="ball")
+    assert report["record_count"] == 39
+    assert report["protocol_status"] == "ROBAS_811_BUILTIN_LIFE_RECORDS_MATCH"
+
+    lines[6] = lines[6].rsplit(b",", 1)[0] + b",1"
+    data.write_bytes(b"\r\n".join(lines) + b"\r\n")
+    with pytest.raises(SolverProbeError, match="kLifeCons must be 0"):
+        inspect_static_input(data, family="ball")
+
+
 def test_binary_source_digest_requires_exact_match(source):
     root, data, digest = source
     with pytest.raises(SolverProbeError, match="SHA-256 differs"):
