@@ -7,7 +7,7 @@ import math
 from pathlib import Path
 import re
 
-from .robas_ball_input import BallDataDocument
+from .robas_ball_input import BallDataDocument, BuiltinLifeBallDataDocument
 from .robas_data import dotnet_round
 from .robas_roller_input import RollerDataDocument
 from .robas_solver_probe import _MAX_INPUT, _MAX_OUTPUT
@@ -420,7 +420,14 @@ def parse_static_results(
     }
     data_text = _decode(data, "DATA.txt")
     try:
+        if family == "ball" and len(data_text.splitlines()) == 39:
+            document_type = BuiltinLifeBallDataDocument
         document = document_type.parse(data_text)
+        if family == "ball":
+            required_switch = 0 if document_type is BuiltinLifeBallDataDocument else 1
+            if float(document.value(6, "kLifeCons")) != required_switch:
+                raise ValueError(
+                    f"kLifeCons must be {required_switch} for {len(document.rows)}-row ball DATA")
         count = int(document.value(5, "nRe"))
         if count < 1:
             raise ValueError("rec 3.2 nRe must be positive")
